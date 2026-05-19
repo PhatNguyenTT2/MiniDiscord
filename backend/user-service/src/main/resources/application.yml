@@ -4,6 +4,13 @@ server:
 spring:
   application:
     name: user-service
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: ${REDIS_SSL:false}
   datasource:
     url: ${USER_DB_URL:${DB_URL:jdbc:postgresql://localhost:5432/discord_mini_users}}
     username: ${USER_DB_USERNAME:${DB_USERNAME:postgres}}
@@ -23,6 +30,14 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASS:guest}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    ssl:
+      enabled: ${RABBITMQ_SSL:false}
 
 jwt:
   secret: ${JWT_SECRET:your-256-bit-secret-key-here-change-in-production}

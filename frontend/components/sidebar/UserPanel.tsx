@@ -15,7 +15,42 @@ export function UserPanel() {
   const [isMuted, setIsMuted] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
 
-  if (!user) return null;
+  if (!user) {
+    return (
+      <div
+        className="absolute inset-x-0 z-20 px-3"
+        style={{ bottom: "var(--floating-bar-gap)" }}
+      >
+        <div
+          className="flex items-center gap-2 px-3 shadow-[0_12px_30px_rgba(0,0,0,0.28)]"
+          style={{
+            minHeight: "var(--floating-user-panel-height)",
+            borderRadius: "var(--floating-bar-radius)",
+            backgroundColor: "#232428",
+          }}
+        >
+          {/* Skeleton avatar */}
+          <div className="h-8 w-8 rounded-full bg-[#3f4147] animate-pulse shrink-0" />
+
+          <div className="min-w-0 flex-1">
+            <div className="h-3 w-16 rounded bg-[#3f4147] animate-pulse mb-1.5" />
+            <div className="h-2.5 w-12 rounded bg-[#3f4147] animate-pulse" />
+          </div>
+
+          <div className="flex items-center gap-0.5">
+            {/* Settings button still accessible */}
+            <button
+              aria-label={t("userPanel.settings")}
+              onClick={openSettings}
+              className="flex h-8 w-8 items-center justify-center rounded-md text-[#b5bac1] hover:bg-[#3f4147] hover:text-[#dbdee1] transition-colors duration-150 cursor-pointer"
+            >
+              <Settings className="h-[18px] w-[18px]" />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const statusKey = user.status.toLowerCase() as
     | "online"

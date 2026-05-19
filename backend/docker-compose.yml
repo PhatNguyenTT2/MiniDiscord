@@ -53,6 +53,10 @@ services:
       - EUREKA_URL=http://discovery-server:8761/eureka/
       - DB_URL=${USER_DB_URL}
       - DB_USERNAME=${USER_DB_USERNAME}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - REDIS_SSL=false
     deploy:
       resources:
         limits:

@@ -14,6 +14,7 @@ interface AuthState {
   register: (data: RegisterRequest) => Promise<void>;
   logout: () => void;
   setUser: (user: User) => void;
+  setOwnStatus: (status: "ONLINE" | "OFFLINE") => void;
   hydrate: () => Promise<void>;
 }
 
@@ -30,6 +31,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const res = await api.post<ApiResponse<AuthResponse>>("/auth/login", data);
       const { token, user } = res.data.data;
       localStorage.setItem("token", token);
+      localStorage.setItem("user_data", JSON.stringify(user));
       set({ user, token, isAuthenticated: true, isLoading: false });
     } catch (err: any) {
       const message = err.response?.data?.message || err.message || "Login failed";
@@ -43,6 +45,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const res = await api.post<ApiResponse<AuthResponse>>("/auth/google", { idToken });
       const { token, user } = res.data.data;
       localStorage.setItem("token", token);
+      localStorage.setItem("user_data", JSON.stringify(user));
       set({ user, token, isAuthenticated: true, isLoading: false });
     } catch (err: any) {
       const message = err.response?.data?.message || err.message || "Google login failed";
@@ -56,6 +59,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const res = await api.post<ApiResponse<AuthResponse>>("/auth/register", data);
       const { token, user } = res.data.data;
       localStorage.setItem("token", token);
+      localStorage.setItem("user_data", JSON.stringify(user));
       set({ user, token, isAuthenticated: true, isLoading: false });
     } catch (err: any) {
       const message = err.response?.data?.message || err.message || "Registration failed";
@@ -65,20 +69,39 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("user_data");
     set({ user: null, token: null, isAuthenticated: false, error: null });
   },
 
   setUser: (user) => set({ user }),
 
+  setOwnStatus: (status) => set((state) => ({
+    user: state.user ? { ...state.user, status } : null
+  })),
+
   hydrate: async () => {
     const token = localStorage.getItem("token");
     if (token) {
-      set({ token, isAuthenticated: true });
+      const cachedUser = localStorage.getItem("user_data");
+      let parsedUser = null;
+      if (cachedUser) {
+        try {
+          parsedUser = JSON.parse(cachedUser);
+        } catch (e) {
+          console.error("Corrupted user cache data");
+          localStorage.removeItem("user_data");
+        }
+      }
+
+      set({ token, isAuthenticated: true, user: parsedUser });
+
       try {
         const res = await api.get<ApiResponse<User>>("/users/me");
-        set({ user: res.data.data });
+        const freshUser = res.data.data;
+        set({ user: freshUser });
+        localStorage.setItem("user_data", JSON.stringify(freshUser));
       } catch (err) {
-        console.error("Failed to fetch user data on hydrate", err);
+        console.warn("[Auth] Using cached user data (offline or API error)", err);
       }
     }
   },

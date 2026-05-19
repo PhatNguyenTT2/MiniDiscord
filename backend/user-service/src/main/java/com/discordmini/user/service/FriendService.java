@@ -17,9 +17,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -30,6 +32,7 @@ public class FriendService {
     private final FriendshipRepository friendshipRepository;
     private final UserRepository userRepository;
     private final RabbitTemplate rabbitTemplate;
+    private final PresenceService presenceService;
 
     @Transactional
     public void sendFriendRequest(UUID currentUserId, String identifier) {
@@ -92,7 +95,8 @@ public class FriendService {
         }
 
         UUID otherUserId = friendship.getRequesterId().equals(currentUserId)
-                ? friendship.getReceiverId() : friendship.getRequesterId();
+                ? friendship.getReceiverId()
+                : friendship.getRequesterId();
 
         friendshipRepository.delete(friendship);
 
@@ -107,14 +111,30 @@ public class FriendService {
                 .filter(f -> f.getStatus() == FriendshipStatus.ACCEPTED)
                 .toList();
 
-        List<FriendResponse> responses = new ArrayList<>();
+        List<UUID> friendIds = new ArrayList<>();
+        Map<UUID, Friendship> friendIdToFriendship = new HashMap<>();
+
         for (Friendship f : friendships) {
             UUID friendId = f.getRequesterId().equals(currentUserId) ? f.getReceiverId() : f.getRequesterId();
-            User friend = userRepository.findById(friendId).orElse(null);
+            friendIds.add(friendId);
+            friendIdToFriendship.put(friendId, f);
+        }
+
+        Map<UUID, User> friendMap = userRepository.findByIdIn(friendIds)
+                .stream().collect(Collectors.toMap(User::getId, Function.identity()));
+
+        Map<UUID, String> statusMap = presenceService.getBulkStatus(friendIds);
+
+        List<FriendResponse> responses = new ArrayList<>();
+        for (UUID friendId : friendIds) {
+            User friend = friendMap.get(friendId);
             if (friend != null) {
+                Friendship f = friendIdToFriendship.get(friendId);
+                String liveStatus = statusMap.getOrDefault(friendId, friend.getStatus());
+
                 responses.add(FriendResponse.builder()
                         .friendshipId(f.getId())
-                        .user(mapToUserResponse(friend))
+                        .user(mapToUserResponse(friend, liveStatus))
                         .status(f.getStatus().name())
                         .since(f.getUpdatedAt() != null ? f.getUpdatedAt() : f.getCreatedAt())
                         .build());
@@ -125,21 +145,35 @@ public class FriendService {
 
     @Transactional(readOnly = true)
     public List<PendingFriendResponse> getPendingRequests(UUID currentUserId) {
-        List<Friendship> pendingFriendships = friendshipRepository.findByRequesterIdOrReceiverId(currentUserId, currentUserId)
+        List<Friendship> pendingFriendships = friendshipRepository
+                .findByRequesterIdOrReceiverId(currentUserId, currentUserId)
                 .stream()
                 .filter(f -> f.getStatus() == FriendshipStatus.PENDING)
                 .toList();
+
+        List<UUID> otherUserIds = new ArrayList<>();
+        for (Friendship f : pendingFriendships) {
+            boolean incoming = f.getReceiverId().equals(currentUserId);
+            UUID otherUserId = incoming ? f.getRequesterId() : f.getReceiverId();
+            otherUserIds.add(otherUserId);
+        }
+
+        Map<UUID, User> otherUserMap = userRepository.findByIdIn(otherUserIds)
+                .stream().collect(Collectors.toMap(User::getId, Function.identity()));
+
+        Map<UUID, String> statusMap = presenceService.getBulkStatus(otherUserIds);
 
         List<PendingFriendResponse> responses = new ArrayList<>();
         for (Friendship f : pendingFriendships) {
             boolean incoming = f.getReceiverId().equals(currentUserId);
             UUID otherUserId = incoming ? f.getRequesterId() : f.getReceiverId();
-            User otherUser = userRepository.findById(otherUserId).orElse(null);
-            
+            User otherUser = otherUserMap.get(otherUserId);
+
             if (otherUser != null) {
+                String liveStatus = statusMap.getOrDefault(otherUserId, otherUser.getStatus());
                 responses.add(PendingFriendResponse.builder()
                         .friendshipId(f.getId())
-                        .user(mapToUserResponse(otherUser))
+                        .user(mapToUserResponse(otherUser, liveStatus))
                         .incoming(incoming)
                         .requestedAt(f.getCreatedAt())
                         .build());
@@ -148,13 +182,13 @@ public class FriendService {
         return responses;
     }
 
-    private UserResponse mapToUserResponse(User user) {
+    private UserResponse mapToUserResponse(User user, String status) {
         return UserResponse.builder()
                 .id(user.getId())
                 .username(user.getUsername())
                 .email(user.getEmail())
                 .avatarUrl(user.getAvatarUrl())
-                .status(user.getStatus())
+                .status(status)
                 .build();
     }
 

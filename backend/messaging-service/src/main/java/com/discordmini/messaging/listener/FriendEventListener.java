@@ -16,7 +16,8 @@ import java.util.Map;
  * Listens for friend events from user-service (via RabbitMQ)
  * and pushes notifications to the target user via STOMP WebSocket.
  *
- * Flow: user-service → RabbitMQ (user.events / user.friend.*) → this listener → STOMP /user/{userId}/queue/notifications
+ * Flow: user-service → RabbitMQ (user.events / user.friend.*) → this listener →
+ * STOMP /user/{userId}/queue/notifications
  */
 @Slf4j
 @Component
@@ -25,11 +26,7 @@ public class FriendEventListener {
 
     private final SimpMessagingTemplate messagingTemplate;
 
-    @RabbitListener(bindings = @QueueBinding(
-            value = @Queue(name = "messaging.friend-events.queue", durable = "true"),
-            exchange = @Exchange(name = "user.events", type = ExchangeTypes.TOPIC),
-            key = "user.friend.*"
-    ))
+    @RabbitListener(bindings = @QueueBinding(value = @Queue(name = "messaging.friend-events.queue", durable = "true"), exchange = @Exchange(name = "user.events", type = ExchangeTypes.TOPIC), key = "user.friend.*"))
     public void handleFriendEvent(Map<String, Object> event) {
         String type = (String) event.get("type");
         String toUserId = (String) event.get("toUserId");
@@ -45,10 +42,16 @@ public class FriendEventListener {
         // Push to the target user's personal WebSocket queue.
         // Spring STOMP auto-prepends /user/{toUserId} before the destination,
         // so frontend subscribes to /user/queue/notifications.
+        java.util.Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("type", type);
+        payload.put("fromUserId", fromUserId != null ? fromUserId : "");
+        if (event.containsKey("status")) {
+            payload.put("status", event.get("status"));
+        }
+
         messagingTemplate.convertAndSendToUser(
                 toUserId,
                 "/queue/notifications",
-                Map.of("type", type, "fromUserId", fromUserId != null ? fromUserId : "")
-        );
+                payload);
     }
 }

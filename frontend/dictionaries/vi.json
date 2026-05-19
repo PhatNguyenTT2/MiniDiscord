@@ -103,8 +103,7 @@
     "markAsRead": "Đánh Dấu Đã Đọc",
     "newLabel": "MỚI",
     "viewingOldMessages": "Bạn Đang Xem Các Tin Nhắn Cũ",
-    "jumpToPresent": "Nhảy đến hiện tại",
-    "edited": "(đã sửa)"
+    "jumpToPresent": "Nhảy đến hiện tại"
   },
   "members": {
     "online": "Trực tuyến",
@@ -206,5 +205,10 @@
       "study": "Nhóm Học Tập",
       "school": "Câu Lạc Bộ Trường Học"
     }
+  },
+  "network": {
+    "offline": "Không có kết nối mạng",
+    "connecting": "Đang kết nối lại...",
+    "connected": "Đã kết nối!"
   }
 }

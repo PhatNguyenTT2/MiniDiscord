@@ -202,5 +202,10 @@
       "study": "Study Group",
       "school": "School Club"
     }
+  },
+  "network": {
+    "offline": "No network connection",
+    "connecting": "Reconnecting...",
+    "connected": "Connected!"
   }
 }
