@@ -10,6 +10,7 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -37,21 +38,27 @@ public class FriendEventListener {
             return;
         }
 
-        log.info("Friend event [{}]: from={} to={}", type, fromUserId, toUserId);
-
-        // Push to the target user's personal WebSocket queue.
-        // Spring STOMP auto-prepends /user/{toUserId} before the destination,
-        // so frontend subscribes to /user/queue/notifications.
-        java.util.Map<String, Object> payload = new java.util.HashMap<>();
-        payload.put("type", type);
-        payload.put("fromUserId", fromUserId != null ? fromUserId : "");
-        if (event.containsKey("status")) {
-            payload.put("status", event.get("status"));
+        if ("PRESENCE_UPDATE".equals(type)) {
+            log.debug("Presence event: from={} to={}", fromUserId, toUserId);
+        } else {
+            log.info("Friend event [{}]: from={} to={}", type, fromUserId, toUserId);
         }
 
-        messagingTemplate.convertAndSendToUser(
-                toUserId,
-                "/queue/notifications",
-                payload);
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("type", type);
+            payload.put("fromUserId", fromUserId != null ? fromUserId : "");
+            if (event.containsKey("status")) {
+                payload.put("status", event.get("status"));
+            }
+
+            messagingTemplate.convertAndSendToUser(
+                    toUserId,
+                    "/queue/notifications",
+                    payload);
+        } catch (Exception e) {
+            // Swallow error so RabbitMQ ACKs the message (no infinite requeue)
+            log.debug("Could not deliver to user {}: {}", toUserId, e.getMessage());
+        }
     }
 }

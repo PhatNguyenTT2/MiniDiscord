@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -20,11 +21,13 @@ import java.util.UUID;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final PresenceService presenceService;
 
     public UserResponse getUserById(UUID userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException(userId));
-        return UserMapper.toResponse(user);
+        String liveStatus = presenceService.getUserStatus(userId);
+        return UserMapper.toResponse(user, liveStatus);
     }
 
     @Transactional
@@ -44,7 +47,8 @@ public class UserService {
         }
 
         user = userRepository.save(user);
-        return UserMapper.toResponse(user);
+        String liveStatus = presenceService.getUserStatus(userId);
+        return UserMapper.toResponse(user, liveStatus);
     }
 
     @Transactional
@@ -58,17 +62,20 @@ public class UserService {
 
     @Transactional(readOnly = true)
     public List<UserResponse> searchUsers(String query) {
-        return userRepository.findByUsernameContainingIgnoreCase(query)
-                .stream()
-                .map(UserMapper::toResponse)
+        List<User> users = userRepository.findByUsernameContainingIgnoreCase(query);
+        List<UUID> ids = users.stream().map(User::getId).toList();
+        Map<UUID, String> statusMap = presenceService.getBulkStatus(ids);
+        return users.stream()
+                .map(u -> UserMapper.toResponse(u, statusMap.getOrDefault(u.getId(), u.getStatus())))
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public List<UserResponse> getUsersByIds(List<UUID> ids) {
-        return userRepository.findByIdIn(ids)
-                .stream()
-                .map(UserMapper::toResponse)
+        List<User> users = userRepository.findByIdIn(ids);
+        Map<UUID, String> statusMap = presenceService.getBulkStatus(ids);
+        return users.stream()
+                .map(u -> UserMapper.toResponse(u, statusMap.getOrDefault(u.getId(), u.getStatus())))
                 .toList();
     }
 }

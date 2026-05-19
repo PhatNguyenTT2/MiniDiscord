@@ -44,20 +44,27 @@ public class PresenceEventListener {
           .filter(f -> f.getStatus() == FriendshipStatus.ACCEPTED)
           .toList();
 
+      log.debug("Broadcasting presence [{}] for user {} to {} friends", status, userIdStr, friendships.size());
+
       for (Friendship f : friendships) {
         UUID friendId = f.getRequesterId().equals(userId) ? f.getReceiverId() : f.getRequesterId();
 
-        rabbitTemplate.convertAndSend(
-            "user.events",
-            "user.friend.presence",
-            Map.of(
-                "type", "PRESENCE_UPDATE",
-                "fromUserId", userIdStr,
-                "toUserId", friendId.toString(),
-                "status", status));
+        try {
+          rabbitTemplate.convertAndSend(
+              "user.events",
+              "user.friend.presence",
+              Map.of(
+                  "type", "PRESENCE_UPDATE",
+                  "fromUserId", userIdStr,
+                  "toUserId", friendId.toString(),
+                  "status", status));
+        } catch (Exception e) {
+          log.error("Failed to publish presence for friend {}", friendId, e);
+        }
       }
-    } catch (IllegalArgumentException e) {
-      log.error("Invalid UUID in presence event: {}", userIdStr);
+    } catch (Exception e) {
+      // Always ACK — do not requeue
+      log.error("Error processing presence event for user {}: {}", userIdStr, e.getMessage());
     }
   }
 }

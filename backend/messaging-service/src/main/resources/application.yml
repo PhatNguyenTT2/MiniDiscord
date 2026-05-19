@@ -19,6 +19,13 @@ spring:
     virtual-host: ${RABBITMQ_VHOST:/}
     ssl:
       enabled: ${RABBITMQ_SSL:false}
+    listener:
+      simple:
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1000
 
 jwt:
   secret: ${JWT_SECRET:your-256-bit-secret-key-here-change-in-production}
