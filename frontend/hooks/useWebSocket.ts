@@ -133,6 +133,10 @@ function handleRoomMessage(msg: IMessage) {
       createdAt: data.createdAt || new Date().toISOString(),
       replyTo: data.replyTo || null,
     });
+    // Track last activity for DM sidebar sort
+    if (data.roomId) {
+      useRoomStore.getState().touchRoomActivity(data.roomId);
+    }
   } catch (e) {
     console.error("[STOMP] Failed to parse room message:", e);
   }

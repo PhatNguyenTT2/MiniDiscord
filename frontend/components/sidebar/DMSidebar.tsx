@@ -86,6 +86,8 @@ export function DMSidebar({ activeUserId }: { activeUserId?: string }) {
   const members = useRoomStore((s) => s.members);
   const currentUserId = useAuthStore((s) => s.user?.id);
 
+  const lastActivityMap = useRoomStore((s) => s.lastActivityMap);
+
   const dmEntries = useMemo<DmEntry[]>(() => {
     const dmRooms = rooms.filter(r => r.type === "DM");
     console.log("[DMSidebar] computing dmEntries:", { currentUserId, dmRooms: dmRooms.length, membersKeys: Object.keys(members) });
@@ -112,10 +114,14 @@ export function DMSidebar({ activeUserId }: { activeUserId?: string }) {
       });
     }
 
-    // Sort by newest activity first
-    entries.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    // Sort by newest activity first (last message time), fallback to room creation
+    entries.sort((a, b) => {
+      const aTime = lastActivityMap[a.roomId] || new Date(a.createdAt).getTime();
+      const bTime = lastActivityMap[b.roomId] || new Date(b.createdAt).getTime();
+      return bTime - aTime;
+    });
     return entries;
-  }, [rooms, members, currentUserId]);
+  }, [rooms, members, currentUserId, lastActivityMap]);
 
   function handleCreateDM(userIds: string[]) {
     if (userIds.length > 0) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { ServerList } from "@/components/sidebar/ServerList";
 import { UserPanel } from "@/components/sidebar/UserPanel";
 import { DMSidebar } from "@/components/sidebar/DMSidebar";
@@ -61,6 +61,7 @@ function DmMessageItem({
   onReply,
   onReaction,
   currentUserId,
+  memberAvatarMap,
 }: {
   message: Message;
   isGrouped: boolean;
@@ -68,12 +69,15 @@ function DmMessageItem({
   onReply: () => void;
   onReaction?: (emoji: string) => void;
   currentUserId?: string;
+  memberAvatarMap?: Record<string, string | null>;
 }) {
   const time = new Date(message.createdAt).toLocaleTimeString(getDateLocale(), {
     hour: "2-digit",
     minute: "2-digit",
   });
   const fallback = message.senderName;
+  // Avatar: prefer message payload, then fall back to roomStore member data
+  const avatarSrc = message.senderAvatar || memberAvatarMap?.[message.senderId] || null;
 
   if (isGrouped) {
     return (
@@ -177,7 +181,7 @@ function DmMessageItem({
       )}
     >
       <StatusAvatar
-        src={message.senderAvatar}
+        src={avatarSrc}
         fallback={fallback}
         status="ONLINE"
         size="lg"
@@ -301,6 +305,21 @@ export default function DmChatPage() {
   const friendAvatar = friend?.user.avatarUrl || roomMember?.avatarUrl || null;
   // Prefer friendStore (real-time PRESENCE_UPDATE), then roomStore.members (also synced)
   const friendStatus = friend?.user.status ?? roomMember?.status ?? "OFFLINE";
+
+  // Build avatar lookup map for chat messages (covers both current user + recipient)
+  const memberAvatarMap = useMemo(() => {
+    const map: Record<string, string | null> = {};
+    if (roomId && allMembers[roomId]) {
+      for (const m of allMembers[roomId]) {
+        map[m.userId] = m.avatarUrl;
+      }
+    }
+    // Also include current user's avatar
+    if (currentUser?.id) {
+      map[currentUser.id] = currentUser.avatarUrl || null;
+    }
+    return map;
+  }, [roomId, allMembers, currentUser]);
 
   const [modalType, setModalType] = useState<"REMOVE_FRIEND" | "BLOCK" | null>(null);
   const [relationship, setRelationship] = useState<"friend" | "none" | "blocked">("friend");
@@ -585,6 +604,7 @@ export default function DmChatPage() {
                         currentUserId={currentUser?.id}
                         isGrouped={isGrouped}
                         isBeingReplied={replyingTo?.messageId === msg.id}
+                        memberAvatarMap={memberAvatarMap}
                         onReply={() =>
                           setReplyingTo({
                             messageId: msg.id,

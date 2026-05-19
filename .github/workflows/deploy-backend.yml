@@ -143,7 +143,6 @@ jobs:
             
             # Restart infra first (wait for them to be healthy)
             echo "=== Restarting infrastructure ==="
-            docker compose -f docker-compose.prod.yml up -d redis
             docker compose -f docker-compose.prod.yml up -d discovery-server
             
             echo "⏳ Waiting for Eureka to warm up..."

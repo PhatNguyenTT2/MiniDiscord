@@ -27,6 +27,7 @@ interface RoomState {
   rooms: Room[];
   channels: Record<string, Channel[]>; // roomId -> channels
   members: Record<string, MemberDetailResponse[]>; // roomId -> members
+  lastActivityMap: Record<string, number>; // roomId -> timestamp (ms)
   isLoading: boolean;
   error: string | null;
 
@@ -37,12 +38,14 @@ interface RoomState {
   findOrCreateDmRoom: (userId: string) => Promise<Room>;
   getDmRoomForUser: (userId: string) => { roomId: string, channelId: string } | null;
   updateMemberStatus: (userId: string, status: string) => void;
+  touchRoomActivity: (roomId: string) => void;
 }
 
 export const useRoomStore = create<RoomState>((set, get) => ({
   rooms: [],
   channels: {},
   members: {},
+  lastActivityMap: {},
   isLoading: false,
   error: null,
 
@@ -194,5 +197,11 @@ export const useRoomStore = create<RoomState>((set, get) => ({
 
       return { members: nextMembers };
     });
+  },
+
+  touchRoomActivity: (roomId: string) => {
+    set((state) => ({
+      lastActivityMap: { ...state.lastActivityMap, [roomId]: Date.now() },
+    }));
   },
 }));
