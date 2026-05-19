@@ -1,7 +1,7 @@
 "use client";
 
 import { Check } from "lucide-react";
-import { useTranslation } from "@/lib/i18n";
+import { useTranslation, getDateLocale } from "@/lib/i18n";
 
 interface UnreadBannerProps {
   unreadCount: number;
@@ -20,11 +20,11 @@ export function UnreadBanner({
 }: UnreadBannerProps) {
   const { t } = useTranslation();
 
-  const timeStr = since.toLocaleTimeString("vi-VN", {
+  const timeStr = since.toLocaleTimeString(getDateLocale(), {
     hour: "2-digit",
     minute: "2-digit",
   });
-  const dateStr = since.toLocaleDateString("vi-VN", {
+  const dateStr = since.toLocaleDateString(getDateLocale(), {
     day: "numeric",
     month: "numeric",
   });

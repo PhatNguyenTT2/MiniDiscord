@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useParams, usePathname } from "next/navigation";
 import { ScrollArea } from "@/components/ui/ScrollArea";
 import { Hash, Volume2, ChevronDown, ChevronRight } from "lucide-react";
@@ -8,41 +8,67 @@ import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/uiStore";
 import { useRoomStore } from "@/stores/roomStore";
+import { useChatStore } from "@/stores/chatStore";
 import type { Channel } from "@/types";
 
 function ChannelItem({
+  roomId,
   channel,
   isActive,
   onClick,
 }: {
+  roomId: string;
   channel: Channel;
   isActive: boolean;
   onClick: () => void;
 }) {
+  const { fetchUnreadCount, unreadCounts } = useChatStore();
+
+  useEffect(() => {
+    // Only fetch if we don't already have it
+    if (!unreadCounts[channel.id]) {
+      fetchUnreadCount(roomId, channel.id);
+    }
+  }, [roomId, channel.id]); // Removed fetchUnreadCount to prevent re-fetch loop if function reference changes
+
+  const unreadData = unreadCounts[channel.id];
+  const hasUnread = unreadData && unreadData.count > 0 && !isActive;
+
   const Icon = channel.type === "TEXT" ? Hash : Volume2;
 
   return (
     <button
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[15px] transition-colors duration-150 cursor-pointer",
+        "group flex w-full items-center justify-between rounded-md px-3 py-1.5 text-[15px] transition-colors duration-150 cursor-pointer",
         isActive
           ? "bg-secondary text-foreground font-medium"
-          : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+          : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
+        hasUnread && !isActive && "text-foreground font-medium"
       )}
     >
-      <Icon className="h-4 w-4 shrink-0 opacity-60" />
-      <span className="truncate">{channel.name}</span>
+      <div className="flex items-center gap-2 min-w-0">
+        <Icon className={cn("h-4 w-4 shrink-0", hasUnread ? "text-foreground opacity-100" : "opacity-60")} />
+        <span className="truncate">{channel.name}</span>
+      </div>
+
+      {hasUnread && (
+        <div className="flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-white leading-none">
+          {unreadData.displayCount}
+        </div>
+      )}
     </button>
   );
 }
 
 function ChannelCategory({
+  roomId,
   title,
   channels,
   activeChannelId,
   onChannelClick,
 }: {
+  roomId: string;
   title: string;
   channels: Channel[];
   activeChannelId: string | null;
@@ -68,6 +94,7 @@ function ChannelCategory({
           {channels.map((ch) => (
             <ChannelItem
               key={ch.id}
+              roomId={roomId}
               channel={ch}
               isActive={ch.id === activeChannelId}
               onClick={() => onChannelClick(ch.id)}
@@ -104,7 +131,7 @@ export function ChannelList() {
   const displayRoomId = activeRoomId || (rooms.length > 0 ? rooms[0].id : null);
   const room = rooms.find((r) => r.id === displayRoomId);
   const roomChannels = displayRoomId ? (channels[displayRoomId] || []) : [];
-  
+
   const textChannels = roomChannels.filter((c) => c.type === "TEXT");
   const voiceChannels = roomChannels.filter((c) => c.type === "VOICE");
 
@@ -125,18 +152,24 @@ export function ChannelList() {
 
       {/* Channel List */}
       <ScrollArea className="flex-1 px-3 pt-4">
-        <ChannelCategory
-          title={t("channels.textChannels")}
-          channels={textChannels}
-          activeChannelId={activeChannelId}
-          onChannelClick={handleChannelClick}
-        />
-        <ChannelCategory
-          title={t("channels.voiceChannels")}
-          channels={voiceChannels}
-          activeChannelId={activeChannelId}
-          onChannelClick={handleChannelClick}
-        />
+        {displayRoomId && (
+          <>
+            <ChannelCategory
+              roomId={displayRoomId}
+              title={t("channels.textChannels")}
+              channels={textChannels}
+              activeChannelId={activeChannelId}
+              onChannelClick={handleChannelClick}
+            />
+            <ChannelCategory
+              roomId={displayRoomId}
+              title={t("channels.voiceChannels")}
+              channels={voiceChannels}
+              activeChannelId={activeChannelId}
+              onChannelClick={handleChannelClick}
+            />
+          </>
+        )}
       </ScrollArea>
     </div>
   );

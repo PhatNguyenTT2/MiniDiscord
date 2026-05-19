@@ -39,7 +39,8 @@ public class FriendEventListener {
         }
 
         if ("PRESENCE_UPDATE".equals(type)) {
-            log.debug("Presence event: from={} to={}", fromUserId, toUserId);
+            log.info("[PRESENCE-HOP3] Presence event: from={} to={} status={}", fromUserId, toUserId,
+                    event.get("status"));
         } else {
             log.info("Friend event [{}]: from={} to={}", type, fromUserId, toUserId);
         }

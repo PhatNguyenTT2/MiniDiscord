@@ -23,14 +23,14 @@ public class PresenceService {
     public void setUserOnline(String userId) {
         String key = PRESENCE_KEY_PREFIX + userId;
         redisTemplate.opsForValue().set(key, "ONLINE", Duration.ofMinutes(10));
-        log.debug("User {} is now ONLINE", userId);
+        log.info("[PRESENCE] User {} is now ONLINE → publishing to RabbitMQ", userId);
         publishPresenceChange(userId, "ONLINE");
     }
 
     public void setUserOffline(String userId) {
         String key = PRESENCE_KEY_PREFIX + userId;
         redisTemplate.delete(key);
-        log.debug("User {} is now OFFLINE", userId);
+        log.info("[PRESENCE] User {} is now OFFLINE → publishing to RabbitMQ", userId);
         publishPresenceChange(userId, "OFFLINE");
     }
 
@@ -38,8 +38,9 @@ public class PresenceService {
         try {
             rabbitTemplate.convertAndSend("user.events", "user.presence.update",
                     java.util.Map.of("userId", userId, "status", status));
+            log.info("[PRESENCE] Published presence event to RabbitMQ: userId={}, status={}", userId, status);
         } catch (Exception e) {
-            log.error("Failed to publish presence event", e);
+            log.error("[PRESENCE] FAILED to publish presence event to RabbitMQ: {}", e.getMessage(), e);
         }
     }
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/authStore";
 import { useWebSocket } from "@/hooks/useWebSocket";
+import { usePrefetch } from "@/hooks/usePrefetch";
 import { Loader2 } from "lucide-react";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
@@ -14,6 +15,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
   // WebSocket connects only when authenticated, disconnects on unmount/logout
   useWebSocket();
+
+  // Prefetch critical data (friends, rooms) as soon as auth is confirmed
+  usePrefetch();
 
   useEffect(() => {
     // Attempt to load token from localStorage

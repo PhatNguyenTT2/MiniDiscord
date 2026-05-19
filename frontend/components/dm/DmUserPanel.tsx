@@ -12,6 +12,8 @@ import {
   Calendar,
 } from "lucide-react";
 import { useFriendStore } from "@/stores/friendStore";
+import { useRoomStore } from "@/stores/roomStore";
+import { useAuthStore } from "@/stores/authStore";
 import { cn } from "@/lib/utils";
 import type { User } from "@/types";
 import { useTranslation } from "@/lib/i18n";
@@ -223,18 +225,26 @@ function UserProfileModal({
 export function DmUserPanel({ userId }: { userId: string }) {
   const { t } = useTranslation();
   const [showProfile, setShowProfile] = useState(false);
-  
-  const { dmList } = useFriendStore();
-  const dm = dmList.find((u) => u.recipientId === userId);
-  
-  if (!dm) return null;
+
+  const friends = useFriendStore((s) => s.friends);
+  const { members: allMembers, getDmRoomForUser } = useRoomStore();
+
+  // Resolve user from multiple sources
+  const friendEntry = friends.find((f) => f.user.id === userId);
+  const dmRoom = getDmRoomForUser(userId);
+  const roomMember = dmRoom?.roomId
+    ? allMembers[dmRoom.roomId]?.find((m) => m.userId === userId)
+    : null;
+
+  const resolvedName = friendEntry?.user.username || roomMember?.username;
+  if (!resolvedName) return null;
 
   const user = {
-    id: dm.recipientId,
-    username: dm.recipientName,
-    avatarUrl: dm.recipientAvatar,
-    status: dm.recipientStatus,
-    createdAt: new Date().toISOString(), // Mocked until we add it to API
+    id: userId,
+    username: resolvedName,
+    avatarUrl: friendEntry?.user.avatarUrl || roomMember?.avatarUrl || null,
+    status: (friendEntry?.user.status || roomMember?.status || "OFFLINE") as User["status"],
+    createdAt: new Date().toISOString(),
   } as User;
 
   const mutualServers = getMutualServers(userId);

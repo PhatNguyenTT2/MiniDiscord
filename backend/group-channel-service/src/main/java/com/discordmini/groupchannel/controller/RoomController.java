@@ -14,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -31,6 +32,15 @@ public class RoomController {
         Room room = roomService.createRoom(request, userId);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Room created successfully", mapToResponse(room)));
+    }
+
+    @PostMapping("/dm")
+    public ResponseEntity<ApiResponse<RoomResponse>> findOrCreateDm(
+            @RequestHeader("X-User-Id") UUID userId,
+            @RequestBody Map<String, String> body) {
+        UUID targetUserId = UUID.fromString(body.get("targetUserId"));
+        Room room = roomService.findOrCreateDmRoom(userId, targetUserId);
+        return ResponseEntity.ok(ApiResponse.ok("DM room fetched", mapToResponse(room)));
     }
 
     @PostMapping("/{roomId}/members")
@@ -53,10 +63,19 @@ public class RoomController {
     }
 
     @GetMapping("/{roomId}/members")
-    public ResponseEntity<ApiResponse<List<com.discordmini.groupchannel.model.dto.MemberDetailResponse>>> getMembers(@PathVariable UUID roomId) {
+    public ResponseEntity<ApiResponse<List<com.discordmini.groupchannel.model.dto.MemberDetailResponse>>> getMembers(
+            @PathVariable UUID roomId) {
         return ResponseEntity.ok(ApiResponse.ok("Members fetched", membershipService.getMembers(roomId)));
     }
-    
+
+    @GetMapping("/{roomId}/members/{userId}")
+    public ResponseEntity<ApiResponse<Void>> checkMembership(
+            @PathVariable UUID roomId,
+            @PathVariable UUID userId) {
+        membershipService.checkMembership(roomId, userId);
+        return ResponseEntity.ok(ApiResponse.ok("Member verified", null));
+    }
+
     private RoomResponse mapToResponse(Room room) {
         return RoomResponse.builder()
                 .id(room.getId())

@@ -7,12 +7,14 @@ import { UnreadBanner, NewMessageDivider } from "@/components/chat/UnreadBanner"
 import { Hash } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { useNotificationStore } from "@/stores/notificationStore";
+import { useChatStore } from "@/stores/chatStore";
 import type { Message } from "@/types";
 
 interface MessageListProps {
   messages: Message[];
   channelName: string;
   channelId?: string;
+  roomId?: string;
   /** Called when scroll-at-bottom state changes */
   onScrollStateChange?: (isAtBottom: boolean) => void;
 }
@@ -35,13 +37,15 @@ function isDifferentDay(a: string, b: string): boolean {
 }
 
 export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
-  function MessageList({ messages, channelName, channelId, onScrollStateChange }, ref) {
+  function MessageList({ messages, channelName, channelId, roomId, onScrollStateChange }, ref) {
     const { t } = useTranslation();
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const unreadDividerRef = useRef<HTMLDivElement>(null);
     const getUnreadCount = useNotificationStore((s) => s.getUnreadCount);
     const markAsRead = useNotificationStore((s) => s.markAsRead);
+    const fetchMessages = useChatStore((s) => s.fetchMessages);
+    const isLoading = useChatStore((s) => s.isLoading);
 
     // Determine unread state for this channel
     const unreadCount = channelId ? getUnreadCount(channelId) : 0;
@@ -64,7 +68,12 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
     useEffect(() => {
       setIsDismissed(false);
       setIsAtBottom(true);
-    }, [channelId]);
+
+      // Initial fetch when switching to a channel
+      if (roomId && channelId) {
+        fetchMessages(roomId, channelId);
+      }
+    }, [roomId, channelId, fetchMessages]);
 
     // Auto-dismiss: mark as read after 5s of viewing the channel
     useEffect(() => {
@@ -109,11 +118,31 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
     const handleScroll = useCallback(() => {
       const el = scrollContainerRef.current;
       if (!el) return;
+
+      // Bottom detection
       const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
       const atBottom = distanceFromBottom < 100;
       setIsAtBottom(atBottom);
       onScrollStateChange?.(atBottom);
-    }, [onScrollStateChange]);
+
+      // Top detection (Infinite scroll up)
+      if (el.scrollTop < 100 && !isLoading && messages.length > 0 && roomId && channelId) {
+        const oldestMessageId = messages[0].id;
+
+        // Save current scroll height to prevent jump
+        const prevScrollHeight = el.scrollHeight;
+
+        fetchMessages(roomId, channelId, oldestMessageId).then(() => {
+          // Adjust scroll position after prepending new items so viewport doesn't jump
+          requestAnimationFrame(() => {
+            if (scrollContainerRef.current) {
+              const newScrollHeight = scrollContainerRef.current.scrollHeight;
+              scrollContainerRef.current.scrollTop = newScrollHeight - prevScrollHeight;
+            }
+          });
+        });
+      }
+    }, [onScrollStateChange, isLoading, messages, roomId, channelId, fetchMessages]);
 
     // Auto-scroll to bottom when messages change (only if already at bottom)
     useEffect(() => {
@@ -164,8 +193,8 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
                 !!prev &&
                 prev.senderId === msg.senderId &&
                 new Date(msg.createdAt).getTime() -
-                  new Date(prev.createdAt).getTime() <
-                  5 * 60 * 1000 &&
+                new Date(prev.createdAt).getTime() <
+                5 * 60 * 1000 &&
                 !isDifferentDay(prev.createdAt, msg.createdAt);
 
               // Show date separator if first message or different day

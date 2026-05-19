@@ -99,6 +99,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      user-service:
+        condition: service_healthy
+      group-channel-service:
+        condition: service_healthy
+      chat-history-service:
+        condition: service_healthy
+      messaging-service:
+        condition: service_healthy
     networks:
       - minidiscord-net
     restart: on-failure
@@ -126,6 +134,12 @@ services:
     networks:
       - minidiscord-net
     restart: on-failure
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8082/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 50s
 
   chat-history-service:
     build:
@@ -147,6 +161,12 @@ services:
     networks:
       - minidiscord-net
     restart: on-failure
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8083/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 50s
 
   messaging-service:
     build:
@@ -174,6 +194,12 @@ services:
     networks:
       - minidiscord-net
     restart: on-failure
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8084/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 50s
 
   file-service:
     build:

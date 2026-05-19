@@ -1,16 +1,24 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { Plus, Smile, Gift, Sticker, X, Reply, FileUp, Image, Video } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Plus, Smile, Gift, Sticker, X, Reply, FileUp, Image as ImageIcon, Video, Loader2, FileIcon } from "lucide-react";
 import { EmojiPicker } from "@/components/ui/EmojiPicker";
 import { useChatStore } from "@/stores/chatStore";
+import { useFileStore } from "@/stores/fileStore";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+
+export type AttachmentData = {
+  fileUrl: string;
+  fileName: string;
+  fileSize: number;
+};
 
 interface MessageInputProps {
   channelName: string;
   isDm?: boolean;
-  onSend?: (content: string) => void;
+  onSend?: (content: string, attachment?: AttachmentData | null) => void;
+  onTyping?: () => void;
 }
 
 function GifIcon() {
@@ -21,15 +29,22 @@ function GifIcon() {
   );
 }
 
-export function MessageInput({ channelName, isDm, onSend }: MessageInputProps) {
+export function MessageInput({ channelName, isDm, onSend, onTyping }: MessageInputProps) {
   const [message, setMessage] = useState("");
   const [isAttachOpen, setIsAttachOpen] = useState(false);
+  const [attachment, setAttachment] = useState<AttachmentData | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const attachRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const lastTypingTime = useRef<number>(0);
   const { t } = useTranslation();
 
   const replyingTo = useChatStore((s) => s.replyingTo);
   const clearReplyingTo = useChatStore((s) => s.clearReplyingTo);
+
+  const { isUploading, uploadProgress, uploadFile } = useFileStore();
 
   // Auto-focus input when reply mode activates
   useEffect(() => {
@@ -40,13 +55,37 @@ export function MessageInput({ channelName, isDm, onSend }: MessageInputProps) {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!message.trim()) return;
-    onSend?.(message.trim());
+    if ((!message.trim() && !attachment) || isUploading) return;
+    onSend?.(message.trim(), attachment);
     setMessage("");
+    setAttachment(null);
   }
 
   function handleEmojiSelect(emoji: string) {
     setMessage((prev) => prev + emoji);
+  }
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadError(null);
+    setIsAttachOpen(false);
+
+    try {
+      const res = await uploadFile(file);
+      setAttachment({
+        fileUrl: res.fileUrl,
+        fileName: res.fileName,
+        fileSize: res.fileSize,
+      });
+      // Focus input after upload
+      inputRef.current?.focus();
+    } catch (err: any) {
+      setUploadError(err?.message || "Upload failed");
+    } finally {
+      // Reset input value so same file can be selected again
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   }
 
   // Click-outside to close attachment menu
@@ -62,9 +101,9 @@ export function MessageInput({ channelName, isDm, onSend }: MessageInputProps) {
   }, [isAttachOpen]);
 
   const ATTACH_ITEMS = [
-    { icon: FileUp, label: t("chat.uploadFile") },
-    { icon: Image, label: t("chat.uploadImage") },
-    { icon: Video, label: t("chat.uploadVideo") },
+    { icon: FileUp, label: t("chat.uploadFile"), accept: "*" },
+    { icon: ImageIcon, label: t("chat.uploadImage"), accept: "image/*" },
+    { icon: Video, label: t("chat.uploadVideo"), accept: "video/*" },
   ];
 
   const placeholder = isDm
@@ -110,6 +149,52 @@ export function MessageInput({ channelName, isDm, onSend }: MessageInputProps) {
           </div>
         )}
 
+        {/* Attachment Preview/Progress UI */}
+        {(isUploading || attachment || uploadError) && (
+          <div className="px-4 pt-3 pb-1 border-b border-border/20 flex gap-3 overflow-x-auto">
+            {isUploading && (
+              <div className="relative flex h-32 w-32 shrink-0 flex-col items-center justify-center rounded bg-[#2b2d31] p-2 border border-border/50">
+                <Loader2 className="h-8 w-8 animate-spin text-accent mb-2" />
+                <span className="text-xs font-medium text-muted-foreground">{uploadProgress}%</span>
+              </div>
+            )}
+
+            {uploadError && (
+              <div className="relative flex h-32 w-32 shrink-0 flex-col items-center justify-center rounded bg-[#2b2d31] p-2 border border-destructive/50">
+                <span className="text-xs font-semibold text-destructive text-center">{uploadError}</span>
+                <button
+                  onClick={() => setUploadError(null)}
+                  className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-white shadow-md hover:bg-destructive/80 cursor-pointer"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+
+            {attachment && !isUploading && (
+              <div className="relative group flex h-32 w-32 shrink-0 flex-col items-center justify-center rounded bg-[#2b2d31] p-2 border border-border/50">
+                {attachment.fileUrl.match(/\.(jpeg|jpg|gif|png)$/i) ? (
+                  <img src={attachment.fileUrl} alt={attachment.fileName} className="h-full w-full object-cover rounded shadow-sm" />
+                ) : (
+                  <div className="flex flex-col items-center gap-2">
+                    <FileIcon className="h-10 w-10 text-accent" />
+                    <span className="text-[10px] text-muted-foreground text-center truncate w-full px-2" title={attachment.fileName}>
+                      {attachment.fileName}
+                    </span>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => setAttachment(null)}
+                  className="absolute -right-2 -top-2 flex h-6 w-6 scale-0 items-center justify-center rounded-full bg-background-tertiary text-foreground shadow-md transition-all group-hover:scale-100 hover:bg-destructive border border-border cursor-pointer"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         <form
           onSubmit={handleSubmit}
           className={cn(
@@ -133,11 +218,16 @@ export function MessageInput({ channelName, isDm, onSend }: MessageInputProps) {
             {/* Attachment Popover */}
             {isAttachOpen && (
               <div className="absolute bottom-[calc(100%+8px)] left-0 w-48 rounded-lg bg-[#2b2d31] p-1.5 shadow-xl border border-border/30 z-30">
-                {ATTACH_ITEMS.map(({ icon: Icon, label }) => (
+                {ATTACH_ITEMS.map(({ icon: Icon, label, accept }) => (
                   <button
                     key={label}
                     type="button"
-                    onClick={() => setIsAttachOpen(false)}
+                    onClick={() => {
+                      if (fileInputRef.current) {
+                        fileInputRef.current.accept = accept;
+                        fileInputRef.current.click();
+                      }
+                    }}
                     className="flex w-full items-center gap-3 rounded px-2.5 py-2 text-[14px] text-[#dbdee1] hover:bg-[#4752c4] hover:text-white transition-colors cursor-pointer"
                   >
                     <Icon className="h-5 w-5 shrink-0" />
@@ -146,13 +236,28 @@ export function MessageInput({ channelName, isDm, onSend }: MessageInputProps) {
                 ))}
               </div>
             )}
+
+            {/* Hidden File Input */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              onChange={handleFileChange}
+            />
           </div>
 
           <input
             ref={inputRef}
             type="text"
             value={message}
-            onChange={(e) => setMessage(e.target.value)}
+            onChange={(e) => {
+              setMessage(e.target.value);
+              const now = Date.now();
+              if (now - lastTypingTime.current > 3000) {
+                lastTypingTime.current = now;
+                onTyping?.();
+              }
+            }}
             placeholder={placeholder}
             className="flex-1 bg-transparent py-[11px] text-[15px] text-foreground placeholder:text-muted-foreground outline-none focus-visible:outline-none"
           />

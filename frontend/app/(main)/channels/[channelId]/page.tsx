@@ -12,9 +12,11 @@ import { ResizeHandle } from "@/components/ui/ResizeHandle";
 import { SlidingPanel } from "@/components/ui/SlidingPanel";
 import { useUIStore } from "@/stores/uiStore";
 import { useChatStore } from "@/stores/chatStore";
+import { useAuthStore } from "@/stores/authStore";
 import { useRoomStore } from "@/stores/roomStore";
+import { getStompClient } from "@/lib/websocket";
 import { useParams } from "next/navigation";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 
 export default function ChannelPage() {
   const params = useParams();
@@ -39,12 +41,66 @@ export default function ChannelPage() {
 
   // Read messages from in-memory store
   const messages = useChatStore((s) => s.getChannelMessages(channelId));
-  const sendChannelMessage = useChatStore((s) => s.sendChannelMessage);
+  const replyingTo = useChatStore((s) => s.replyingTo);
+  const clearReplyingTo = useChatStore((s) => s.clearReplyingTo);
+  const markChannelAsRead = useChatStore((s) => s.markChannelAsRead);
+  const token = useAuthStore((s) => s.token);
+
+  const lastMarkedMsgRef = useRef<string | null>(null);
+
+  // Auto mask as read when viewing this channel
+  useEffect(() => {
+    if (messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMarkedMsgRef.current !== lastMessage.id) {
+        lastMarkedMsgRef.current = lastMessage.id;
+        markChannelAsRead(roomId, channelId, lastMessage.id);
+      }
+    }
+  }, [messages, roomId, channelId, markChannelAsRead]);
 
   const handleSend = useCallback(
-    (content: string) => sendChannelMessage(channelId, roomId, content),
-    [channelId, roomId, sendChannelMessage]
+    (content: string, attachment?: { fileUrl: string; fileName: string; fileSize: number } | null) => {
+      if (!token) return;
+      const client = getStompClient(token);
+      if (!client.connected) return;
+
+      const payload = {
+        roomId,
+        channelId,
+        content,
+        fileUrl: attachment?.fileUrl,
+        fileName: attachment?.fileName,
+        fileSize: attachment?.fileSize,
+        replyTo: replyingTo
+          ? {
+            messageId: replyingTo.messageId,
+            content: replyingTo.content.slice(0, 100),
+            senderName: replyingTo.senderName,
+          }
+          : null,
+      };
+
+      client.publish({
+        destination: "/app/chat.send",
+        body: JSON.stringify(payload),
+      });
+
+      clearReplyingTo();
+    },
+    [channelId, roomId, token, replyingTo, clearReplyingTo]
   );
+
+  const handleTyping = useCallback(() => {
+    if (!token) return;
+    const client = getStompClient(token);
+    if (!client.connected) return;
+
+    client.publish({
+      destination: "/app/chat.typing",
+      body: JSON.stringify({ roomId, channelId }),
+    });
+  }, [channelId, roomId, token]);
 
   const handleResize = useCallback(
     (delta: number) => setSidebarWidth(sidebarWidth + delta),
@@ -87,6 +143,7 @@ export default function ChannelPage() {
           messages={messages}
           channelName={channelName}
           channelId={channelId}
+          roomId={roomId}
           onScrollStateChange={handleScrollStateChange}
         />
 
@@ -96,7 +153,11 @@ export default function ChannelPage() {
             visible={showJumpBanner}
             onJumpToPresent={() => messageListRef.current?.scrollToBottom()}
           />
-          <MessageInput channelName={channelName} onSend={handleSend} />
+          <MessageInput
+            channelName={channelName}
+            onSend={handleSend}
+            onTyping={handleTyping}
+          />
         </div>
       </main>
 

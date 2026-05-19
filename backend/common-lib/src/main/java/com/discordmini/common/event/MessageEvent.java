@@ -6,7 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Data
 @Builder
@@ -21,10 +21,10 @@ public class MessageEvent implements Serializable {
     private String senderName;
     private String senderAvatar;
     private String content;
-    private String type;       // TEXT, IMAGE, FILE, SYSTEM
+    private String type; // TEXT, IMAGE, FILE, SYSTEM
     private String fileUrl;
     private String fileName;
     private Long fileSize;
     private ReplyInfo replyTo;
-    private LocalDateTime createdAt;
+    private Instant createdAt;
 }

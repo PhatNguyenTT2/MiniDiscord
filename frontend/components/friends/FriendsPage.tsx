@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { FriendUser, FriendResponse, PendingFriendResponse } from "@/types/friend";
 import { useFriendStore } from "@/stores/friendStore";
+import { useRoomStore } from "@/stores/roomStore";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -163,16 +164,35 @@ function FriendItem({
 }) {
   const { t } = useTranslation();
   const router = useRouter();
+  const roomStore = useRoomStore();
   const [showMenu, setShowMenu] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
+
   const statusKey = user.status.toLowerCase() as
     | "online"
     | "offline"
     | "idle"
     | "dnd";
 
-  function handleNavigate() {
-    if (!isPending) {
-      router.push(`/dm/${user.id}`);
+  async function handleNavigate() {
+    if (!isPending && !isNavigating) {
+      // A. Fast-lane: 0ms navigation if DM room already exists locally
+      const existingDm = roomStore.getDmRoomForUser(user.id);
+      if (existingDm) {
+        router.push(`/dm/${user.id}`);
+        return;
+      }
+
+      // B. Slow-lane (~200ms): Call idempotent endpoint if not found
+      setIsNavigating(true);
+      try {
+        await roomStore.findOrCreateDmRoom(user.id);
+        router.push(`/dm/${user.id}`);
+      } catch (err) {
+        console.error("Failed to navigate to DM", err);
+      } finally {
+        setIsNavigating(false);
+      }
     }
   }
 
@@ -237,8 +257,12 @@ function FriendItem({
         ) : (
           <>
             <button
-              onClick={() => router.push(`/dm/${user.id}`)}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              onClick={handleNavigate}
+              disabled={isNavigating}
+              className={cn(
+                "flex h-9 w-9 items-center justify-center rounded-full bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer",
+                isNavigating && "opacity-50 cursor-not-allowed"
+              )}
               aria-label="Message"
             >
               <MessageCircle className="h-[18px] w-[18px]" />
@@ -461,36 +485,48 @@ function AddFriend() {
 /* ─── Main component ───────────────────────────────────────────────── */
 export function FriendsPage() {
   const [activeTab, setActiveTab] = useState<FriendsTab>("online");
-  const { 
-    friends, 
-    pendingRequests, 
-    fetchFriends, 
-    fetchPending, 
-    acceptFriend, 
+  const {
+    friends,
+    pendingRequests,
+    isLoading,
+    acceptFriend,
     declineOrRemoveFriend,
     getPendingCount
   } = useFriendStore();
 
-  useEffect(() => {
-    fetchFriends();
-    fetchPending();
-  }, [fetchFriends, fetchPending]);
+  // No useEffect fetch here — data is prefetched in AuthGuard via usePrefetch hook
 
   return (
     <div className="flex h-full flex-col">
       <FriendsHeader activeTab={activeTab} onTabChange={setActiveTab} pendingCount={getPendingCount()} />
 
       <ScrollArea className="flex-1">
-        {activeTab === "online" && <OnlineFriends friends={friends} />}
-        {activeTab === "all" && <AllFriends friends={friends} />}
-        {activeTab === "pending" && (
-          <PendingFriends
-            pendingRequests={pendingRequests}
-            onAccept={acceptFriend}
-            onDecline={declineOrRemoveFriend}
-          />
+        {isLoading && friends.length === 0 ? (
+          <div className="px-6 pt-8 space-y-3">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="flex items-center gap-3 rounded-lg px-3 py-2.5 animate-pulse">
+                <div className="h-10 w-10 rounded-full bg-secondary/60" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3.5 w-28 rounded bg-secondary/60" />
+                  <div className="h-3 w-16 rounded bg-secondary/40" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <>
+            {activeTab === "online" && <OnlineFriends friends={friends} />}
+            {activeTab === "all" && <AllFriends friends={friends} />}
+            {activeTab === "pending" && (
+              <PendingFriends
+                pendingRequests={pendingRequests}
+                onAccept={acceptFriend}
+                onDecline={declineOrRemoveFriend}
+              />
+            )}
+            {activeTab === "add" && <AddFriend />}
+          </>
         )}
-        {activeTab === "add" && <AddFriend />}
       </ScrollArea>
     </div>
   );

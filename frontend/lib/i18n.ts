@@ -59,6 +59,12 @@ export const useI18nStore = create<I18nState>((set) => ({
   },
 }));
 
+/** Map app locale to Intl date locale string */
+const DATE_LOCALE_MAP: Record<Locale, string> = { en: "en-US", vi: "vi-VN" };
+export function getDateLocale(): string {
+  return DATE_LOCALE_MAP[useI18nStore.getState().locale];
+}
+
 /** Call this in a top-level client component to hydrate locale from localStorage */
 export function useI18nHydration() {
   const hydrate = useI18nStore((s) => s.hydrate);

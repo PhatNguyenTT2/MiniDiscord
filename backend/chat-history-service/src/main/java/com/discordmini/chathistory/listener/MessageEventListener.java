@@ -10,7 +10,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Slf4j
 @Component
@@ -44,7 +44,7 @@ public class MessageEventListener {
                 .fileName(event.getFileName())
                 .fileSize(event.getFileSize())
                 .replyTo(replyTo)
-                .createdAt(event.getCreatedAt() != null ? event.getCreatedAt() : LocalDateTime.now())
+                .createdAt(event.getCreatedAt() != null ? event.getCreatedAt() : Instant.now())
                 .build();
 
         try {

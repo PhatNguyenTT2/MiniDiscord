@@ -14,7 +14,7 @@ import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.stereotype.Controller;
 
 import java.security.Principal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Slf4j
@@ -44,7 +44,8 @@ public class ChatWebSocketController {
         // 3. Populate server-controlled fields
         message.setMessageId(UUID.randomUUID().toString());
         message.setSenderId(userId);
-        // Note: For a production app, senderName and senderAvatar should be fetched from the User service or a local cache.
+        // Note: For a production app, senderName and senderAvatar should be fetched
+        // from the User service or a local cache.
         // For now, we assume we either have them or they are fetched.
         // We will leave them null or set placeholder if client didn't send.
         if (message.getSenderName() == null) {
@@ -65,7 +66,7 @@ public class ChatWebSocketController {
                 .fileName(message.getFileName())
                 .fileSize(message.getFileSize())
                 .replyTo(message.getReplyTo())
-                .createdAt(LocalDateTime.now())
+                .createdAt(Instant.now())
                 .build();
 
         // 5. Non-blocking Publish
@@ -78,7 +79,7 @@ public class ChatWebSocketController {
     @MessageMapping("/chat.typing")
     public void sendTyping(TypingEvent event, Principal principal) {
         String userId = principal.getName();
-        
+
         // Populate server fields
         event.setUserId(userId);
         if (event.getUsername() == null) {

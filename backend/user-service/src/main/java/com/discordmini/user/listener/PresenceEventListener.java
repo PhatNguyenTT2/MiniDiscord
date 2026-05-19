@@ -44,7 +44,8 @@ public class PresenceEventListener {
           .filter(f -> f.getStatus() == FriendshipStatus.ACCEPTED)
           .toList();
 
-      log.debug("Broadcasting presence [{}] for user {} to {} friends", status, userIdStr, friendships.size());
+      log.info("[PRESENCE-HOP2] Broadcasting presence [{}] for user {} to {} friends", status, userIdStr,
+          friendships.size());
 
       for (Friendship f : friendships) {
         UUID friendId = f.getRequesterId().equals(userId) ? f.getReceiverId() : f.getRequesterId();

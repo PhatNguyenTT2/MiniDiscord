@@ -65,7 +65,10 @@
     "requestError": "Failed to send friend request.",
     "alreadyExists": "Friendship or request already exists.",
     "userNotFound": "User not found.",
-    "cannotSelf": "You cannot add yourself as a friend."
+    "cannotSelf": "You cannot add yourself as a friend.",
+    "startVideoCall": "Start Video Call",
+    "startVoiceCall": "Start Voice Call",
+    "removeFriendAction": "Remove Friend"
   },
   "activeNow": {
     "title": "Active Now",

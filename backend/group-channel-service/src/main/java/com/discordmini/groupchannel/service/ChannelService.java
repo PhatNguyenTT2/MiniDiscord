@@ -2,6 +2,7 @@ package com.discordmini.groupchannel.service;
 
 import com.discordmini.groupchannel.exception.RoomNotFoundException;
 import com.discordmini.groupchannel.model.dto.ChannelRequest;
+import com.discordmini.groupchannel.model.dto.ChannelResponse;
 import com.discordmini.groupchannel.model.entity.Channel;
 import com.discordmini.groupchannel.model.entity.Room;
 import com.discordmini.groupchannel.repository.ChannelRepository;
@@ -28,7 +29,8 @@ public class ChannelService {
         membershipService.validateAdminOrOwner(roomId, requesterId);
 
         List<Channel> existingChannels = channelRepository.findByRoomIdOrderByPositionAsc(roomId);
-        int position = existingChannels.isEmpty() ? 0 : existingChannels.get(existingChannels.size() - 1).getPosition() + 1;
+        int position = existingChannels.isEmpty() ? 0
+                : existingChannels.get(existingChannels.size() - 1).getPosition() + 1;
 
         Channel channel = Channel.builder()
                 .room(room)
@@ -41,7 +43,20 @@ public class ChannelService {
     }
 
     @Transactional(readOnly = true)
-    public List<Channel> getChannels(UUID roomId) {
-        return channelRepository.findByRoomIdOrderByPositionAsc(roomId);
+    public List<ChannelResponse> getChannels(UUID roomId) {
+        return channelRepository.findByRoomIdOrderByPositionAsc(roomId).stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    private ChannelResponse toResponse(Channel channel) {
+        return ChannelResponse.builder()
+                .id(channel.getId())
+                .roomId(channel.getRoom().getId())
+                .name(channel.getName())
+                .type(channel.getType().name())
+                .position(channel.getPosition())
+                .createdAt(channel.getCreatedAt())
+                .build();
     }
 }

@@ -2,12 +2,13 @@
 
 import { StatusAvatar } from "@/components/ui/StatusAvatar";
 import { MessageActions } from "@/components/chat/MessageActions";
-import { Reply } from "lucide-react";
+import { Reply, FileIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chatStore";
 import { CURRENT_USER } from "@/lib/mock-data";
 import type { Message } from "@/types";
 import { useTranslation } from "@/lib/i18n";
+import { getDateLocale } from "@/lib/i18n";
 
 interface MessageItemProps {
   message: Message;
@@ -17,7 +18,7 @@ interface MessageItemProps {
 
 function formatTime(dateStr: string) {
   const date = new Date(dateStr);
-  return date.toLocaleTimeString("vi-VN", {
+  return date.toLocaleTimeString(getDateLocale(), {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -25,7 +26,7 @@ function formatTime(dateStr: string) {
 
 function formatFullDate(dateStr: string) {
   const date = new Date(dateStr);
-  return date.toLocaleDateString("vi-VN", {
+  return date.toLocaleDateString(getDateLocale(), {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -117,6 +118,42 @@ export function MessageItem({ message, isGrouped = false, channelId }: MessageIt
         <p className="text-[15px] text-foreground leading-relaxed break-words">
           {message.content}
         </p>
+
+        {/* Attachment */}
+        {message.fileUrl && (
+          <div className="mt-2">
+            {message.fileUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
+              <a href={message.fileUrl} target="_blank" rel="noopener noreferrer">
+                <img
+                  src={message.fileUrl}
+                  alt={message.fileName || "attachment"}
+                  className="max-w-full sm:max-w-[400px] max-h-[300px] object-cover rounded-md shadow-sm border border-border/50"
+                  loading="lazy"
+                />
+              </a>
+            ) : (
+              <a
+                href={message.fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 p-3 rounded bg-secondary/50 border border-border/50 max-w-[400px] hover:bg-secondary/80 transition-colors"
+                title={message.fileName || "Download file"}
+              >
+                <FileIcon className="h-8 w-8 text-accent shrink-0" />
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[14px] font-medium text-blue-400 hover:underline truncate">
+                    {message.fileName || "Unknown file"}
+                  </span>
+                  {message.fileSize && (
+                    <span className="text-[12px] text-muted-foreground mt-0.5">
+                      {Math.round(message.fileSize / 1024)} KB
+                    </span>
+                  )}
+                </div>
+              </a>
+            )}
+          </div>
+        )}
 
         {/* Reactions */}
         {message.reactions.length > 0 && (

@@ -11,8 +11,10 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -32,13 +34,21 @@ public class MessageService {
         if (before != null && !before.isBlank()) {
             messages = messageRepository.findByRoomIdAndChannelIdBeforeCursor(roomId, channelId, before, pageable);
         } else {
-            messages = messageRepository.findByRoomIdAndChannelIdAndIsDeletedFalseOrderByIdDesc(roomId, channelId, pageable);
+            messages = messageRepository.findByRoomIdAndChannelIdAndIsDeletedFalseOrderByIdDesc(roomId, channelId,
+                    pageable);
         }
 
-        return messages.stream().map(MessageResponse::from).toList();
+        // DESC query for cursor pagination, then reverse for chronological display
+        // (oldest→newest)
+        List<MessageResponse> responses = messages.stream()
+                .map(MessageResponse::from)
+                .collect(Collectors.toList());
+        Collections.reverse(responses);
+        return responses;
     }
 
-    public List<MessageResponse> searchMessages(String userId, String roomId, String channelId, String keyword, int limit) {
+    public List<MessageResponse> searchMessages(String userId, String roomId, String channelId, String keyword,
+            int limit) {
         membershipClient.verifyMembership(userId, roomId);
 
         int clampedLimit = Math.min(Math.max(limit, 1), MAX_LIMIT);
@@ -57,7 +67,7 @@ public class MessageService {
         }
 
         message.setDeleted(true);
-        message.setDeletedAt(LocalDateTime.now());
+        message.setDeletedAt(Instant.now());
         messageRepository.save(message);
     }
 }

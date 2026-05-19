@@ -29,11 +29,7 @@ export function ServerList() {
   const getUnreadCount = useNotificationStore((s) => s.getUnreadCount);
   const markAsRead = useNotificationStore((s) => s.markAsRead);
 
-  const { rooms, channels, fetchMyRooms } = useRoomStore();
-
-  useEffect(() => {
-    fetchMyRooms();
-  }, [fetchMyRooms]);
+  const { rooms, channels } = useRoomStore();
 
   // Derive active room from current URL
   const activeChannelId = (params?.channelId as string) || null;
@@ -85,8 +81,8 @@ export function ServerList() {
 
           <Separator className="mx-auto w-8" />
 
-          {/* Server icons */}
-          {rooms.map((room) => (
+          {/* Server icons (exclude DM rooms — those belong in DMSidebar) */}
+          {rooms.filter(room => room.type !== "DM").map((room) => (
             <ServerIcon
               key={room.id}
               name={room.name}

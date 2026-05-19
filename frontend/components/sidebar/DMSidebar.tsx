@@ -1,18 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { ScrollArea } from "@/components/ui/ScrollArea";
 import { StatusAvatar } from "@/components/ui/StatusAvatar";
 import { Users, Plus, X } from "lucide-react";
-import { useFriendStore } from "@/stores/friendStore";
 import { useNotificationStore } from "@/stores/notificationStore";
+import { useRoomStore } from "@/stores/roomStore";
+import { useAuthStore } from "@/stores/authStore";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/uiStore";
 import { NewMessageModal } from "@/components/dm/NewMessageModal";
 import { UnreadBadge } from "@/components/ui/UnreadBadge";
-import type { DirectMessage } from "@/types";
+
+interface DmEntry {
+  roomId: string;
+  recipientId: string;
+  recipientName: string;
+  recipientAvatar: string | null;
+  recipientStatus: string;
+  createdAt: string;
+}
 
 function DMItem({
   dm,
@@ -20,7 +29,7 @@ function DMItem({
   unreadCount,
   onClick,
 }: {
-  dm: DirectMessage;
+  dm: DmEntry;
   isActive: boolean;
   unreadCount: number;
   onClick: () => void;
@@ -38,7 +47,7 @@ function DMItem({
       <StatusAvatar
         src={dm.recipientAvatar}
         fallback={dm.recipientName}
-        status={dm.recipientStatus}
+        status={dm.recipientStatus as any}
         size="md"
       />
       <span className="flex-1 truncate text-left text-[15px] font-medium">
@@ -66,15 +75,49 @@ export function DMSidebar({ activeUserId }: { activeUserId?: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const sidebarWidth = useUIStore((s) => s.sidebarWidth);
-  const dmList = useFriendStore((s) => s.dmList);
   const getUnreadCount = useNotificationStore((s) => s.getUnreadCount);
   const markAsRead = useNotificationStore((s) => s.markAsRead);
   const [isNewMessageModalOpen, setIsNewMessageModalOpen] = useState(false);
 
   const isDashboard = pathname?.startsWith("/dashboard");
 
+  // Derive DM list from roomStore
+  const rooms = useRoomStore((s) => s.rooms);
+  const members = useRoomStore((s) => s.members);
+  const currentUserId = useAuthStore((s) => s.user?.id);
+
+  const dmEntries = useMemo<DmEntry[]>(() => {
+    const dmRooms = rooms.filter(r => r.type === "DM");
+    console.log("[DMSidebar] computing dmEntries:", { currentUserId, dmRooms: dmRooms.length, membersKeys: Object.keys(members) });
+    if (!currentUserId) return [];
+
+    const entries: DmEntry[] = [];
+    for (const room of rooms) {
+      if (room.type !== "DM") continue;
+
+      const roomMembers = members[room.id];
+      if (!roomMembers) continue;
+
+      // Find the OTHER user in this DM room
+      const otherUser = roomMembers.find(m => m.userId !== currentUserId);
+      if (!otherUser) continue;
+
+      entries.push({
+        roomId: room.id,
+        recipientId: otherUser.userId,
+        recipientName: otherUser.username,
+        recipientAvatar: otherUser.avatarUrl,
+        recipientStatus: otherUser.status || "OFFLINE",
+        createdAt: room.createdAt,
+      });
+    }
+
+    // Sort by newest activity first
+    entries.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return entries;
+  }, [rooms, members, currentUserId]);
+
   function handleCreateDM(userIds: string[]) {
-    // Navigate to first selected user's DM
     if (userIds.length > 0) {
       router.push(`/dm/${userIds[0]}`);
     }
@@ -123,11 +166,11 @@ export function DMSidebar({ activeUserId }: { activeUserId?: string }) {
               </button>
             </div>
 
-            {/* DM list */}
+            {/* DM list — derived from backend DM rooms */}
             <div className="mt-1 space-y-0.5">
-              {dmList.map((dm) => (
+              {dmEntries.map((dm) => (
                 <DMItem
-                  key={dm.id}
+                  key={dm.roomId}
                   dm={dm}
                   unreadCount={getUnreadCount(dm.recipientId)}
                   isActive={activeUserId === dm.recipientId}
@@ -152,3 +195,4 @@ export function DMSidebar({ activeUserId }: { activeUserId?: string }) {
     </>
   );
 }
+

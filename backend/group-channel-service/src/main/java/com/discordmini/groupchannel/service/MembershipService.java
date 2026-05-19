@@ -46,7 +46,7 @@ public class MembershipService {
     @Transactional
     public void addMember(UUID roomId, UUID requesterId, UUID targetUserId) {
         validateAdminOrOwner(roomId, requesterId);
-        
+
         Room room = roomRepository.findById(roomId)
                 .orElseThrow(() -> new RoomNotFoundException("Room not found"));
 
@@ -74,6 +74,12 @@ public class MembershipService {
                     .role(RoomRole.MEMBER)
                     .build();
             participantRepository.save(newMember);
+        }
+    }
+
+    public void checkMembership(UUID roomId, UUID userId) {
+        if (!participantRepository.existsByUserIdAndRoomId(userId, roomId)) {
+            throw new BaseException("Not a member of this room", HttpStatus.FORBIDDEN, "FORBIDDEN");
         }
     }
 

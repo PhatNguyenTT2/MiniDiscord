@@ -1,8 +1,8 @@
-"use client";
+import { getDateLocale } from "@/lib/i18n";
 
 /** Date separator line — horizontal rule with date text centered */
 export function DateSeparator({ date }: { date: Date }) {
-  const formatted = date.toLocaleDateString("vi-VN", {
+  const formatted = date.toLocaleDateString(getDateLocale(), {
     day: "numeric",
     month: "long",
     year: "numeric",

@@ -24,8 +24,9 @@ import { useNetworkStore } from "@/stores/networkStore";
  * - Tracks subscriptions via Map to avoid duplicates
  * - Cleans up on unmount (deactivate client)
  */
-export function useWebSocket(roomId?: string) {
+export function useWebSocket() {
   const token = useAuthStore((s) => s.token);
+  const rooms = useRoomStore((s) => s.rooms);
   const subscriptionsRef = useRef<Map<string, StompSubscription>>(new Map());
 
   // ── 1. Connect + subscribe personal notification channel ──────────
@@ -37,12 +38,30 @@ export function useWebSocket(roomId?: string) {
     client.onConnect = () => {
       useNetworkStore.getState().setWsStatus("connected");
       useAuthStore.getState().setOwnStatus("ONLINE");
+
+      // Clear stale room subscriptions from previous connection
+      subscriptionsRef.current.forEach((sub, key) => {
+        if (key !== "/user/queue/notifications") {
+          subscriptionsRef.current.delete(key);
+        }
+      });
+
       // Personal notification channel
       const notifKey = "/user/queue/notifications";
       if (!subscriptionsRef.current.has(notifKey)) {
         const sub = client.subscribe(notifKey, handleNotification);
         subscriptionsRef.current.set(notifKey, sub);
       }
+
+      // Re-subscribe to current rooms immediately to prevent message drop
+      const currentRooms = useRoomStore.getState().rooms;
+      currentRooms.forEach((room) => {
+        const roomKey = `/topic/room.${room.id}`;
+        if (!subscriptionsRef.current.has(roomKey)) {
+          const sub = client.subscribe(roomKey, handleRoomMessage);
+          subscriptionsRef.current.set(roomKey, sub);
+        }
+      });
     };
 
     client.onStompError = (frame) => {
@@ -71,54 +90,52 @@ export function useWebSocket(roomId?: string) {
     };
   }, [token]);
 
-  // ── 2. Room subscription (changes when user navigates rooms) ──────
+  // ── 2. Room subscriptions (changes when user navigates rooms) ──────
   useEffect(() => {
-    if (!token || !roomId) return;
-
+    if (!token) return;
     const client = getStompClient(token);
-    if (!client.connected) return;
 
-    const roomKey = `/topic/room.${roomId}`;
-
-    // Already subscribed?
-    if (subscriptionsRef.current.has(roomKey)) return;
-
-    const sub = client.subscribe(roomKey, (msg: IMessage) => {
-      try {
-        const data = JSON.parse(msg.body);
-        // Full payload push — append directly to chatStore (Pattern 2)
-        useChatStore.getState().receiveMessage(data.channelId, {
-          id: data.messageId,
-          roomId: data.roomId,
-          channelId: data.channelId,
-          senderId: data.senderId,
-          senderName: data.senderName,
-          senderAvatar: data.senderAvatar || null,
-          type: data.type || "TEXT",
-          content: data.content,
-          fileUrl: data.fileUrl || null,
-          fileName: data.fileName || null,
-          fileSize: data.fileSize || null,
-          reactions: [],
-          isEdited: false,
-          isDeleted: false,
-          editedAt: null,
-          createdAt: data.createdAt || new Date().toISOString(),
-          replyTo: data.replyTo || null,
-        });
-      } catch (e) {
-        console.error("[STOMP] Failed to parse room message:", e);
+    // Create new subscriptions
+    rooms.forEach((room) => {
+      const roomKey = `/topic/room.${room.id}`;
+      if (!subscriptionsRef.current.has(roomKey)) {
+        // Can only subscribe if client is already connected
+        if (client.connected) {
+          const sub = client.subscribe(roomKey, handleRoomMessage);
+          subscriptionsRef.current.set(roomKey, sub);
+        }
       }
     });
 
-    subscriptionsRef.current.set(roomKey, sub);
+  }, [token, rooms, useNetworkStore.getState().wsStatus]); // Re-run if connection status changes or rooms change
+}
 
-    // Cleanup: unsubscribe when leaving this room
-    return () => {
-      sub.unsubscribe();
-      subscriptionsRef.current.delete(roomKey);
-    };
-  }, [token, roomId]);
+// ── Room message handler ───────────────────────────────────────────
+function handleRoomMessage(msg: IMessage) {
+  try {
+    const data = JSON.parse(msg.body);
+    useChatStore.getState().receiveMessage(data.channelId, {
+      id: data.messageId,
+      roomId: data.roomId,
+      channelId: data.channelId,
+      senderId: data.senderId,
+      senderName: data.senderName,
+      senderAvatar: data.senderAvatar || null,
+      type: data.type || "TEXT",
+      content: data.content,
+      fileUrl: data.fileUrl || null,
+      fileName: data.fileName || null,
+      fileSize: data.fileSize || null,
+      reactions: [],
+      isEdited: false,
+      isDeleted: false,
+      editedAt: null,
+      createdAt: data.createdAt || new Date().toISOString(),
+      replyTo: data.replyTo || null,
+    });
+  } catch (e) {
+    console.error("[STOMP] Failed to parse room message:", e);
+  }
 }
 
 // ── Notification handler (Pattern 1: Ping + Re-fetch) ─────────────
@@ -138,8 +155,10 @@ function handleNotification(msg: IMessage) {
         useFriendStore.getState().handleWsEvent(type);
         break;
       case "PRESENCE_UPDATE":
+        console.log("[STOMP] PRESENCE_UPDATE received:", data);
         if (data.fromUserId && data.status) {
           useFriendStore.getState().updateFriendStatus(data.fromUserId, data.status as string);
+          useRoomStore.getState().updateMemberStatus(data.fromUserId, data.status as string);
         }
         break;
       case "MEMBER_JOINED":

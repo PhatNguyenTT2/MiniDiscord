@@ -1,17 +1,9 @@
 import { create } from "zustand";
 import type { Message, ReplyReference } from "@/types";
 import { useAuthStore } from "./authStore";
+import { api } from "@/lib/api";
 
-export interface DmMessage {
-  id: string;
-  senderId: string;
-  senderName: string;
-  senderAvatar: string | null;
-  content: string;
-  createdAt: string;
-  replyTo?: ReplyReference | null;
-  reactions: { emoji: string; userIds: string[]; count: number }[];
-}
+// Local state has been removed for DM messages since it's now handled by the backend channels flow
 
 export interface ReplyTarget {
   messageId: string;
@@ -19,22 +11,33 @@ export interface ReplyTarget {
   content: string;
 }
 
+export interface ReadReceipt {
+  count: number;
+  displayCount: string;
+  hasMore: boolean;
+}
+
 interface ChatState {
   channelMessages: Record<string, Message[]>;
-  dmMessages: Record<string, DmMessage[]>;
+  unreadCounts: Record<string, ReadReceipt>;
 
   replyingTo: ReplyTarget | null;
 
   getChannelMessages: (channelId: string) => Message[];
-  getDmMessages: (userId: string) => DmMessage[];
+
+  fetchUnreadCount: (roomId: string, channelId: string) => Promise<void>;
+  markChannelAsRead: (roomId: string, channelId: string, lastMessageId: string) => Promise<void>;
 
   sendChannelMessage: (channelId: string, roomId: string, content: string) => void;
-  sendDmMessage: (recipientId: string, content: string) => void;
 
-  setReplyingTo: (target: ReplyTarget) => void;
+  setReplyingTo: (target: ReplyTarget | null) => void;
   clearReplyingTo: () => void;
   addReaction: (channelId: string, messageId: string, emoji: string) => void;
-  addDmReaction: (recipientId: string, messageId: string, emoji: string) => void;
+
+  /* API: Fetch history */
+  isLoading: boolean;
+  error: string | null;
+  fetchMessages: (roomId: string, channelId: string, before?: string, limit?: number) => Promise<void>;
 
   /* WebSocket: receive message from /topic/room.{roomId} */
   receiveMessage: (channelId: string, message: Message) => void;
@@ -45,59 +48,93 @@ function generateId(): string {
   return `msg-${Date.now()}-${nextId++}`;
 }
 
+// Stable empty array to avoid creating new refs on every selector call
+const EMPTY_MESSAGES: Message[] = [];
+
 export const useChatStore = create<ChatState>((set, get) => ({
   channelMessages: {},
-  dmMessages: {},
+  unreadCounts: {},
   replyingTo: null,
+  isLoading: false,
+  error: null,
 
-  getChannelMessages: (channelId) => get().channelMessages[channelId] ?? [],
+  getChannelMessages: (channelId) => get().channelMessages[channelId] ?? EMPTY_MESSAGES,
 
-  getDmMessages: (userId) => get().dmMessages[userId] ?? [],
+  fetchUnreadCount: async (roomId, channelId) => {
+    try {
+      const res = await api.get(`/messages/rooms/${roomId}/channels/${channelId}/unread`);
+      set((state) => ({
+        unreadCounts: {
+          ...state.unreadCounts,
+          [channelId]: res.data.data
+        }
+      }));
+    } catch (err) {
+      console.error("Failed to fetch unread count:", err);
+    }
+  },
+
+  markChannelAsRead: async (roomId, channelId, lastMessageId) => {
+    try {
+      await api.put(`/messages/rooms/${roomId}/channels/${channelId}/read`, { lastReadMessageId: lastMessageId });
+      set((state) => {
+        const nextUnread = { ...state.unreadCounts };
+        delete nextUnread[channelId];
+        return { unreadCounts: nextUnread };
+      });
+    } catch (err) {
+      console.error("Failed to mark channel as read:", err);
+    }
+  },
 
   setReplyingTo: (target) => set({ replyingTo: target }),
   clearReplyingTo: () => set({ replyingTo: null }),
 
+  fetchMessages: async (roomId, channelId, before, limit = 50) => {
+    try {
+      set({ isLoading: true, error: null });
+      const { api } = await import("@/lib/api"); // dynamic import to avoid circular dependency
+      const params: Record<string, any> = { limit };
+      if (before) params.before = before;
+
+      const res = await api.get<{ message: string; data: Message[] }>(
+        `/messages/rooms/${roomId}/channels/${channelId}`,
+        { params }
+      );
+
+      const fetchedMessages = res.data.data;
+
+      set((state) => {
+        const existing = state.channelMessages[channelId] || [];
+
+        // If 'before' is provided, we are fetching older messages (scrolling up)
+        // We prepend (unshift) history to existing messages.
+        // If 'before' is omitted, it's initial load, replace entirely.
+        const merged = before
+          ? [...fetchedMessages, ...existing]
+          : fetchedMessages;
+
+        return {
+          channelMessages: {
+            ...state.channelMessages,
+            [channelId]: merged,
+          },
+          isLoading: false,
+        };
+      });
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+    }
+  },
+
+  // Note: sendChannelMessage is now purely a placeholder. 
+  // It should be removed, as the STOMP publish happens in MessageInput.tsx, 
+  // and state mutation happens via receiveMessage.
   sendChannelMessage: (channelId, roomId, content) => {
-    const trimmed = content.trim();
-    if (!trimmed) return;
-
-    const { replyingTo } = get();
-    const user = useAuthStore.getState().user;
-    if (!user) return;
-
-    const newMessage: Message = {
-      id: generateId(),
-      roomId,
-      channelId,
-      senderId: user.id,
-      senderName: user.username,
-      senderAvatar: user.avatarUrl,
-      type: "TEXT",
-      content: trimmed,
-      fileUrl: null,
-      fileName: null,
-      fileSize: null,
-      reactions: [],
-      isEdited: false,
-      isDeleted: false,
-      editedAt: null,
-      createdAt: new Date().toISOString(),
-      replyTo: replyingTo
-        ? {
-            messageId: replyingTo.messageId,
-            content: replyingTo.content.slice(0, 100),
-            senderName: replyingTo.senderName,
-          }
-        : null,
-    };
-
-    set((state) => ({
-      replyingTo: null,
-      channelMessages: {
-        ...state.channelMessages,
-        [channelId]: [...(state.channelMessages[channelId] ?? []), newMessage],
-      },
-    }));
+    // DO NOTHING HERE (No Optimistic Update)
+    // The STOMP message is published in MessageInput.tsx
+    // State is mutated ONLY via receiveMessage() when the server broadcasts it back.
+    console.warn("sendChannelMessage in store is deprecated. Use STOMP client in component.");
   },
 
   addReaction: (channelId, messageId, emoji) => {
@@ -156,102 +193,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  sendDmMessage: (recipientId, content) => {
-    const trimmed = content.trim();
-    if (!trimmed) return;
 
-    const { replyingTo } = get();
-    const user = useAuthStore.getState().user;
-    if (!user) return;
 
-    const newMessage: DmMessage = {
-      id: generateId(),
-      senderId: user.id,
-      senderName: user.username,
-      senderAvatar: user.avatarUrl,
-      content: trimmed,
-      createdAt: new Date().toISOString(),
-      reactions: [],
-      replyTo: replyingTo
-        ? {
-            messageId: replyingTo.messageId,
-            content: replyingTo.content.slice(0, 100),
-            senderName: replyingTo.senderName,
-          }
-        : null,
-    };
-
-    set((state) => ({
-      replyingTo: null,
-      dmMessages: {
-        ...state.dmMessages,
-        [recipientId]: [...(state.dmMessages[recipientId] ?? []), newMessage],
-      },
-    }));
-  },
-
-  addDmReaction: (recipientId, messageId, emoji) => {
-    const user = useAuthStore.getState().user;
-    if (!user) return;
-
+  receiveMessage: (channelId, message) => {
     set((state) => {
-      const msgs = state.dmMessages[recipientId];
-      if (!msgs) return state;
-
-      const updated = msgs.map((msg) => {
-        if (msg.id !== messageId) return msg;
-
-        const existingIdx = msg.reactions.findIndex((r) => r.emoji === emoji);
-        let newReactions = [...msg.reactions];
-
-        if (existingIdx >= 0) {
-          const existing = newReactions[existingIdx];
-          const hasReacted = existing.userIds.includes(user.id);
-
-          if (hasReacted) {
-            const newUserIds = existing.userIds.filter((id) => id !== user.id);
-            if (newUserIds.length === 0) {
-              newReactions.splice(existingIdx, 1);
-            } else {
-              newReactions[existingIdx] = {
-                ...existing,
-                userIds: newUserIds,
-                count: newUserIds.length,
-              };
-            }
-          } else {
-            newReactions[existingIdx] = {
-              ...existing,
-              userIds: [...existing.userIds, user.id],
-              count: existing.count + 1,
-            };
-          }
-        } else {
-          newReactions.push({
-            emoji,
-            userIds: [user.id],
-            count: 1,
-          });
-        }
-
-        return { ...msg, reactions: newReactions };
-      });
-
+      const existing = state.channelMessages[channelId] || [];
+      // Prevent duplicates if server broadcast reaches us twice somehow
+      if (existing.some((m) => m.id === message.id)) {
+        return state;
+      }
       return {
-        dmMessages: {
-          ...state.dmMessages,
-          [recipientId]: updated,
+        channelMessages: {
+          ...state.channelMessages,
+          [channelId]: [...existing, message],
         },
       };
     });
-  },
-
-  receiveMessage: (channelId, message) => {
-    set((state) => ({
-      channelMessages: {
-        ...state.channelMessages,
-        [channelId]: [...(state.channelMessages[channelId] ?? []), message],
-      },
-    }));
   },
 }));

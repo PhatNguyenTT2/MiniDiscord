@@ -54,5 +54,5 @@ jwt:
 
 gateway:
   rate-limit:
-    max-requests: 20
+    max-requests: 60
     window-seconds: 10

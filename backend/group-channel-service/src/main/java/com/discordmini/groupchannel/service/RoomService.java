@@ -26,116 +26,169 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class RoomService {
 
-    private final RoomRepository roomRepository;
-    private final RoomParticipantRepository participantRepository;
-    private final ChannelRepository channelRepository;
-    private final ApplicationEventPublisher eventPublisher;
+        private final RoomRepository roomRepository;
+        private final RoomParticipantRepository participantRepository;
+        private final ChannelRepository channelRepository;
+        private final ApplicationEventPublisher eventPublisher;
 
-    @Value("${app.default-room.name:MiniDiscord General}")
-    private String defaultRoomName;
+        @Value("${app.default-room.name:MiniDiscord General}")
+        private String defaultRoomName;
 
-    @Transactional
-    public Room createRoom(CreateRoomRequest request, UUID ownerId) {
-        // 1. Create Room
-        Room room = Room.builder()
-                .name(request.getName())
-                .description(request.getDescription())
-                .type(request.getType())
-                .ownerId(ownerId)
-                .build();
-        room = roomRepository.save(room);
+        @Transactional
+        public Room createRoom(CreateRoomRequest request, UUID ownerId) {
+                // 1. Create Room
+                Room room = Room.builder()
+                                .name(request.getName())
+                                .description(request.getDescription())
+                                .type(request.getType())
+                                .ownerId(ownerId)
+                                .build();
+                room = roomRepository.save(room);
 
-        // 2. Add Owner as Participant
-        RoomParticipant owner = RoomParticipant.builder()
-                .room(room)
-                .userId(ownerId)
-                .role(RoomRole.OWNER)
-                .build();
-        participantRepository.save(owner);
+                // 2. Add Owner as Participant
+                RoomParticipant owner = RoomParticipant.builder()
+                                .room(room)
+                                .userId(ownerId)
+                                .role(RoomRole.OWNER)
+                                .build();
+                participantRepository.save(owner);
 
-        // 3. Create Default Channel
-        Channel defaultChannel = Channel.builder()
-                .room(room)
-                .name("general")
-                .type(ChannelType.TEXT)
-                .position(0)
-                .build();
-        channelRepository.save(defaultChannel);
+                // 3. Create Default Channel
+                Channel defaultChannel = Channel.builder()
+                                .room(room)
+                                .name("general")
+                                .type(ChannelType.TEXT)
+                                .position(0)
+                                .build();
+                channelRepository.save(defaultChannel);
 
-        // 4. Publish Event (Will be handled asynchronously after commit)
-        eventPublisher.publishEvent(new RoomCreatedEvent(room.getId(), ownerId, room.getName(), room.getType()));
+                // 4. Publish Event (Will be handled asynchronously after commit)
+                eventPublisher.publishEvent(
+                                new RoomCreatedEvent(room.getId(), ownerId, room.getName(), room.getType()));
 
-        return room;
-    }
+                return room;
+        }
 
-    @Transactional(readOnly = true)
-    public List<RoomResponse> getMyRooms(UUID userId) {
-        List<RoomParticipant> memberships = participantRepository.findByUserIdOrderByJoinedAtAsc(userId);
-        List<UUID> roomIds = memberships.stream()
-                .map(p -> p.getRoom().getId())
-                .toList();
+        @Transactional(readOnly = true)
+        public List<RoomResponse> getMyRooms(UUID userId) {
+                List<RoomParticipant> memberships = participantRepository.findByUserIdOrderByJoinedAtAsc(userId);
+                List<UUID> roomIds = memberships.stream()
+                                .map(p -> p.getRoom().getId())
+                                .toList();
 
-        List<Room> rooms = roomRepository.findByIdIn(roomIds);
-        
-        return rooms.stream().map(room -> {
-            RoomResponse response = new RoomResponse();
-            response.setId(room.getId());
-            response.setName(room.getName());
-            response.setDescription(room.getDescription());
-            response.setIconUrl(room.getIconUrl());
-            response.setType(room.getType().name());
-            response.setOwnerId(room.getOwnerId());
-            response.setCreatedAt(room.getCreatedAt());
-            response.setUpdatedAt(room.getUpdatedAt());
-            return response;
-        }).toList();
-    }
+                List<Room> rooms = roomRepository.findByIdIn(roomIds);
 
-    @Transactional(readOnly = true)
-    public RoomResponse getRoomDetail(UUID roomId) {
-        Room room = roomRepository.findById(roomId)
-                .orElseThrow(() -> new com.discordmini.groupchannel.exception.RoomNotFoundException("Room not found"));
-        
-        RoomResponse response = new RoomResponse();
-        response.setId(room.getId());
-        response.setName(room.getName());
-        response.setDescription(room.getDescription());
-        response.setIconUrl(room.getIconUrl());
-        response.setType(room.getType().name());
-        response.setOwnerId(room.getOwnerId());
-        response.setCreatedAt(room.getCreatedAt());
-        response.setUpdatedAt(room.getUpdatedAt());
-        return response;
-    }
+                return rooms.stream().map(room -> {
+                        RoomResponse response = new RoomResponse();
+                        response.setId(room.getId());
+                        response.setName(room.getName());
+                        response.setDescription(room.getDescription());
+                        response.setIconUrl(room.getIconUrl());
+                        response.setType(room.getType().name());
+                        response.setOwnerId(room.getOwnerId());
+                        response.setCreatedAt(room.getCreatedAt());
+                        response.setUpdatedAt(room.getUpdatedAt());
+                        return response;
+                }).toList();
+        }
 
-    @Transactional
-    public Room getOrCreateRootGroup() {
-        return roomRepository.findByNameAndType(defaultRoomName, RoomType.GROUP)
-                .orElseGet(() -> {
-                    Room newRoom = Room.builder()
-                            .name(defaultRoomName)
-                            .type(RoomType.GROUP)
-                            .ownerId(UUID.fromString("00000000-0000-0000-0000-000000000000")) // System owner
-                            .build();
-                    roomRepository.save(newRoom);
+        @Transactional(readOnly = true)
+        public RoomResponse getRoomDetail(UUID roomId) {
+                Room room = roomRepository.findById(roomId)
+                                .orElseThrow(() -> new com.discordmini.groupchannel.exception.RoomNotFoundException(
+                                                "Room not found"));
 
-                    Channel generalChannel = Channel.builder()
-                            .room(newRoom)
-                            .name("general")
-                            .type(ChannelType.TEXT)
-                            .position(0)
-                            .build();
-                    channelRepository.save(generalChannel);
+                RoomResponse response = new RoomResponse();
+                response.setId(room.getId());
+                response.setName(room.getName());
+                response.setDescription(room.getDescription());
+                response.setIconUrl(room.getIconUrl());
+                response.setType(room.getType().name());
+                response.setOwnerId(room.getOwnerId());
+                response.setCreatedAt(room.getCreatedAt());
+                response.setUpdatedAt(room.getUpdatedAt());
+                return response;
+        }
 
-                    Channel announcementChannel = Channel.builder()
-                            .room(newRoom)
-                            .name("announcements")
-                            .type(ChannelType.TEXT)
-                            .position(1)
-                            .build();
-                    channelRepository.save(announcementChannel);
+        @Transactional
+        public Room getOrCreateRootGroup() {
+                return roomRepository.findByNameAndType(defaultRoomName, RoomType.GROUP)
+                                .orElseGet(() -> {
+                                        Room newRoom = Room.builder()
+                                                        .name(defaultRoomName)
+                                                        .type(RoomType.GROUP)
+                                                        .ownerId(UUID.fromString(
+                                                                        "00000000-0000-0000-0000-000000000000")) // System
+                                                                                                                 // owner
+                                                        .build();
+                                        roomRepository.save(newRoom);
 
-                    return newRoom;
-                });
-    }
+                                        Channel generalChannel = Channel.builder()
+                                                        .room(newRoom)
+                                                        .name("general")
+                                                        .type(ChannelType.TEXT)
+                                                        .position(0)
+                                                        .build();
+                                        channelRepository.save(generalChannel);
+
+                                        Channel announcementChannel = Channel.builder()
+                                                        .room(newRoom)
+                                                        .name("announcements")
+                                                        .type(ChannelType.TEXT)
+                                                        .position(1)
+                                                        .build();
+                                        channelRepository.save(announcementChannel);
+
+                                        return newRoom;
+                                });
+        }
+
+        @Transactional
+        public Room findOrCreateDmRoom(UUID ownerId, UUID targetUserId) {
+                List<Room> existingRooms = roomRepository.findDmRoomBetween(ownerId, targetUserId);
+                if (!existingRooms.isEmpty()) {
+                        return existingRooms.get(0);
+                }
+
+                // Create new DM room
+                Room room = Room.builder()
+                                .name("DM")
+                                .type(RoomType.DM)
+                                .ownerId(ownerId)
+                                .build();
+                room = roomRepository.save(room);
+
+                // Add both users
+                RoomParticipant owner = RoomParticipant.builder()
+                                .room(room)
+                                .userId(ownerId)
+                                .role(RoomRole.OWNER)
+                                .build();
+                participantRepository.save(owner);
+
+                // Add target user only if it's not self-DM (though discord supports it, it's
+                // safer to check)
+                if (!ownerId.equals(targetUserId)) {
+                        RoomParticipant target = RoomParticipant.builder()
+                                        .room(room)
+                                        .userId(targetUserId)
+                                        .role(RoomRole.MEMBER)
+                                        .build();
+                        participantRepository.save(target);
+                }
+
+                // Create Default Channel for STOMP topic routing
+                Channel defaultChannel = Channel.builder()
+                                .room(room)
+                                .name("general")
+                                .type(ChannelType.TEXT)
+                                .position(0)
+                                .build();
+                channelRepository.save(defaultChannel);
+
+                eventPublisher.publishEvent(
+                                new RoomCreatedEvent(room.getId(), ownerId, room.getName(), room.getType()));
+
+                return room;
+        }
 }

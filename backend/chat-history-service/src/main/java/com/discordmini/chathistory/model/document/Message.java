@@ -8,7 +8,7 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Data
 @Builder
@@ -42,11 +42,11 @@ public class Message {
     private boolean isEdited = false;
     @Builder.Default
     private boolean isDeleted = false;
-    private LocalDateTime deletedAt; // TTL anchor
+    private Instant deletedAt; // TTL anchor
 
     // Timestamps
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private Instant createdAt;
+    private Instant updatedAt;
 
     // Reply reference (optional)
     private ReplyTo replyTo;

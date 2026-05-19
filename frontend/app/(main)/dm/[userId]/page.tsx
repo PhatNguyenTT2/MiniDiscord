@@ -10,13 +10,16 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { MessageInput } from "@/components/chat/MessageInput";
 import { MessageActions } from "@/components/chat/MessageActions";
 import { StatusAvatar } from "@/components/ui/StatusAvatar";
-import { Phone, Video, Pin, User, Reply, Server, UserPlus } from "lucide-react";
+import { Phone, Video, Pin, User, Reply, Server, UserPlus, FileIcon } from "lucide-react";
 import { ResizeHandle } from "@/components/ui/ResizeHandle";
 import { SlidingPanel } from "@/components/ui/SlidingPanel";
 import { useUIStore } from "@/stores/uiStore";
-import { useChatStore, type DmMessage } from "@/stores/chatStore";
+import { useChatStore } from "@/stores/chatStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useFriendStore } from "@/stores/friendStore";
+import { useRoomStore } from "@/stores/roomStore";
+import { getStompClient } from "@/lib/websocket";
+import { type Message } from "@/types";
 
 function getMutualServersCount(userId: string) {
   // TODO: Implement mutual servers logic with real API
@@ -24,9 +27,32 @@ function getMutualServersCount(userId: string) {
 }
 
 import { cn } from "@/lib/utils";
-import { useTranslation } from "@/lib/i18n";
+import { useTranslation, getDateLocale } from "@/lib/i18n";
 import { DateSeparator } from "@/components/chat/DateSeparator";
 import { useNotificationStore } from "@/stores/notificationStore";
+
+// Stable empty array to prevent React getSnapshot caching issues
+const EMPTY_DM: Message[] = [];
+
+function MessagesSkeleton() {
+  return (
+    <div className="flex-1 p-4 pb-0 space-y-6 overflow-hidden opacity-50">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="flex gap-4 animate-pulse">
+          <div className="h-10 w-10 shrink-0 rounded-full bg-secondary" />
+          <div className="space-y-2 flex-1">
+            <div className="flex items-center gap-2">
+              <div className="h-4 w-24 bg-secondary rounded" />
+              <div className="h-3 w-16 bg-secondary/50 rounded" />
+            </div>
+            <div className="h-4 bg-secondary rounded w-3/4" />
+            <div className="h-4 bg-secondary rounded w-1/2" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function DmMessageItem({
   message,
@@ -36,14 +62,14 @@ function DmMessageItem({
   onReaction,
   currentUserId,
 }: {
-  message: DmMessage;
+  message: Message;
   isGrouped: boolean;
   isBeingReplied: boolean;
   onReply: () => void;
   onReaction?: (emoji: string) => void;
   currentUserId?: string;
 }) {
-  const time = new Date(message.createdAt).toLocaleTimeString("vi-VN", {
+  const time = new Date(message.createdAt).toLocaleTimeString(getDateLocale(), {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -76,6 +102,40 @@ function DmMessageItem({
           <p className="text-[0.9375rem] leading-[1.375rem] text-foreground">
             {message.content}
           </p>
+          {/* Attachment */}
+          {message.fileUrl && (
+            <div className="mt-2">
+              {message.fileUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
+                <a href={message.fileUrl} target="_blank" rel="noopener noreferrer">
+                  <img
+                    src={message.fileUrl}
+                    alt={message.fileName || "attachment"}
+                    className="max-w-full sm:max-w-[400px] max-h-[300px] object-cover rounded-md shadow-sm border border-border/50"
+                    loading="lazy"
+                  />
+                </a>
+              ) : (
+                <a
+                  href={message.fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 p-3 rounded bg-secondary/50 border border-border/50 max-w-[400px] hover:bg-secondary/80 transition-colors"
+                >
+                  <FileIcon className="h-8 w-8 text-accent shrink-0" />
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[14px] font-medium text-blue-400 hover:underline truncate">
+                      {message.fileName || "Unknown file"}
+                    </span>
+                    {message.fileSize && (
+                      <span className="text-[12px] text-muted-foreground mt-0.5">
+                        {Math.round(message.fileSize / 1024)} KB
+                      </span>
+                    )}
+                  </div>
+                </a>
+              )}
+            </div>
+          )}
           {/* Reaction badges */}
           {message.reactions && message.reactions.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1">
@@ -144,6 +204,40 @@ function DmMessageItem({
         <p className="text-[0.9375rem] leading-[1.375rem] text-foreground">
           {message.content}
         </p>
+        {/* Attachment */}
+        {message.fileUrl && (
+          <div className="mt-2">
+            {message.fileUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
+              <a href={message.fileUrl} target="_blank" rel="noopener noreferrer">
+                <img
+                  src={message.fileUrl}
+                  alt={message.fileName || "attachment"}
+                  className="max-w-full sm:max-w-[400px] max-h-[300px] object-cover rounded-md shadow-sm border border-border/50"
+                  loading="lazy"
+                />
+              </a>
+            ) : (
+              <a
+                href={message.fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 p-3 rounded bg-secondary/50 border border-border/50 max-w-[400px] hover:bg-secondary/80 transition-colors"
+              >
+                <FileIcon className="h-8 w-8 text-accent shrink-0" />
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[14px] font-medium text-blue-400 hover:underline truncate">
+                    {message.fileName || "Unknown file"}
+                  </span>
+                  {message.fileSize && (
+                    <span className="text-[12px] text-muted-foreground mt-0.5">
+                      {Math.round(message.fileSize / 1024)} KB
+                    </span>
+                  )}
+                </div>
+              </a>
+            )}
+          </div>
+        )}
         {/* Reaction badges */}
         {message.reactions && message.reactions.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-1">
@@ -189,24 +283,113 @@ export default function DmChatPage() {
     [sidebarWidth, setSidebarWidth]
   );
 
-  const { dmList } = useFriendStore();
+  const friends = useFriendStore((s) => s.friends);
   const currentUser = useAuthStore((s) => s.user);
-  
-  const friend = dmList.find((u) => u.recipientId === userId);
-  const friendName = friend?.recipientName || "User";
+
+  // Get Room Mapping
+  const { getDmRoomForUser, members: allMembers, findOrCreateDmRoom, isLoading: isLoadingRoom } = useRoomStore();
+  const dmRoom = getDmRoomForUser(userId);
+  const roomId = dmRoom?.roomId || "";
+  const channelId = dmRoom?.channelId || "";
+
+  // Resolve friend name from multiple sources
+  const friend = friends.find((f) => f.user.id === userId);
+  const roomMember = roomId
+    ? allMembers[roomId]?.find((m) => m.userId === userId)
+    : null;
+  const friendName = friend?.user.username || roomMember?.username || "User";
+  const friendAvatar = friend?.user.avatarUrl || roomMember?.avatarUrl || null;
+  // Prefer friendStore (real-time PRESENCE_UPDATE), then roomStore.members (also synced)
+  const friendStatus = friend?.user.status ?? roomMember?.status ?? "OFFLINE";
+
   const [modalType, setModalType] = useState<"REMOVE_FRIEND" | "BLOCK" | null>(null);
   const [relationship, setRelationship] = useState<"friend" | "none" | "blocked">("friend");
 
-  // Chat store
-  const messages = useChatStore((s) => s.getDmMessages(userId));
-  const sendDmMessage = useChatStore((s) => s.sendDmMessage);
-  const addDmReaction = useChatStore((s) => s.addDmReaction);
+  // Chat store — Read messages from global channel storage
+  const messages = useChatStore((s) => s.getChannelMessages(channelId));
+  const addReaction = useChatStore((s) => s.addReaction);
   const replyingTo = useChatStore((s) => s.replyingTo);
   const setReplyingTo = useChatStore((s) => s.setReplyingTo);
+  const clearReplyingTo = useChatStore((s) => s.clearReplyingTo);
+  const markChannelAsRead = useChatStore((s) => s.markChannelAsRead);
+  const fetchMessages = useChatStore((s) => s.fetchMessages);
+  const isLoadingMessages = useChatStore((s) => s.isLoading);
+
+  const token = useAuthStore((s) => s.token);
+
+  const lastMarkedMsgRef = useRef<string | null>(null);
+
+  // Auto-resolve DM room on mount
+  useEffect(() => {
+    if (!roomId && userId) {
+      findOrCreateDmRoom(userId).catch(err => {
+        console.error("Failed to find or create DM room:", err);
+      });
+    }
+  }, [userId, roomId, findOrCreateDmRoom]);
+
+  // Fetch message history when room/channel are available
+  useEffect(() => {
+    if (roomId && channelId) {
+      fetchMessages(roomId, channelId).catch(err => {
+        console.error("Failed to fetch messages:", err);
+      });
+    }
+  }, [roomId, channelId, fetchMessages]);
+
+  // Auto mask as read when viewing this channel
+  useEffect(() => {
+    if (messages.length > 0 && roomId && channelId) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMarkedMsgRef.current !== lastMessage.id) {
+        lastMarkedMsgRef.current = lastMessage.id;
+        markChannelAsRead(roomId, channelId, lastMessage.id);
+      }
+    }
+  }, [messages, roomId, channelId, markChannelAsRead]);
 
   const handleSend = useCallback(
-    (content: string) => sendDmMessage(userId, content),
-    [userId, sendDmMessage]
+    (content: string, attachment?: { fileUrl: string; fileName: string; fileSize: number } | null) => {
+      if (!roomId || !channelId) {
+        console.error("[DM] Cannot send: roomId or channelId missing", { roomId, channelId });
+        return;
+      }
+      if (!token) {
+        console.error("[DM] Cannot send: no token");
+        return;
+      }
+      const client = getStompClient(token);
+      if (!client.connected) {
+        console.error("[DM] Cannot send: STOMP not connected");
+        return;
+      }
+
+      const payload = {
+        roomId,
+        channelId,
+        content,
+        senderName: currentUser?.username,
+        senderAvatar: currentUser?.avatarUrl,
+        fileUrl: attachment?.fileUrl,
+        fileName: attachment?.fileName,
+        fileSize: attachment?.fileSize,
+        replyTo: replyingTo
+          ? {
+            messageId: replyingTo.messageId,
+            content: replyingTo.content.slice(0, 100),
+            senderName: replyingTo.senderName,
+          }
+          : null,
+      };
+
+      client.publish({
+        destination: "/app/chat.send",
+        body: JSON.stringify(payload),
+      });
+
+      clearReplyingTo();
+    },
+    [channelId, roomId, token, replyingTo, clearReplyingTo]
   );
 
   // Auto-mark DM as read when entering
@@ -282,9 +465,9 @@ export default function DmChatPage() {
               {/* Large Avatar */}
               <div className="mb-3">
                 <StatusAvatar
-                  src={friend?.recipientAvatar ?? null}
+                  src={friendAvatar}
                   fallback={friendName}
-                  status={friend?.recipientStatus || "OFFLINE"}
+                  status={friendStatus as any}
                   size="xl"
                 />
               </div>
@@ -369,49 +552,57 @@ export default function DmChatPage() {
             </div>
 
             {/* Messages */}
-            <div className="pb-2">
-              {messages.map((msg, i) => {
-                const prev = messages[i - 1];
+            {(isLoadingMessages && messages.length === 0) ? (
+              <MessagesSkeleton />
+            ) : (
+              <div className="pb-2">
+                {messages.map((msg, i) => {
+                  const prev = messages[i - 1];
 
-                // Date separator check
-                const msgDate = new Date(msg.createdAt);
-                const prevDate = prev ? new Date(prev.createdAt) : null;
-                const showDateSeparator =
-                  i === 0 ||
-                  !prevDate ||
-                  msgDate.getFullYear() !== prevDate.getFullYear() ||
-                  msgDate.getMonth() !== prevDate.getMonth() ||
-                  msgDate.getDate() !== prevDate.getDate();
+                  // Date separator check
+                  const msgDate = new Date(msg.createdAt);
+                  const prevDate = prev ? new Date(prev.createdAt) : null;
+                  const showDateSeparator =
+                    i === 0 ||
+                    !prevDate ||
+                    msgDate.getFullYear() !== prevDate.getFullYear() ||
+                    msgDate.getMonth() !== prevDate.getMonth() ||
+                    msgDate.getDate() !== prevDate.getDate();
 
-                const isGrouped =
-                  !!prev &&
-                  prev.senderId === msg.senderId &&
-                  !showDateSeparator &&
-                  msgDate.getTime() - new Date(prev.createdAt).getTime() < 5 * 60 * 1000;
+                  const isGrouped =
+                    !!prev &&
+                    prev.senderId === msg.senderId &&
+                    !showDateSeparator &&
+                    msgDate.getTime() - new Date(prev.createdAt).getTime() < 5 * 60 * 1000;
 
-                return (
-                  <div key={msg.id}>
-                    {showDateSeparator && (
-                      <DateSeparator date={msgDate} />
-                    )}
-                    <DmMessageItem
-                      message={msg}
-                      currentUserId={currentUser?.id}
-                      isGrouped={isGrouped}
-                      isBeingReplied={replyingTo?.messageId === msg.id}
-                      onReply={() =>
-                        setReplyingTo({
-                          messageId: msg.id,
-                          senderName: msg.senderName,
-                          content: msg.content,
-                        })
-                      }
-                      onReaction={(emoji) => addDmReaction(userId, msg.id, emoji)}
-                    />
-                  </div>
-                );
-              })}
-            </div>
+                  return (
+                    <div key={msg.id}>
+                      {showDateSeparator && (
+                        <DateSeparator date={msgDate} />
+                      )}
+                      <DmMessageItem
+                        message={msg}
+                        currentUserId={currentUser?.id}
+                        isGrouped={isGrouped}
+                        isBeingReplied={replyingTo?.messageId === msg.id}
+                        onReply={() =>
+                          setReplyingTo({
+                            messageId: msg.id,
+                            senderName: msg.senderName,
+                            content: msg.content,
+                          })
+                        }
+                        onReaction={(emoji) => {
+                          if (channelId) {
+                            addReaction(channelId, msg.id, emoji);
+                          }
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             <div ref={bottomRef} />
           </div>
