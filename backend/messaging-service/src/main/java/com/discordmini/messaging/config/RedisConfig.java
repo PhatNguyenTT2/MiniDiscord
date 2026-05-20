@@ -34,6 +34,8 @@ public class RedisConfig {
         org.springframework.data.redis.listener.RedisMessageListenerContainer container = 
             new org.springframework.data.redis.listener.RedisMessageListenerContainer();
         container.setConnectionFactory(connectionFactory);
+        // Retry connection every 5 seconds on connection failures instead of crashing the context
+        container.setRecoveryInterval(5000L);
         
         // Listen to all typing and presence channels
         container.addMessageListener(pubSubService, new org.springframework.data.redis.listener.PatternTopic("typing:*"));
