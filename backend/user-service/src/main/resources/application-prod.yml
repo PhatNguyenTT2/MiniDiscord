@@ -1,9 +1,9 @@
 # === PRODUCTION PROFILE (DigitalOcean) ===
 spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL}
-    username: ${SPRING_DATASOURCE_USERNAME}
-    password: ${SPRING_DATASOURCE_PASSWORD}
+    url: ${USER_DB_URL}
+    username: ${USER_DB_USERNAME}
+    password: ${DB_PASSWORD}
   jpa:
     hibernate:
       ddl-auto: update

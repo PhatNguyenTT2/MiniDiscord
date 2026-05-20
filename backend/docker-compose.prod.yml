@@ -12,7 +12,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
     networks:
       - minidiscord-net
     healthcheck:
@@ -36,7 +36,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 300M
+          memory: 400M
     depends_on:
       discovery-server:
         condition: service_healthy
@@ -53,8 +53,6 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=prod
       - EUREKA_URL=http://discovery-server:8761/eureka/
-      - DB_URL=${USER_DB_URL}
-      - DB_USERNAME=${USER_DB_USERNAME}
     deploy:
       resources:
         limits:
@@ -82,8 +80,6 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=prod
       - EUREKA_URL=http://discovery-server:8761/eureka/
-      - DB_URL=${GROUP_DB_URL}
-      - DB_USERNAME=${GROUP_DB_USERNAME}
     deploy:
       resources:
         limits:
