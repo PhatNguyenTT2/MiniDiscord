@@ -12,6 +12,26 @@ spring:
           uri: lb://user-service
           predicates:
             - Path=/api/auth/**, /api/users/**
+
+        - id: group-channel-service
+          uri: lb://group-channel-service
+          predicates:
+            - Path=/api/rooms/**, /api/channels/**
+
+        - id: chat-history-service
+          uri: lb://chat-history-service
+          predicates:
+            - Path=/api/messages/**
+
+        - id: messaging-service
+          uri: lb://messaging-service
+          predicates:
+            - Path=/ws/**
+
+        - id: file-service
+          uri: lb://file-service
+          predicates:
+            - Path=/api/files/**
   data:
     redis:
       host: ${REDIS_HOST:redis}
