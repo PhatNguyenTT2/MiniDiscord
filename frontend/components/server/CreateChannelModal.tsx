@@ -77,7 +77,7 @@ export function CreateChannelModal({ isOpen, onClose, roomId, defaultType = "TEX
 
       onClose();
       // Navigate to new channel
-      router.push(`/channels/${newChannel.id}`);
+      router.push(`/channels/${roomId}/${newChannel.id}`);
     } catch (err) {
       console.error("[CreateChannelModal] Error creating channel:", err);
     } finally {

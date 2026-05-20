@@ -358,15 +358,6 @@ export default function DmChatPage() {
 
   const lastMarkedMsgRef = useRef<string | null>(null);
 
-  // Auto-resolve DM room on mount
-  useEffect(() => {
-    if (!roomId && userId) {
-      findOrCreateDmRoom(userId).catch(err => {
-        console.error("Failed to find or create DM room:", err);
-      });
-    }
-  }, [userId, roomId, findOrCreateDmRoom]);
-
   // Fetch message history when room/channel are available
   useEffect(() => {
     if (roomId && channelId) {
@@ -376,7 +367,7 @@ export default function DmChatPage() {
     }
   }, [roomId, channelId, fetchMessages]);
 
-  // Auto mask as read when viewing this channel
+  // Auto mark as read when viewing this channel
   useEffect(() => {
     if (messages.length > 0 && roomId && channelId) {
       const lastMessage = messages[messages.length - 1];
@@ -388,11 +379,64 @@ export default function DmChatPage() {
   }, [messages, roomId, channelId, markChannelAsRead]);
 
   const handleSend = useCallback(
-    (content: string, attachment?: { fileUrl: string; fileName: string; fileSize: number } | null) => {
-      if (!roomId || !channelId) {
-        console.error("[DM] Cannot send: roomId or channelId missing", { roomId, channelId });
-        return;
+    async (content: string, attachment?: { fileUrl: string; fileName: string; fileSize: number } | null) => {
+      let activeRoomId = roomId;
+      let activeChannelId = channelId;
+
+      if (!activeRoomId || !activeChannelId) {
+        try {
+          const newRoom = await findOrCreateDmRoom(userId);
+          activeRoomId = newRoom.id;
+          const { channels: updatedChannels } = useRoomStore.getState();
+          const newChannels = updatedChannels[newRoom.id] || [];
+          const defaultCh = newChannels.find(c => c.type === "TEXT") || newChannels[0];
+          if (!defaultCh) {
+            console.error("Failed to find text channel after creating lazy room", newRoom.id);
+            return;
+          }
+          activeChannelId = defaultCh.id;
+
+          // Eager Stomp subscribe to avoid any messaging race condition before React renders
+          const activeToken = useAuthStore.getState().token;
+          if (activeToken) {
+            const client = getStompClient(activeToken);
+            if (client.connected) {
+              client.subscribe(`/topic/room.${activeRoomId}`, (msg) => {
+                try {
+                  const data = JSON.parse(msg.body);
+                  useChatStore.getState().receiveMessage(data.channelId, {
+                    id: data.messageId,
+                    roomId: data.roomId,
+                    channelId: data.channelId,
+                    senderId: data.senderId,
+                    senderName: data.senderName,
+                    senderAvatar: data.senderAvatar || null,
+                    type: data.type || "TEXT",
+                    content: data.content,
+                    fileUrl: data.fileUrl || null,
+                    fileName: data.fileName || null,
+                    fileSize: data.fileSize || null,
+                    reactions: [],
+                    isEdited: false,
+                    isDeleted: false,
+                    editedAt: null,
+                    createdAt: data.createdAt || new Date().toISOString(),
+                    replyTo: data.replyTo || null,
+                  });
+                } catch (e) {
+                  console.error("Failed to parse lazy room message", e);
+                }
+              });
+              // Wait for broker to bind the queue before publishing first message
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+          }
+        } catch (err) {
+          console.error("Lazy DM creation failed", err);
+          return;
+        }
       }
+
       if (!token) {
         console.error("[DM] Cannot send: no token");
         return;
@@ -406,8 +450,8 @@ export default function DmChatPage() {
       // Optimistic insert — show message immediately with faded style
       const optimisticMsg: Message = {
         id: `optimistic-${Date.now()}`,
-        roomId,
-        channelId,
+        roomId: activeRoomId,
+        channelId: activeChannelId,
         senderId: currentUser?.id || "",
         senderName: currentUser?.username || "",
         senderAvatar: currentUser?.avatarUrl || null,
@@ -429,11 +473,11 @@ export default function DmChatPage() {
           }
           : null,
       };
-      addOptimisticMessage(channelId, optimisticMsg);
+      addOptimisticMessage(activeChannelId, optimisticMsg);
 
       const payload = {
-        roomId,
-        channelId,
+        roomId: activeRoomId,
+        channelId: activeChannelId,
         content,
         senderName: currentUser?.username,
         senderAvatar: currentUser?.avatarUrl,
@@ -456,7 +500,7 @@ export default function DmChatPage() {
 
       clearReplyingTo();
     },
-    [channelId, roomId, token, replyingTo, clearReplyingTo, currentUser, addOptimisticMessage]
+    [channelId, roomId, token, replyingTo, clearReplyingTo, currentUser, addOptimisticMessage, userId, findOrCreateDmRoom]
   );
 
   // Auto-mark DM as read when entering

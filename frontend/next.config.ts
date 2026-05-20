@@ -1,6 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  async rewrites() {
+    return [
+      {
+        source: "/channels/@me/:path*",
+        destination: "/channels/me/:path*",
+      },
+    ];
+  },
   async headers() {
     return [
       {

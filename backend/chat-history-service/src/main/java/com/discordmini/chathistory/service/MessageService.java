@@ -6,6 +6,7 @@ import com.discordmini.chathistory.exception.ResourceNotFoundException;
 import com.discordmini.chathistory.model.document.Message;
 import com.discordmini.chathistory.model.dto.MessageResponse;
 import com.discordmini.chathistory.repository.MessageRepository;
+import com.discordmini.chathistory.repository.ReadReceiptRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -21,6 +22,7 @@ import java.util.stream.Collectors;
 public class MessageService {
 
     private final MessageRepository messageRepository;
+    private final ReadReceiptRepository readReceiptRepository;
     private final MembershipClient membershipClient;
     private static final int MAX_LIMIT = 100;
 
@@ -69,5 +71,10 @@ public class MessageService {
         message.setDeleted(true);
         message.setDeletedAt(Instant.now());
         messageRepository.save(message);
+    }
+
+    public void clearAllHistory() {
+        messageRepository.deleteAll();
+        readReceiptRepository.deleteAll();
     }
 }

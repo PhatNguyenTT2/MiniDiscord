@@ -137,18 +137,9 @@ export function ChannelList() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createDefaultType, setCreateDefaultType] = useState<"TEXT" | "VOICE">("TEXT");
 
-  // Derive active channel from URL params
+  // Derive active channel and room from URL params
   const activeChannelId = (params?.channelId as string) || null;
-  let activeRoomId: string | null = null;
-
-  if (activeChannelId) {
-    for (const [rId, cList] of Object.entries(channels)) {
-      if (cList.some((c) => c.id === activeChannelId)) {
-        activeRoomId = rId;
-        break;
-      }
-    }
-  }
+  const activeRoomId = (params?.serverId as string) || null;
 
   // If on dashboard or no active room, fallback to empty or first room
   const displayRoomId = activeRoomId || (rooms.length > 0 ? rooms[0].id : null);
@@ -162,7 +153,11 @@ export function ChannelList() {
   const canCreateChannel = myRole === "OWNER" || myRole === "ADMIN";
 
   function handleChannelClick(channelId: string) {
-    router.push(`/channels/${channelId}`);
+    if (displayRoomId) {
+      router.push(`/channels/${displayRoomId}/${channelId}`);
+    } else {
+      router.push(`/channels/${channelId}`);
+    }
   }
 
   function handleAddChannel(type: "TEXT" | "VOICE") {

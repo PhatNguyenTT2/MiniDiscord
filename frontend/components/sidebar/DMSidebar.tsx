@@ -79,7 +79,7 @@ export function DMSidebar({ activeUserId }: { activeUserId?: string }) {
   const markAsRead = useNotificationStore((s) => s.markAsRead);
   const [isNewMessageModalOpen, setIsNewMessageModalOpen] = useState(false);
 
-  const isDashboard = pathname?.startsWith("/dashboard");
+  const isDashboard = pathname === "/channels/@me" || pathname?.startsWith("/channels/me") || pathname?.startsWith("/channels/@me");
 
   // Derive DM list from roomStore
   const rooms = useRoomStore((s) => s.rooms);
@@ -139,7 +139,7 @@ export function DMSidebar({ activeUserId }: { activeUserId?: string }) {
 
   function handleCreateDM(userIds: string[]) {
     if (userIds.length > 0) {
-      router.push(`/dm/${userIds[0]}`);
+      router.push(`/channels/@me/${userIds[0]}`);
     }
   }
 
@@ -160,7 +160,7 @@ export function DMSidebar({ activeUserId }: { activeUserId?: string }) {
           <div className="px-3 pt-3">
             {/* Friends nav */}
             <button
-              onClick={() => router.push("/dashboard")}
+              onClick={() => router.push("/channels/@me")}
               className={cn(
                 "flex w-full items-center gap-4 rounded-md px-3 py-2.5 text-[15px] font-medium transition-colors cursor-pointer",
                 isDashboard && !activeUserId
@@ -196,7 +196,7 @@ export function DMSidebar({ activeUserId }: { activeUserId?: string }) {
                   isActive={activeUserId === dm.recipientId}
                   onClick={() => {
                     markAsRead(dm.recipientId);
-                    router.push(`/dm/${dm.recipientId}`);
+                    router.push(`/channels/@me/${dm.recipientId}`);
                   }}
                 />
               ))}

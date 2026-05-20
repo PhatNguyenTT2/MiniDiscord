@@ -206,7 +206,7 @@ export function CreateServerModal({ isOpen, onClose }: CreateServerModalProps) {
                     const defaultCh = newChannels.find(c => c.type === "TEXT") || newChannels[0];
                     onClose();
                     if (defaultCh) {
-                      router.push(`/channels/${defaultCh.id}`);
+                      router.push(`/channels/${newRoom.id}/${defaultCh.id}`);
                     }
                   } catch (err) {
                     console.error(err);

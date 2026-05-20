@@ -32,26 +32,15 @@ export function ServerList() {
   const { rooms, channels } = useRoomStore();
 
   // Derive active room from current URL
-  const activeChannelId = (params?.channelId as string) || null;
-  let activeRoomId: string | null = null;
-
-  if (activeChannelId) {
-    for (const [rId, cList] of Object.entries(channels)) {
-      if (cList.some((c) => c.id === activeChannelId)) {
-        activeRoomId = rId;
-        break;
-      }
-    }
-  }
-
-  const isDashboard = pathname?.startsWith("/dashboard");
+  const activeRoomId = (params?.serverId as string) || null;
+  const isDashboard = pathname?.includes("/channels/@me") || pathname?.startsWith("/channels/me") || pathname === "/channels";
 
   function handleServerClick(roomId: string) {
     markAsRead(roomId);
     const roomChannels = channels[roomId] || [];
     if (roomChannels.length > 0) {
       const defaultChannel = roomChannels.find((c) => c.type === "TEXT") || roomChannels[0];
-      router.push(`/channels/${defaultChannel.id}`);
+      router.push(`/channels/${roomId}/${defaultChannel.id}`);
     }
   }
 
@@ -59,11 +48,11 @@ export function ServerList() {
     <div className="flex h-full w-[72px] flex-col items-center bg-background-tertiary py-3">
       <ScrollArea className="flex-1 w-full">
         <div className="flex flex-col items-center gap-2 px-3">
-          {/* DM Button — navigates to /dashboard */}
+          {/* DM Button — navigates to /channels/@me */}
           <Tooltip>
             <TooltipTrigger asChild>
               <button
-                onClick={() => router.push("/dashboard")}
+                onClick={() => router.push("/channels/@me")}
                 className={cn(
                   "flex h-12 w-12 items-center justify-center transition-all duration-200 cursor-pointer",
                   isDashboard

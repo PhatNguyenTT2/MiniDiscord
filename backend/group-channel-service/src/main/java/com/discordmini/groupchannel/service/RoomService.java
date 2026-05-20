@@ -176,20 +176,19 @@ public class RoomService {
                 Room room = Room.builder()
                                 .name("DM")
                                 .type(RoomType.DM)
-                                .ownerId(ownerId)
+                                .ownerId(UUID.fromString("00000000-0000-0000-0000-000000000000"))
                                 .build();
                 room = roomRepository.save(room);
 
-                // Add both users
+                // Add both users as MEMBER roles for equal DM ownership
                 RoomParticipant owner = RoomParticipant.builder()
                                 .room(room)
                                 .userId(ownerId)
-                                .role(RoomRole.OWNER)
+                                .role(RoomRole.MEMBER)
                                 .build();
                 participantRepository.save(owner);
 
-                // Add target user only if it's not self-DM (though discord supports it, it's
-                // safer to check)
+                // Add target user only if it's not self-DM
                 if (!ownerId.equals(targetUserId)) {
                         RoomParticipant target = RoomParticipant.builder()
                                         .room(room)
@@ -212,5 +211,12 @@ public class RoomService {
                                 new RoomCreatedEvent(room.getId(), ownerId, room.getName(), room.getType()));
 
                 return room;
+        }
+
+        @Transactional
+        public void clearDatabase() {
+                participantRepository.deleteAll();
+                channelRepository.deleteAll();
+                roomRepository.deleteAll();
         }
 }

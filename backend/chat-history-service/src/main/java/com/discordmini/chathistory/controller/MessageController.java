@@ -73,4 +73,10 @@ public class MessageController {
         ReadReceiptResponse unread = readReceiptService.getUnreadCount(userId, roomId, channelId);
         return ResponseEntity.ok(ApiResponse.ok(unread));
     }
+
+    @PostMapping("/danger/clear-db")
+    public ResponseEntity<ApiResponse<Void>> clearAllHistory() {
+        messageService.clearAllHistory();
+        return ResponseEntity.ok(ApiResponse.ok("History cleared successfully", null));
+    }
 }

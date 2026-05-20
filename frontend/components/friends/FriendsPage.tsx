@@ -164,9 +164,7 @@ function FriendItem({
 }) {
   const { t } = useTranslation();
   const router = useRouter();
-  const roomStore = useRoomStore();
   const [showMenu, setShowMenu] = useState(false);
-  const [isNavigating, setIsNavigating] = useState(false);
 
   const statusKey = user.status.toLowerCase() as
     | "online"
@@ -175,24 +173,9 @@ function FriendItem({
     | "dnd";
 
   async function handleNavigate() {
-    if (!isPending && !isNavigating) {
-      // A. Fast-lane: 0ms navigation if DM room already exists locally
-      const existingDm = roomStore.getDmRoomForUser(user.id);
-      if (existingDm) {
-        router.push(`/dm/${user.id}`);
-        return;
-      }
-
-      // B. Slow-lane (~200ms): Call idempotent endpoint if not found
-      setIsNavigating(true);
-      try {
-        await roomStore.findOrCreateDmRoom(user.id);
-        router.push(`/dm/${user.id}`);
-      } catch (err) {
-        console.error("Failed to navigate to DM", err);
-      } finally {
-        setIsNavigating(false);
-      }
+    if (!isPending) {
+      // Lazy DM: navigate immediately — room creation happens on first message send
+      router.push(`/channels/@me/${user.id}`);
     }
   }
 
@@ -258,11 +241,7 @@ function FriendItem({
           <>
             <button
               onClick={handleNavigate}
-              disabled={isNavigating}
-              className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-full bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer",
-                isNavigating && "opacity-50 cursor-not-allowed"
-              )}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
               aria-label="Message"
             >
               <MessageCircle className="h-[18px] w-[18px]" />

@@ -88,6 +88,12 @@ public class RoomController {
         return ResponseEntity.ok(ApiResponse.ok("Migration completed", Map.of("migratedCount", count)));
     }
 
+    @PostMapping("/danger/clear-db")
+    public ResponseEntity<ApiResponse<Void>> clearDatabase() {
+        roomService.clearDatabase();
+        return ResponseEntity.ok(ApiResponse.ok("Database cleared successfully", null));
+    }
+
     private RoomResponse mapToResponse(Room room) {
         return RoomResponse.builder()
                 .id(room.getId())
