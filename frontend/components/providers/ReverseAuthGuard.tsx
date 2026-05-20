@@ -9,21 +9,20 @@ export function ReverseAuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const hydrate = useAuthStore((state) => state.hydrate);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const [isHydrating, setIsHydrating] = useState(true);
+  const isHydrated = useAuthStore((state) => state.isHydrated);
 
   useEffect(() => {
     hydrate();
-    setIsHydrating(false);
   }, [hydrate]);
 
   useEffect(() => {
-    if (!isHydrating && isAuthenticated) {
+    if (isHydrated && isAuthenticated) {
       router.push("/dashboard");
     }
-  }, [isHydrating, isAuthenticated, router]);
+  }, [isHydrated, isAuthenticated, router]);
 
   // Show a loading state while hydrating to prevent flash of login page if already authenticated
-  if (isHydrating || isAuthenticated) {
+  if (!isHydrated || isAuthenticated) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-black">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />

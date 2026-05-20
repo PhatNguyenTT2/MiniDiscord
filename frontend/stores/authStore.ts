@@ -8,6 +8,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  isHydrated: boolean;
 
   login: (data: LoginRequest) => Promise<void>;
   loginWithGoogle: (idToken: string) => Promise<void>;
@@ -18,12 +19,13 @@ interface AuthState {
   hydrate: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   token: null,
   isAuthenticated: false,
   isLoading: false,
   error: null,
+  isHydrated: false,
 
   login: async (data) => {
     set({ isLoading: true, error: null });
@@ -80,6 +82,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   })),
 
   hydrate: async () => {
+    if (get().isHydrated) return;
     const token = localStorage.getItem("token");
     if (token) {
       const cachedUser = localStorage.getItem("user_data");
@@ -93,7 +96,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         }
       }
 
-      set({ token, isAuthenticated: true, user: parsedUser });
+      set({ token, isAuthenticated: true, user: parsedUser, isHydrated: true });
 
       try {
         const res = await api.get<ApiResponse<User>>("/users/me");
@@ -103,6 +106,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       } catch (err) {
         console.warn("[Auth] Using cached user data (offline or API error)", err);
       }
+    } else {
+      set({ isHydrated: true });
     }
   },
 }));

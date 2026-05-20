@@ -28,7 +28,13 @@ api.interceptors.response.use(
       useNetworkStore.getState().setWsStatus("disconnected");
     }
 
-    if (error.response?.status === 401) {
+    const config = error.config;
+    const isAuthRequest =
+      config?.url?.includes("/auth/login") ||
+      config?.url?.includes("/auth/register") ||
+      config?.url?.includes("/auth/google");
+
+    if (error.response?.status === 401 && !isAuthRequest) {
       if (typeof window !== "undefined") {
         import("@/stores/authStore").then(({ useAuthStore }) => {
           useAuthStore.getState().logout();

@@ -30,8 +30,10 @@ public class FriendEventListener {
     @RabbitListener(bindings = @QueueBinding(value = @Queue(name = "messaging.friend-events.queue", durable = "true"), exchange = @Exchange(name = "user.events", type = ExchangeTypes.TOPIC), key = "user.friend.*"))
     public void handleFriendEvent(Map<String, Object> event) {
         String type = (String) event.get("type");
-        String toUserId = (String) event.get("toUserId");
-        String fromUserId = (String) event.get("fromUserId");
+        // Safe UUID→String conversion (Jackson may deserialize UUID as non-String
+        // object)
+        String toUserId = event.get("toUserId") != null ? String.valueOf(event.get("toUserId")) : null;
+        String fromUserId = event.get("fromUserId") != null ? String.valueOf(event.get("fromUserId")) : null;
 
         if (type == null || toUserId == null) {
             log.warn("Received malformed friend event: {}", event);
@@ -45,21 +47,35 @@ public class FriendEventListener {
             log.info("Friend event [{}]: from={} to={}", type, fromUserId, toUserId);
         }
 
-        try {
-            Map<String, Object> payload = new HashMap<>();
-            payload.put("type", type);
-            payload.put("fromUserId", fromUserId != null ? fromUserId : "");
-            if (event.containsKey("status")) {
-                payload.put("status", event.get("status"));
-            }
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("type", type);
+        payload.put("fromUserId", fromUserId != null ? fromUserId : "");
+        if (event.containsKey("status")) {
+            payload.put("status", event.get("status"));
+        }
 
+        // Notify the receiver (target user)
+        try {
             messagingTemplate.convertAndSendToUser(
                     toUserId,
                     "/queue/notifications",
                     payload);
+            log.debug("Delivered friend event [{}] to receiver {}", type, toUserId);
         } catch (Exception e) {
-            // Swallow error so RabbitMQ ACKs the message (no infinite requeue)
-            log.debug("Could not deliver to user {}: {}", toUserId, e.getMessage());
+            log.debug("Could not deliver to receiver {}: {}", toUserId, e.getMessage());
+        }
+
+        // Notify the sender too (so their Pending list updates in real-time)
+        if (fromUserId != null && !"PRESENCE_UPDATE".equals(type)) {
+            try {
+                messagingTemplate.convertAndSendToUser(
+                        fromUserId,
+                        "/queue/notifications",
+                        payload);
+                log.debug("Delivered friend event [{}] to sender {}", type, fromUserId);
+            } catch (Exception e) {
+                log.debug("Could not deliver to sender {}: {}", fromUserId, e.getMessage());
+            }
         }
     }
 }

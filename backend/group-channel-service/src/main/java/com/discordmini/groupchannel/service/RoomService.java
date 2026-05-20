@@ -11,6 +11,7 @@ import com.discordmini.groupchannel.repository.ChannelRepository;
 import com.discordmini.groupchannel.repository.RoomParticipantRepository;
 import com.discordmini.groupchannel.repository.RoomRepository;
 import lombok.RequiredArgsConstructor;
+import com.discordmini.groupchannel.client.UserServiceClient;
 import com.discordmini.groupchannel.model.dto.RoomResponse;
 import com.discordmini.groupchannel.model.enums.RoomType;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,6 +31,8 @@ public class RoomService {
         private final RoomParticipantRepository participantRepository;
         private final ChannelRepository channelRepository;
         private final ApplicationEventPublisher eventPublisher;
+        private final UserServiceClient userServiceClient;
+        private final MembershipService membershipService;
 
         @Value("${app.default-room.name:MiniDiscord General}")
         private String defaultRoomName;
@@ -141,6 +144,25 @@ public class RoomService {
 
                                         return newRoom;
                                 });
+        }
+
+        @Transactional
+        public int migrateExistingUsersToRootGroup() {
+                Room root = getOrCreateRootGroup();
+                List<UUID> allUserIds = userServiceClient.getAllUserIds();
+                List<RoomParticipant> participants = participantRepository.findByRoomId(root.getId());
+                List<UUID> existingMemberIds = participants.stream()
+                                .map(RoomParticipant::getUserId)
+                                .toList();
+
+                List<UUID> newUserIds = allUserIds.stream()
+                                .filter(id -> !existingMemberIds.contains(id))
+                                .toList();
+
+                if (!newUserIds.isEmpty()) {
+                        membershipService.batchAddMembers(root.getId(), newUserIds);
+                }
+                return newUserIds.size();
         }
 
         @Transactional

@@ -114,13 +114,27 @@ export function DMSidebar({ activeUserId }: { activeUserId?: string }) {
       });
     }
 
+    // De-duplicate by recipientId — keep only the room with the latest activity
+    const deduped = new Map<string, DmEntry>();
+    for (const entry of entries) {
+      const existing = deduped.get(entry.recipientId);
+      if (!existing) {
+        deduped.set(entry.recipientId, entry);
+      } else {
+        const existingTime = lastActivityMap[existing.roomId] || new Date(existing.createdAt).getTime();
+        const entryTime = lastActivityMap[entry.roomId] || new Date(entry.createdAt).getTime();
+        if (entryTime > existingTime) {
+          deduped.set(entry.recipientId, entry);
+        }
+      }
+    }
+
     // Sort by newest activity first (last message time), fallback to room creation
-    entries.sort((a, b) => {
+    return Array.from(deduped.values()).sort((a, b) => {
       const aTime = lastActivityMap[a.roomId] || new Date(a.createdAt).getTime();
       const bTime = lastActivityMap[b.roomId] || new Date(b.createdAt).getTime();
       return bTime - aTime;
     });
-    return entries;
   }, [rooms, members, currentUserId, lastActivityMap]);
 
   function handleCreateDM(userIds: string[]) {

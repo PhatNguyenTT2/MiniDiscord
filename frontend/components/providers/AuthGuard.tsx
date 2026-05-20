@@ -11,7 +11,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const hydrate = useAuthStore((state) => state.hydrate);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const [isHydrating, setIsHydrating] = useState(true);
+  const isHydrated = useAuthStore((state) => state.isHydrated);
 
   // WebSocket connects only when authenticated, disconnects on unmount/logout
   useWebSocket();
@@ -22,17 +22,16 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Attempt to load token from localStorage
     hydrate();
-    setIsHydrating(false);
   }, [hydrate]);
 
   useEffect(() => {
-    if (!isHydrating && !isAuthenticated) {
+    if (isHydrated && !isAuthenticated) {
       router.push("/login");
     }
-  }, [isHydrating, isAuthenticated, router]);
+  }, [isHydrated, isAuthenticated, router]);
 
   // Show a loading skeleton/spinner while hydrating or if not authenticated (prevent flash)
-  if (isHydrating || !isAuthenticated) {
+  if (!isHydrated || !isAuthenticated) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">

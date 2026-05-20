@@ -76,6 +76,18 @@ public class RoomController {
         return ResponseEntity.ok(ApiResponse.ok("Member verified", null));
     }
 
+    @GetMapping("/root")
+    public ResponseEntity<ApiResponse<RoomResponse>> getRootGroup() {
+        Room root = roomService.getOrCreateRootGroup();
+        return ResponseEntity.ok(ApiResponse.ok("Root group fetched", mapToResponse(root)));
+    }
+
+    @PostMapping("/root/migrate-all")
+    public ResponseEntity<ApiResponse<Map<String, Integer>>> migrateAll() {
+        int count = roomService.migrateExistingUsersToRootGroup();
+        return ResponseEntity.ok(ApiResponse.ok("Migration completed", Map.of("migratedCount", count)));
+    }
+
     private RoomResponse mapToResponse(Room room) {
         return RoomResponse.builder()
                 .id(room.getId())

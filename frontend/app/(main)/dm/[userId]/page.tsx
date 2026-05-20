@@ -62,6 +62,7 @@ function DmMessageItem({
   onReaction,
   currentUserId,
   memberAvatarMap,
+  memberStatusMap,
 }: {
   message: Message;
   isGrouped: boolean;
@@ -70,6 +71,7 @@ function DmMessageItem({
   onReaction?: (emoji: string) => void;
   currentUserId?: string;
   memberAvatarMap?: Record<string, string | null>;
+  memberStatusMap?: Record<string, string>;
 }) {
   const time = new Date(message.createdAt).toLocaleTimeString(getDateLocale(), {
     hour: "2-digit",
@@ -83,7 +85,7 @@ function DmMessageItem({
     return (
       <div
         className={cn(
-          "group relative flex items-start gap-4 px-4 py-[2px] transition-colors",
+          "group relative flex items-start gap-4 px-4 py-0 transition-colors",
           isBeingReplied
             ? "bg-accent/8 hover:bg-accent/12"
             : "hover:bg-secondary/30"
@@ -104,7 +106,7 @@ function DmMessageItem({
             </div>
           )}
           <p className="text-[0.9375rem] leading-[1.375rem] text-foreground">
-            {message.content}
+            {message.content.trim()}
           </p>
           {/* Attachment */}
           {message.fileUrl && (
@@ -174,7 +176,7 @@ function DmMessageItem({
   return (
     <div
       className={cn(
-        "group relative flex items-start gap-4 px-4 pt-[1.0625rem] pb-[2px] transition-colors",
+        "group relative flex items-start gap-4 px-4 pt-4 pb-0 transition-colors",
         isBeingReplied
           ? "bg-accent/8 hover:bg-accent/12"
           : "hover:bg-secondary/30"
@@ -183,7 +185,7 @@ function DmMessageItem({
       <StatusAvatar
         src={avatarSrc}
         fallback={fallback}
-        status="ONLINE"
+        status={(message.senderId === currentUserId ? "ONLINE" : (memberStatusMap?.[message.senderId] || "OFFLINE")) as any}
         size="lg"
       />
       <div className="flex-1 min-w-0">
@@ -206,7 +208,7 @@ function DmMessageItem({
           </div>
         )}
         <p className="text-[0.9375rem] leading-[1.375rem] text-foreground">
-          {message.content}
+          {message.content.trim()}
         </p>
         {/* Attachment */}
         {message.fileUrl && (
@@ -320,6 +322,21 @@ export default function DmChatPage() {
     }
     return map;
   }, [roomId, allMembers, currentUser]);
+
+  // Build status lookup map for chat messages (covers both current user + recipient)
+  const memberStatusMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    if (roomId && allMembers[roomId]) {
+      for (const m of allMembers[roomId]) {
+        map[m.userId] = m.status || "OFFLINE";
+      }
+    }
+    // Also sync from friendStore for more accurate presence
+    if (friend?.user) {
+      map[friend.user.id] = friend.user.status || "OFFLINE";
+    }
+    return map;
+  }, [roomId, allMembers, friend]);
 
   const [modalType, setModalType] = useState<"REMOVE_FRIEND" | "BLOCK" | null>(null);
   const [relationship, setRelationship] = useState<"friend" | "none" | "blocked">("friend");
@@ -605,6 +622,7 @@ export default function DmChatPage() {
                         isGrouped={isGrouped}
                         isBeingReplied={replyingTo?.messageId === msg.id}
                         memberAvatarMap={memberAvatarMap}
+                        memberStatusMap={memberStatusMap}
                         onReply={() =>
                           setReplyingTo({
                             messageId: msg.id,

@@ -39,6 +39,8 @@ interface RoomState {
   getDmRoomForUser: (userId: string) => { roomId: string, channelId: string } | null;
   updateMemberStatus: (userId: string, status: string) => void;
   touchRoomActivity: (roomId: string) => void;
+  createChannel: (roomId: string, name: string, type: "TEXT" | "VOICE") => Promise<Channel>;
+  getMyRoleInRoom: (roomId: string, userId: string) => "OWNER" | "ADMIN" | "MEMBER" | null;
 }
 
 export const useRoomStore = create<RoomState>((set, get) => ({
@@ -203,5 +205,23 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     set((state) => ({
       lastActivityMap: { ...state.lastActivityMap, [roomId]: Date.now() },
     }));
+  },
+
+  createChannel: async (roomId: string, name: string, type: "TEXT" | "VOICE") => {
+    try {
+      clearCache();
+      const res = await api.post<{ message: string; data: Channel }>(`/rooms/${roomId}/channels`, { name, type });
+      await get().fetchChannels(roomId);
+      return res.data.data;
+    } catch (error: any) {
+      set({ error: error.message });
+      throw error;
+    }
+  },
+
+  getMyRoleInRoom: (roomId: string, userId: string) => {
+    const roomMembers = get().members[roomId] || [];
+    const me = roomMembers.find(m => m.userId === userId);
+    return me ? (me.role as "OWNER" | "ADMIN" | "MEMBER") : null;
   },
 }));

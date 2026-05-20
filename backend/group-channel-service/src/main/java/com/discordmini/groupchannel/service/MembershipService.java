@@ -77,6 +77,22 @@ public class MembershipService {
         }
     }
 
+    @Transactional
+    public void batchAddMembers(UUID roomId, List<UUID> userIds) {
+        Room room = roomRepository.findById(roomId)
+                .orElseThrow(() -> new RoomNotFoundException("Room not found"));
+
+        List<RoomParticipant> participants = userIds.stream()
+                .map(userId -> RoomParticipant.builder()
+                        .room(room)
+                        .userId(userId)
+                        .role(RoomRole.MEMBER)
+                        .build())
+                .toList();
+
+        participantRepository.saveAll(participants);
+    }
+
     public void checkMembership(UUID roomId, UUID userId) {
         if (!participantRepository.existsByUserIdAndRoomId(userId, roomId)) {
             throw new BaseException("Not a member of this room", HttpStatus.FORBIDDEN, "FORBIDDEN");

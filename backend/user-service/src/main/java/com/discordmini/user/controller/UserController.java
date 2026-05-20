@@ -34,8 +34,7 @@ public class UserController {
         UserResponse user = userService.updateProfile(
                 userId,
                 updates.get("username"),
-                updates.get("avatarUrl")
-        );
+                updates.get("avatarUrl"));
         return ResponseEntity.ok(ApiResponse.ok("Profile updated", user));
     }
 
@@ -56,5 +55,10 @@ public class UserController {
     @PostMapping("/bulk")
     public ResponseEntity<List<UserResponse>> getUsersByIds(@RequestBody List<UUID> ids) {
         return ResponseEntity.ok(userService.getUsersByIds(ids));
+    }
+
+    @GetMapping("/ids")
+    public ResponseEntity<List<UUID>> getAllUserIds() {
+        return ResponseEntity.ok(userService.getAllUserIds());
     }
 }

@@ -78,4 +78,9 @@ public class UserService {
                 .map(u -> UserMapper.toResponse(u, statusMap.getOrDefault(u.getId(), u.getStatus())))
                 .toList();
     }
+
+    @Transactional(readOnly = true)
+    public List<UUID> getAllUserIds() {
+        return userRepository.findAllIds();
+    }
 }

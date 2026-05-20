@@ -3,12 +3,14 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams, usePathname } from "next/navigation";
 import { ScrollArea } from "@/components/ui/ScrollArea";
-import { Hash, Volume2, ChevronDown, ChevronRight } from "lucide-react";
+import { Hash, Volume2, ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/uiStore";
 import { useRoomStore } from "@/stores/roomStore";
 import { useChatStore } from "@/stores/chatStore";
+import { useAuthStore } from "@/stores/authStore";
+import { CreateChannelModal } from "../server/CreateChannelModal";
 import type { Channel } from "@/types";
 
 function ChannelItem({
@@ -67,28 +69,45 @@ function ChannelCategory({
   channels,
   activeChannelId,
   onChannelClick,
+  onAddClick,
 }: {
   roomId: string;
   title: string;
   channels: Channel[];
   activeChannelId: string | null;
   onChannelClick: (channelId: string) => void;
+  onAddClick?: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(true);
 
   return (
     <div className="mb-4">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center gap-1 px-1 py-1.5 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-      >
-        {isOpen ? (
-          <ChevronDown className="h-3 w-3" />
-        ) : (
-          <ChevronRight className="h-3 w-3" />
+      <div className="flex items-center justify-between group/category px-1 py-1.5">
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex flex-1 items-center gap-1 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground hover:text-[#dbdee1] transition-colors cursor-pointer"
+        >
+          {isOpen ? (
+            <ChevronDown className="h-3 w-3" />
+          ) : (
+            <ChevronRight className="h-3 w-3" />
+          )}
+          <span className="truncate">{title}</span>
+        </button>
+        {onAddClick && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddClick();
+            }}
+            className="text-[#949ba4] hover:text-white transition-colors duration-150 cursor-pointer hidden group-hover/category:block"
+            aria-label="Create Channel"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
         )}
-        <span>{title}</span>
-      </button>
+      </div>
       {isOpen && (
         <div className="space-y-0.5 px-1">
           {channels.map((ch) => (
@@ -112,7 +131,11 @@ export function ChannelList() {
   const params = useParams();
   const pathname = usePathname();
   const sidebarWidth = useUIStore((s) => s.sidebarWidth);
-  const { rooms, channels } = useRoomStore();
+  const { rooms, channels, getMyRoleInRoom } = useRoomStore();
+  const currentUserId = useAuthStore((s) => s.user?.id);
+
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [createDefaultType, setCreateDefaultType] = useState<"TEXT" | "VOICE">("TEXT");
 
   // Derive active channel from URL params
   const activeChannelId = (params?.channelId as string) || null;
@@ -135,8 +158,16 @@ export function ChannelList() {
   const textChannels = roomChannels.filter((c) => c.type === "TEXT");
   const voiceChannels = roomChannels.filter((c) => c.type === "VOICE");
 
+  const myRole = displayRoomId && currentUserId ? getMyRoleInRoom(displayRoomId, currentUserId) : null;
+  const canCreateChannel = myRole === "OWNER" || myRole === "ADMIN";
+
   function handleChannelClick(channelId: string) {
     router.push(`/channels/${channelId}`);
+  }
+
+  function handleAddChannel(type: "TEXT" | "VOICE") {
+    setCreateDefaultType(type);
+    setIsCreateOpen(true);
   }
 
   return (
@@ -160,6 +191,7 @@ export function ChannelList() {
               channels={textChannels}
               activeChannelId={activeChannelId}
               onChannelClick={handleChannelClick}
+              onAddClick={canCreateChannel ? () => handleAddChannel("TEXT") : undefined}
             />
             <ChannelCategory
               roomId={displayRoomId}
@@ -167,10 +199,20 @@ export function ChannelList() {
               channels={voiceChannels}
               activeChannelId={activeChannelId}
               onChannelClick={handleChannelClick}
+              onAddClick={canCreateChannel ? () => handleAddChannel("VOICE") : undefined}
             />
           </>
         )}
       </ScrollArea>
+
+      {isCreateOpen && displayRoomId && (
+        <CreateChannelModal
+          isOpen={isCreateOpen}
+          onClose={() => setIsCreateOpen(false)}
+          roomId={displayRoomId}
+          defaultType={createDefaultType}
+        />
+      )}
     </div>
   );
 }

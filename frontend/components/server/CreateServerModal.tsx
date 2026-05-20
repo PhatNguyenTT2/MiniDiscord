@@ -199,9 +199,15 @@ export function CreateServerModal({ isOpen, onClose }: CreateServerModalProps) {
                   try {
                     setIsSubmitting(true);
                     const newRoom = await createRoom(serverName.trim());
+                    // Fetch channels for the new room, then navigate
+                    const { fetchChannels } = useRoomStore.getState();
+                    await fetchChannels(newRoom.id);
+                    const newChannels = useRoomStore.getState().channels[newRoom.id] || [];
+                    const defaultCh = newChannels.find(c => c.type === "TEXT") || newChannels[0];
                     onClose();
-                    // Just refresh to dashboard to let ServerList update, or navigate to a default view
-                    // We don't have default channels right away, so maybe just close the modal.
+                    if (defaultCh) {
+                      router.push(`/channels/${defaultCh.id}`);
+                    }
                   } catch (err) {
                     console.error(err);
                   } finally {

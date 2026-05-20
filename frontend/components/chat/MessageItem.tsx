@@ -5,6 +5,8 @@ import { MessageActions } from "@/components/chat/MessageActions";
 import { Reply, FileIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chatStore";
+import { useRoomStore } from "@/stores/roomStore";
+import { useAuthStore } from "@/stores/authStore";
 import { CURRENT_USER } from "@/lib/mock-data";
 import type { Message } from "@/types";
 import { useTranslation } from "@/lib/i18n";
@@ -41,6 +43,13 @@ export function MessageItem({ message, isGrouped = false, channelId }: MessageIt
   const setReplyingTo = useChatStore((s) => s.setReplyingTo);
   const addReaction = useChatStore((s) => s.addReaction);
 
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const members = useRoomStore((s) => s.members[message.roomId] || []);
+  const senderMember = members.find((m) => m.userId === message.senderId);
+  const status = message.senderId === currentUserId
+    ? "ONLINE"
+    : (senderMember?.status || "OFFLINE");
+
   const isBeingReplied = replyingTo?.messageId === message.id;
 
   function handleReply() {
@@ -66,8 +75,8 @@ export function MessageItem({ message, isGrouped = false, channelId }: MessageIt
   return (
     <div
       className={cn(
-        "group relative flex gap-4 px-4 py-0.5 transition-colors",
-        !isGrouped && "mt-4 pt-1",
+        "group relative flex gap-4 px-4 py-0 transition-colors",
+        !isGrouped && "mt-3 pt-1",
         isBeingReplied
           ? "bg-accent/8 hover:bg-accent/12"
           : "hover:bg-background-secondary/30"
@@ -79,6 +88,7 @@ export function MessageItem({ message, isGrouped = false, channelId }: MessageIt
           <StatusAvatar
             src={message.senderAvatar}
             fallback={message.senderName}
+            status={status as any}
             size="lg"
           />
         ) : (
@@ -115,7 +125,7 @@ export function MessageItem({ message, isGrouped = false, channelId }: MessageIt
           </div>
         )}
 
-        <p className="text-[15px] text-foreground leading-relaxed break-words">
+        <p className="text-[15px] text-foreground leading-relaxed break-words whitespace-pre-line">
           {message.content}
         </p>
 
