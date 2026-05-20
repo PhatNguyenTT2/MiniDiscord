@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { Plus, Smile, Gift, Sticker, X, Reply, FileUp, Image as ImageIcon, Video, Loader2, FileIcon } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Plus, Smile, Gift, Sticker, X, Reply, FileUp, Image as ImageIcon, Video, Loader2, FileIcon, AlertTriangle } from "lucide-react";
 import { EmojiPicker } from "@/components/ui/EmojiPicker";
 import { useChatStore } from "@/stores/chatStore";
 import { useFileStore } from "@/stores/fileStore";
@@ -34,17 +34,31 @@ export function MessageInput({ channelName, isDm, onSend, onTyping }: MessageInp
   const [isAttachOpen, setIsAttachOpen] = useState(false);
   const [attachment, setAttachment] = useState<AttachmentData | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [rateLimitCooldown, setRateLimitCooldown] = useState(0);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const attachRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastTypingTime = useRef<number>(0);
+  const sendTimestamps = useRef<number[]>([]);
+  const cooldownTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const { t } = useTranslation();
+
+  const RATE_LIMIT_MAX = 5; // max messages
+  const RATE_LIMIT_WINDOW = 3000; // within 3 seconds
+  const RATE_LIMIT_COOLDOWN = 3; // cooldown in seconds
 
   const replyingTo = useChatStore((s) => s.replyingTo);
   const clearReplyingTo = useChatStore((s) => s.clearReplyingTo);
 
   const { isUploading, uploadProgress, uploadFile } = useFileStore();
+
+  // Cleanup cooldown timer on unmount
+  useEffect(() => {
+    return () => {
+      if (cooldownTimer.current) clearInterval(cooldownTimer.current);
+    };
+  }, []);
 
   // Auto-focus input when reply mode activates
   useEffect(() => {
@@ -56,6 +70,33 @@ export function MessageInput({ channelName, isDm, onSend, onTyping }: MessageInp
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if ((!message.trim() && !attachment) || isUploading) return;
+
+    // Rate limit check
+    if (rateLimitCooldown > 0) return;
+
+    const now = Date.now();
+    sendTimestamps.current = sendTimestamps.current.filter(
+      (ts) => now - ts < RATE_LIMIT_WINDOW
+    );
+    sendTimestamps.current.push(now);
+
+    if (sendTimestamps.current.length > RATE_LIMIT_MAX) {
+      // Trigger cooldown
+      setRateLimitCooldown(RATE_LIMIT_COOLDOWN);
+      cooldownTimer.current = setInterval(() => {
+        setRateLimitCooldown((prev) => {
+          if (prev <= 1) {
+            if (cooldownTimer.current) clearInterval(cooldownTimer.current);
+            cooldownTimer.current = null;
+            sendTimestamps.current = [];
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return;
+    }
+
     onSend?.(message.trim(), attachment);
     setMessage("");
     setAttachment(null);
@@ -123,6 +164,16 @@ export function MessageInput({ channelName, isDm, onSend, onTyping }: MessageInp
           backgroundColor: "#383a40",
         }}
       >
+        {/* Rate limit warning */}
+        {rateLimitCooldown > 0 && (
+          <div className="flex items-center gap-2 px-4 py-2 text-sm text-warning bg-warning/10 rounded-t-[var(--floating-bar-radius)]">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>
+              {t("chat.rateLimited")}{" "}
+              {t("chat.rateLimitWait", { seconds: rateLimitCooldown })}
+            </span>
+          </div>
+        )}
         {/* Reply content lives inside the same shell so the whole composer reads as one floating bar. */}
         {replyingTo && (
           <div className="flex items-center justify-between px-4 pt-3 pb-1.5">

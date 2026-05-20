@@ -103,7 +103,9 @@
     "markAsRead": "Đánh Dấu Đã Đọc",
     "newLabel": "MỚI",
     "viewingOldMessages": "Bạn Đang Xem Các Tin Nhắn Cũ",
-    "jumpToPresent": "Nhảy đến hiện tại"
+    "jumpToPresent": "Nhảy đến hiện tại",
+    "rateLimited": "Bạn đang gửi tin nhắn quá nhanh.",
+    "rateLimitWait": "Vui lòng thử lại sau {seconds}s."
   },
   "members": {
     "online": "Trực tuyến",

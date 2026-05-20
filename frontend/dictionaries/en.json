@@ -103,7 +103,9 @@
     "markAsRead": "Mark As Read",
     "newLabel": "NEW",
     "viewingOldMessages": "You Are Viewing Older Messages",
-    "jumpToPresent": "Jump to present"
+    "jumpToPresent": "Jump to present",
+    "rateLimited": "You are sending messages too quickly.",
+    "rateLimitWait": "Please try again in {seconds}s."
   },
   "members": {
     "online": "Online",

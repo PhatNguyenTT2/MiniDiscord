@@ -79,7 +79,8 @@ export function MessageItem({ message, isGrouped = false, channelId }: MessageIt
         !isGrouped && "mt-3 pt-1",
         isBeingReplied
           ? "bg-accent/8 hover:bg-accent/12"
-          : "hover:bg-background-secondary/30"
+          : "hover:bg-background-secondary/30",
+        message.id.startsWith("optimistic-") && "opacity-50"
       )}
     >
       {/* Avatar or timestamp gutter */}

@@ -88,7 +88,8 @@ function DmMessageItem({
           "group relative flex items-start gap-4 px-4 py-0 transition-colors",
           isBeingReplied
             ? "bg-accent/8 hover:bg-accent/12"
-            : "hover:bg-secondary/30"
+            : "hover:bg-secondary/30",
+          message.id.startsWith("optimistic-") && "opacity-50"
         )}
       >
         <span className="w-10 text-center text-[11px] text-muted-foreground opacity-0 group-hover:opacity-100 pt-0.5 leading-[1.375rem]">
@@ -179,7 +180,8 @@ function DmMessageItem({
         "group relative flex items-start gap-4 px-4 pt-4 pb-0 transition-colors",
         isBeingReplied
           ? "bg-accent/8 hover:bg-accent/12"
-          : "hover:bg-secondary/30"
+          : "hover:bg-secondary/30",
+        message.id.startsWith("optimistic-") && "opacity-50"
       )}
     >
       <StatusAvatar
@@ -344,6 +346,7 @@ export default function DmChatPage() {
   // Chat store — Read messages from global channel storage
   const messages = useChatStore((s) => s.getChannelMessages(channelId));
   const addReaction = useChatStore((s) => s.addReaction);
+  const addOptimisticMessage = useChatStore((s) => s.addOptimisticMessage);
   const replyingTo = useChatStore((s) => s.replyingTo);
   const setReplyingTo = useChatStore((s) => s.setReplyingTo);
   const clearReplyingTo = useChatStore((s) => s.clearReplyingTo);
@@ -400,6 +403,34 @@ export default function DmChatPage() {
         return;
       }
 
+      // Optimistic insert — show message immediately with faded style
+      const optimisticMsg: Message = {
+        id: `optimistic-${Date.now()}`,
+        roomId,
+        channelId,
+        senderId: currentUser?.id || "",
+        senderName: currentUser?.username || "",
+        senderAvatar: currentUser?.avatarUrl || null,
+        type: attachment ? "FILE" : "TEXT",
+        content,
+        fileUrl: attachment?.fileUrl || null,
+        fileName: attachment?.fileName || null,
+        fileSize: attachment?.fileSize || null,
+        reactions: [],
+        isEdited: false,
+        isDeleted: false,
+        editedAt: null,
+        createdAt: new Date().toISOString(),
+        replyTo: replyingTo
+          ? {
+            messageId: replyingTo.messageId,
+            content: replyingTo.content.slice(0, 100),
+            senderName: replyingTo.senderName,
+          }
+          : null,
+      };
+      addOptimisticMessage(channelId, optimisticMsg);
+
       const payload = {
         roomId,
         channelId,
@@ -425,7 +456,7 @@ export default function DmChatPage() {
 
       clearReplyingTo();
     },
-    [channelId, roomId, token, replyingTo, clearReplyingTo]
+    [channelId, roomId, token, replyingTo, clearReplyingTo, currentUser, addOptimisticMessage]
   );
 
   // Auto-mark DM as read when entering

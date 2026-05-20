@@ -29,6 +29,7 @@ interface ChatState {
   markChannelAsRead: (roomId: string, channelId: string, lastMessageId: string) => Promise<void>;
 
   sendChannelMessage: (channelId: string, roomId: string, content: string) => void;
+  addOptimisticMessage: (channelId: string, message: Message) => void;
 
   setReplyingTo: (target: ReplyTarget | null) => void;
   clearReplyingTo: () => void;
@@ -131,10 +132,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // It should be removed, as the STOMP publish happens in MessageInput.tsx, 
   // and state mutation happens via receiveMessage.
   sendChannelMessage: (channelId, roomId, content) => {
-    // DO NOTHING HERE (No Optimistic Update)
-    // The STOMP message is published in MessageInput.tsx
-    // State is mutated ONLY via receiveMessage() when the server broadcasts it back.
     console.warn("sendChannelMessage in store is deprecated. Use STOMP client in component.");
+  },
+
+  addOptimisticMessage: (channelId, message) => {
+    set((state) => {
+      const existing = state.channelMessages[channelId] || [];
+      return {
+        channelMessages: {
+          ...state.channelMessages,
+          [channelId]: [...existing, message],
+        },
+      };
+    });
   },
 
   addReaction: (channelId, messageId, emoji) => {
@@ -198,10 +208,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
   receiveMessage: (channelId, message) => {
     set((state) => {
       const existing = state.channelMessages[channelId] || [];
-      // Prevent duplicates if server broadcast reaches us twice somehow
+
+      // Prevent duplicates if server broadcast reaches us twice
       if (existing.some((m) => m.id === message.id)) {
         return state;
       }
+
+      // Replace matching optimistic message (id starts with "optimistic-")
+      // Match by senderId + content + close timestamp
+      const optimisticIdx = existing.findIndex(
+        (m) =>
+          m.id.startsWith("optimistic-") &&
+          m.senderId === message.senderId &&
+          m.content === message.content
+      );
+
+      if (optimisticIdx >= 0) {
+        const updated = [...existing];
+        updated[optimisticIdx] = message;
+        return {
+          channelMessages: {
+            ...state.channelMessages,
+            [channelId]: updated,
+          },
+        };
+      }
+
       return {
         channelMessages: {
           ...state.channelMessages,
