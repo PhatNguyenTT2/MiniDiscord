@@ -20,6 +20,7 @@ interface DmEntry {
   recipientName: string;
   recipientAvatar: string | null;
   recipientStatus: string;
+  channelId: string | null;
   createdAt: string;
 }
 
@@ -83,6 +84,7 @@ export function DMSidebar({ activeUserId }: { activeUserId?: string }) {
 
   // Derive DM list from roomStore
   const rooms = useRoomStore((s) => s.rooms);
+  const channels = useRoomStore((s) => s.channels);
   const members = useRoomStore((s) => s.members);
   const currentUserId = useAuthStore((s) => s.user?.id);
 
@@ -104,12 +106,15 @@ export function DMSidebar({ activeUserId }: { activeUserId?: string }) {
       const otherUser = roomMembers.find(m => m.userId !== currentUserId);
       if (!otherUser) continue;
 
+      const channelId = channels[room.id]?.[0]?.id || null;
+
       entries.push({
         roomId: room.id,
         recipientId: otherUser.userId,
         recipientName: otherUser.username,
         recipientAvatar: otherUser.avatarUrl,
         recipientStatus: otherUser.status || "OFFLINE",
+        channelId,
         createdAt: room.createdAt,
       });
     }
@@ -192,10 +197,10 @@ export function DMSidebar({ activeUserId }: { activeUserId?: string }) {
                 <DMItem
                   key={dm.roomId}
                   dm={dm}
-                  unreadCount={getUnreadCount(dm.recipientId)}
+                  unreadCount={dm.channelId ? getUnreadCount(dm.channelId) : 0}
                   isActive={activeUserId === dm.recipientId}
                   onClick={() => {
-                    markAsRead(dm.recipientId);
+                    if (dm.channelId) markAsRead(dm.channelId);
                     router.push(`/channels/@me/${dm.recipientId}`);
                   }}
                 />

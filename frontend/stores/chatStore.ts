@@ -30,6 +30,12 @@ interface ChatState {
 
   sendChannelMessage: (channelId: string, roomId: string, content: string) => void;
   addOptimisticMessage: (channelId: string, message: Message) => void;
+  updateMessage: (channelId: string, messageId: string, content: string, editedAt: string) => void;
+  removeMessage: (channelId: string, messageId: string) => void;
+
+  typingUsers: Record<string, { userId: string; username: string; expiresAt: number }[]>;
+  setTyping: (channelId: string, userId: string, username: string) => void;
+  clearTyping: (channelId: string, userId: string) => void;
 
   setReplyingTo: (target: ReplyTarget | null) => void;
   clearReplyingTo: () => void;
@@ -55,6 +61,7 @@ const EMPTY_MESSAGES: Message[] = [];
 export const useChatStore = create<ChatState>((set, get) => ({
   channelMessages: {},
   unreadCounts: {},
+  typingUsers: {},
   replyingTo: null,
   isLoading: false,
   error: null,
@@ -83,6 +90,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         delete nextUnread[channelId];
         return { unreadCounts: nextUnread };
       });
+      // Sync notification store
+      const { useNotificationStore } = await import("./notificationStore");
+      useNotificationStore.getState().markAsRead(channelId);
     } catch (err) {
       console.error("Failed to mark channel as read:", err);
     }
@@ -143,6 +153,80 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ...state.channelMessages,
           [channelId]: [...existing, message],
         },
+      };
+    });
+  },
+
+  updateMessage: (channelId, messageId, content, editedAt) => {
+    set((state) => {
+      const msgs = state.channelMessages[channelId] ?? [];
+      const updated = msgs.map(msg =>
+        msg.id === messageId
+          ? { ...msg, content, isEdited: true, editedAt }
+          : msg
+      );
+      return {
+        channelMessages: {
+          ...state.channelMessages,
+          [channelId]: updated,
+        }
+      };
+    });
+  },
+
+  removeMessage: (channelId, messageId) => {
+    set((state) => {
+      const msgs = state.channelMessages[channelId] ?? [];
+      const updated = msgs.map(msg =>
+        msg.id === messageId
+          ? { ...msg, isDeleted: true, content: "" }
+          : msg
+      );
+      return {
+        channelMessages: {
+          ...state.channelMessages,
+          [channelId]: updated,
+        }
+      };
+    });
+  },
+
+  setTyping: (channelId, userId, username) => {
+    set((state) => {
+      const users = state.typingUsers[channelId] || [];
+      const existing = users.find(u => u.userId === userId);
+      const expiresAt = Date.now() + 3000;
+
+      let nextUsers;
+      if (existing) {
+        nextUsers = users.map(u => u.userId === userId ? { ...u, expiresAt } : u);
+      } else {
+        nextUsers = [...users, { userId, username, expiresAt }];
+      }
+
+      // Schedule cleanup
+      setTimeout(() => {
+        useChatStore.getState().clearTyping(channelId, userId);
+      }, 3000);
+
+      return {
+        typingUsers: {
+          ...state.typingUsers,
+          [channelId]: nextUsers
+        }
+      };
+    });
+  },
+
+  clearTyping: (channelId, userId) => {
+    set((state) => {
+      const users = state.typingUsers[channelId] || [];
+      const validUsers = users.filter(u => u.userId !== userId && u.expiresAt > Date.now());
+      return {
+        typingUsers: {
+          ...state.typingUsers,
+          [channelId]: validUsers
+        }
       };
     });
   },

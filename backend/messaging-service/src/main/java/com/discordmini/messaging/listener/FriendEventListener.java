@@ -27,7 +27,7 @@ public class FriendEventListener {
 
     private final SimpMessagingTemplate messagingTemplate;
 
-    @RabbitListener(bindings = @QueueBinding(value = @Queue(name = "messaging.friend-events.queue", durable = "true"), exchange = @Exchange(name = "user.events", type = ExchangeTypes.TOPIC), key = "user.friend.*"))
+    @RabbitListener(bindings = @QueueBinding(value = @Queue(name = "messaging.friend-events.queue", durable = "true"), exchange = @Exchange(name = "user.events", type = ExchangeTypes.TOPIC), key = "user.friend.#"))
     public void handleFriendEvent(Map<String, Object> event) {
         String type = (String) event.get("type");
         // Safe UUID→String conversion (Jackson may deserialize UUID as non-String

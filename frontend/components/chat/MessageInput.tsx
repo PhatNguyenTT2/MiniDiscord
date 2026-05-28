@@ -8,6 +8,8 @@ import { useFileStore } from "@/stores/fileStore";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
+const EMPTY_TYPING: { userId: string; username: string }[] = [];
+
 export type AttachmentData = {
   fileUrl: string;
   fileName: string;
@@ -15,6 +17,7 @@ export type AttachmentData = {
 };
 
 interface MessageInputProps {
+  channelId: string;
   channelName: string;
   isDm?: boolean;
   onSend?: (content: string, attachment?: AttachmentData | null) => void;
@@ -29,7 +32,7 @@ function GifIcon() {
   );
 }
 
-export function MessageInput({ channelName, isDm, onSend, onTyping }: MessageInputProps) {
+export function MessageInput({ channelId, channelName, isDm, onSend, onTyping }: MessageInputProps) {
   const [message, setMessage] = useState("");
   const [isAttachOpen, setIsAttachOpen] = useState(false);
   const [attachment, setAttachment] = useState<AttachmentData | null>(null);
@@ -50,6 +53,7 @@ export function MessageInput({ channelName, isDm, onSend, onTyping }: MessageInp
 
   const replyingTo = useChatStore((s) => s.replyingTo);
   const clearReplyingTo = useChatStore((s) => s.clearReplyingTo);
+  const typingUsers = useChatStore((s) => s.typingUsers[channelId]) ?? EMPTY_TYPING;
 
   const { isUploading, uploadProgress, uploadFile } = useFileStore();
 
@@ -347,6 +351,22 @@ export function MessageInput({ channelName, isDm, onSend, onTyping }: MessageInp
             </EmojiPicker>
           </div>
         </form>
+
+        {/* Typing Indicator */}
+        {typingUsers.length > 0 && (
+          <div className="absolute -bottom-6 left-0 text-xs text-muted-foreground font-medium animate-in fade-in slide-in-from-bottom-2 duration-200">
+            <span className="flex items-center gap-1.5">
+              <span className="flex gap-0.5 mt-[3px]">
+                <span className="w-1 h-1 rounded-full bg-accent animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                <span className="w-1 h-1 rounded-full bg-accent animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                <span className="w-1 h-1 rounded-full bg-accent animate-bounce" style={{ animationDelay: '300ms' }}></span>
+              </span>
+              {typingUsers.length === 1 && <span><strong className="text-foreground">{typingUsers[0].username}</strong> đang nhập...</span>}
+              {typingUsers.length === 2 && <span><strong className="text-foreground">{typingUsers[0].username}</strong> và <strong className="text-foreground">{typingUsers[1].username}</strong> đang nhập...</span>}
+              {typingUsers.length > 2 && <span>Nhiều người đang nhập...</span>}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

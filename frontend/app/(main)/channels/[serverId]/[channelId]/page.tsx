@@ -154,6 +154,7 @@ export default function ChannelPage() {
             onJumpToPresent={() => messageListRef.current?.scrollToBottom()}
           />
           <MessageInput
+            channelId={channelId}
             channelName={channelName}
             onSend={handleSend}
             onTyping={handleTyping}

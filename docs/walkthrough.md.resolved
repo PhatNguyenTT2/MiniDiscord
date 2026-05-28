@@ -1,0 +1,27 @@
+# MiniDiscord Real-Time Overhaul Walkthrough
+
+## What Was Accomplished
+We fully overhauled the real-time websocket handling in MiniDiscord. The core goal was to implement critical real-time features that were missing and consolidate on the single `STOMP` WebSocket architecture (RabbitMQ broker) instead of migrating to a fractured SSE design.
+
+### Phase 1: Notification Flow
+- Re-wired `notificationStore` to handle [handleNotification()](file:///e:/UIT/cv/MiniDiscord/frontend/hooks/useWebSocket.ts#176-214) properly when the WebSocket emits messages.
+- Added `uiStore` `activeChannelId` checking so that unread counts do not increment if the user is already viewing the target channel window.
+- Verified that DM badges update successfully in real-time across both ends ([DMSidebar.tsx](file:///e:/UIT/cv/MiniDiscord/frontend/components/sidebar/DMSidebar.tsx)).
+
+### Phase 2: Edit & Delete Sync
+- **Backend:** Updated [MessageService](file:///e:/UIT/cv/MiniDiscord/backend/chat-history-service/src/main/java/com/discordmini/chathistory/service/MessageService.java#23-126) to fire `message.system` events on the RabbitMQ `chat.exchange` when a message is edited or deleted.
+- **Backend:** Created [SystemEventListener](file:///e:/UIT/cv/MiniDiscord/backend/messaging-service/src/main/java/com/discordmini/messaging/listener/SystemEventListener.java#15-42) inside `messaging-service` to broadcast those system events to connected users.
+- **Frontend:** Handled `MESSAGE_EDITED` and `MESSAGE_DELETED` events inside `chatStore` replacing contents dynamically in the React tree.
+
+### Phase 3: Typing Indicators
+- **Backend:** Created `TypingController` and mapped `/app/chat.typing` allowing users to fire typing payloads. Reconfigured [RedisPubSubService](file:///e:/UIT/cv/MiniDiscord/backend/messaging-service/src/main/java/com/discordmini/messaging/service/RedisPubSubService.java#16-72) to funnel `typing:` room signals to the standard `/topic/room` queue.
+- **Frontend:** Wired `chatStore.setTyping` with an automatic 3000ms delay expire timer. Showcased the "User is typing..." animated DOM element inside [MessageInput.tsx](file:///e:/UIT/cv/MiniDiscord/frontend/components/chat/MessageInput.tsx)!
+
+### Phase 4: Channel Unread Badges
+- Reconfigured [ChannelList.tsx](file:///e:/UIT/cv/MiniDiscord/frontend/components/sidebar/ChannelList.tsx) to read out unread badges from `notificationStore` directly.
+- Added a `99+` maximum count clamp.
+
+## Validation Status
+- ✅ Code successfully compiled and passes lint checks (minus a few preexisting issues outside the modified boundaries).
+- ✅ Tests are executed successfully.
+- Code changes implement the `clean-code` and React best practices provided in the agent specification.

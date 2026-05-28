@@ -12,7 +12,10 @@ import { useAuthStore } from "@/stores/authStore";
 import { useFriendStore } from "@/stores/friendStore";
 import { useChatStore } from "@/stores/chatStore";
 import { useRoomStore } from "@/stores/roomStore";
+import { clearRoomCache } from "@/stores/roomStore";
 import { useNetworkStore } from "@/stores/networkStore";
+import { useNotificationStore } from "@/stores/notificationStore";
+import { useUIStore } from "@/stores/uiStore";
 
 /**
  * WebSocket lifecycle hook.
@@ -39,6 +42,10 @@ export function useWebSocket() {
       useNetworkStore.getState().setWsStatus("connected");
       useAuthStore.getState().setOwnStatus("ONLINE");
 
+      // Evict stale sessionStorage cache so the post-connect refresh
+      // fetches fresh presence data from Redis, not stale cache
+      clearRoomCache();
+
       // Clear stale room subscriptions from previous connection
       subscriptionsRef.current.forEach((sub, key) => {
         if (key !== "/user/queue/notifications") {
@@ -62,6 +69,13 @@ export function useWebSocket() {
           subscriptionsRef.current.set(roomKey, sub);
         }
       });
+
+      // Refresh ALL data after WebSocket connects to get accurate Redis presence.
+      // Delay lets our own PRESENCE_UPDATE propagate through the pipeline first.
+      setTimeout(() => {
+        useFriendStore.getState().fetchFriends();
+        useRoomStore.getState().refreshAllDmMembers();
+      }, 2000);
     };
 
     client.onStompError = (frame) => {
@@ -114,6 +128,23 @@ export function useWebSocket() {
 function handleRoomMessage(msg: IMessage) {
   try {
     const data = JSON.parse(msg.body);
+    const eventType = data.type || data.eventType || "MESSAGE_NEW";
+
+    if (eventType === "MESSAGE_EDITED") {
+      useChatStore.getState().updateMessage(data.channelId, data.messageId, data.content, data.editedAt || new Date().toISOString());
+      return;
+    }
+
+    if (eventType === "MESSAGE_DELETED") {
+      useChatStore.getState().removeMessage(data.channelId, data.messageId);
+      return;
+    }
+
+    if (eventType === "TYPING_START") {
+      useChatStore.getState().setTyping(data.channelId, data.userId, data.username);
+      return;
+    }
+
     useChatStore.getState().receiveMessage(data.channelId, {
       id: data.messageId,
       roomId: data.roomId,
@@ -133,6 +164,18 @@ function handleRoomMessage(msg: IMessage) {
       createdAt: data.createdAt || new Date().toISOString(),
       replyTo: data.replyTo || null,
     });
+
+    // Increment unread count logic
+    if (eventType === "TEXT" || eventType === "FILE" || eventType === "MESSAGE_NEW") {
+      const activeChannelId = useUIStore.getState().activeChannelId;
+      const isFocused = typeof document !== 'undefined' && document.hasFocus();
+
+      // Increment unread if user is NOT looking at this channel, OR if the window is blurred (lướt tab khác)
+      if (data.channelId !== activeChannelId || !isFocused) {
+        useNotificationStore.getState().incrementUnread(data.channelId);
+      }
+    }
+
     // Track last activity for DM sidebar sort
     if (data.roomId) {
       useRoomStore.getState().touchRoomActivity(data.roomId);

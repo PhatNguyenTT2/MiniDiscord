@@ -49,10 +49,20 @@ public class RedisPubSubService implements MessageListener {
 
         if (channel.startsWith(TYPING_CHANNEL_PREFIX)) {
             String roomId = channel.substring(TYPING_CHANNEL_PREFIX.length());
-            // Broadcast to local connected users in the room
-            // Note: In a real implementation we might check if any room member is connected to this instance
-            // but SimpMessagingTemplate handles routing to local subscribers automatically.
-            messagingTemplate.convertAndSend("/topic/room." + roomId + ".typing", body);
+            try {
+                TypingEvent event = objectMapper.readValue(body, TypingEvent.class);
+                // Broadcast to the main room topic
+                java.util.Map<String, Object> payload = new java.util.HashMap<>();
+                payload.put("eventType", "TYPING_START");
+                payload.put("roomId", event.getRoomId());
+                payload.put("channelId", event.getChannelId());
+                payload.put("userId", event.getUserId());
+                payload.put("username", event.getUsername());
+
+                messagingTemplate.convertAndSend("/topic/room." + roomId, payload);
+            } catch (Exception e) {
+                log.error("Failed to parse typing event", e);
+            }
         } else if (channel.startsWith(PRESENCE_CHANNEL_PREFIX)) {
             String roomId = channel.substring(PRESENCE_CHANNEL_PREFIX.length());
             messagingTemplate.convertAndSend("/topic/room." + roomId + ".presence", body);

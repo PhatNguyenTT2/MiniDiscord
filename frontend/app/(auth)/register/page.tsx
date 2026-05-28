@@ -50,13 +50,13 @@ export default function RegisterPage() {
       email: data.email,
       password: data.password,
     });
-    
+
     // Check if auth was successful by checking the store state
     // Note: In Zustand, the state is updated synchronously after await
     const { isAuthenticated, error } = useAuthStore.getState();
-    
+
     if (isAuthenticated && !error) {
-      router.push("/dashboard");
+      router.push("/channels/me");
     }
   }
 

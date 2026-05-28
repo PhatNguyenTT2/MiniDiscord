@@ -23,6 +23,8 @@ function clearCache() {
   sessionStorage.removeItem(CACHE_KEY);
 }
 
+export { clearCache as clearRoomCache };
+
 interface RoomState {
   rooms: Room[];
   channels: Record<string, Channel[]>; // roomId -> channels
@@ -31,7 +33,7 @@ interface RoomState {
   isLoading: boolean;
   error: string | null;
 
-  fetchMyRooms: () => Promise<void>;
+  fetchMyRooms: (skipCache?: boolean) => Promise<void>;
   fetchChannels: (roomId: string) => Promise<void>;
   fetchMembers: (roomId: string) => Promise<void>;
   createRoom: (name: string, type?: "GROUP" | "DM") => Promise<Room>;
@@ -41,6 +43,7 @@ interface RoomState {
   touchRoomActivity: (roomId: string) => void;
   createChannel: (roomId: string, name: string, type: "TEXT" | "VOICE") => Promise<Channel>;
   getMyRoleInRoom: (roomId: string, userId: string) => "OWNER" | "ADMIN" | "MEMBER" | null;
+  refreshAllDmMembers: () => Promise<void>;
 }
 
 export const useRoomStore = create<RoomState>((set, get) => ({
@@ -51,12 +54,15 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   isLoading: false,
   error: null,
 
-  fetchMyRooms: async () => {
+  fetchMyRooms: async (skipCache?: boolean) => {
     try {
       set({ isLoading: true, error: null });
 
+      // Show cached data for instant UI, but DON'T background refresh here.
+      // The post-WS-connect refresh in useWebSocket.ts handles status updates
+      // to avoid race conditions with real-time PRESENCE_UPDATE events.
       const cache = loadCache();
-      if (cache) {
+      if (cache && !skipCache) {
         set({ rooms: cache.rooms, channels: cache.channels, members: cache.members, isLoading: false });
         return;
       }
@@ -66,21 +72,24 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       console.log("[roomStore] fetchMyRooms:", rooms.map(r => ({ id: r.id, type: r.type, name: r.name })));
       set({ rooms, isLoading: false });
 
-      // Batch fetch with small delay between requests to avoid 429 rate limiting
-      for (const room of rooms) {
+      // Parallel fetch: channels for all rooms + members for DM rooms
+      const fetchPromises = rooms.map(async (room) => {
         try {
-          await get().fetchChannels(room.id);
+          const promises: Promise<void>[] = [get().fetchChannels(room.id)];
           if (room.type === "DM") {
-            console.log("[roomStore] Auto-fetching members for DM room:", room.id);
-            await get().fetchMembers(room.id);
+            promises.push(get().fetchMembers(room.id));
           }
-          // Small delay between rooms to avoid rate limit (60 req / 10s)
-          if (rooms.length > 3) {
-            await new Promise(r => setTimeout(r, 150));
-          }
+          await Promise.all(promises);
         } catch (err) {
-          // Continue to next room even if one fails
           console.warn("[roomStore] Skipping room", room.id, "due to error");
+        }
+      });
+
+      // Execute in batches of 2 with delay to avoid backend timeouts
+      for (let i = 0; i < fetchPromises.length; i += 2) {
+        await Promise.all(fetchPromises.slice(i, i + 2));
+        if (i + 2 < fetchPromises.length) {
+          await new Promise(r => setTimeout(r, 200));
         }
       }
 
@@ -186,17 +195,6 @@ export const useRoomStore = create<RoomState>((set, get) => ({
           m.userId === userId ? { ...m, status } : m
         );
       }
-
-      // Sync to sessionStorage to prevent stale status on reload
-      try {
-        sessionStorage.setItem("room_members_cache", JSON.stringify({
-          data: nextMembers,
-          ts: Date.now()
-        }));
-      } catch (e) {
-        console.warn("[ROOM_STORE] Failed to sync member status to sessionStorage", e);
-      }
-
       return { members: nextMembers };
     });
   },
@@ -223,5 +221,10 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     const roomMembers = get().members[roomId] || [];
     const me = roomMembers.find(m => m.userId === userId);
     return me ? (me.role as "OWNER" | "ADMIN" | "MEMBER") : null;
+  },
+
+  refreshAllDmMembers: async () => {
+    const dmRooms = get().rooms.filter(r => r.type === "DM");
+    await Promise.all(dmRooms.map(r => get().fetchMembers(r.id)));
   },
 }));

@@ -8,6 +8,7 @@ import { Hash } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { useChatStore } from "@/stores/chatStore";
+import { useUIStore } from "@/stores/uiStore";
 import type { Message } from "@/types";
 
 interface MessageListProps {
@@ -69,9 +70,16 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
       setIsDismissed(false);
       setIsAtBottom(true);
 
+      // Track active channel for notification logic
+      useUIStore.getState().setActiveChannelId(channelId || null);
+
       // Initial fetch when switching to a channel
       if (roomId && channelId) {
         fetchMessages(roomId, channelId);
+      }
+
+      return () => {
+        useUIStore.getState().setActiveChannelId(null);
       }
     }, [roomId, channelId, fetchMessages]);
 

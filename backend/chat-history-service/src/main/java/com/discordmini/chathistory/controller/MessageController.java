@@ -53,6 +53,21 @@ public class MessageController {
         return ResponseEntity.ok(ApiResponse.ok("Message deleted", null));
     }
 
+    @PutMapping("/{messageId}")
+    public ResponseEntity<ApiResponse<MessageResponse>> editMessage(
+            @RequestHeader("X-User-Id") String userId,
+            @PathVariable String messageId,
+            @RequestBody Map<String, String> body) {
+
+        String newContent = body.get("content");
+        if (newContent == null || newContent.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("Content is required", "BAD_REQUEST"));
+        }
+
+        MessageResponse response = messageService.editMessage(userId, messageId, newContent);
+        return ResponseEntity.ok(ApiResponse.ok("Message edited", response));
+    }
+
     @PutMapping("/rooms/{roomId}/channels/{channelId}/read")
     public ResponseEntity<ApiResponse<Void>> markAsRead(
             @RequestHeader("X-User-Id") String userId,

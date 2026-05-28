@@ -58,7 +58,36 @@ public class MessageRouter {
 
     private Set<String> getRoomMembers(String roomId) {
         // Query Redis cache (populated by MembershipClient)
-        // Note: For large rooms, we might want to paginate or use specialized data structures
+        // Note: For large rooms, we might want to paginate or use specialized data
+        // structures
         return redisTemplate.opsForSet().members("room:members:" + roomId);
+    }
+
+    // 3. Fan-out system map events (edit, delete)
+    @Async("taskExecutor")
+    public void fanOutSystemEvent(Map<String, Object> event, String roomId) {
+        Set<String> memberIds = getRoomMembers(roomId);
+        if (memberIds == null || memberIds.isEmpty()) {
+            return;
+        }
+
+        Map<String, List<String>> instanceToUsers = new HashMap<>();
+
+        for (String userId : memberIds) {
+            String instanceId = connectionManager.getInstanceForUser(userId);
+            if (instanceId != null) {
+                instanceToUsers.computeIfAbsent(instanceId, k -> new ArrayList<>()).add(userId);
+            }
+        }
+
+        log.debug("Fanning out system event {} to {} instances", event.get("eventType"), instanceToUsers.size());
+
+        instanceToUsers.forEach((instanceId, users) -> {
+            // We use a Map to send raw JSON
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("targetUserIds", users);
+            payload.put("message", event); // WsMessageListener will broadcast this
+            rabbitTemplate.convertAndSend(RabbitMQConfig.WS_EXCHANGE, "server." + instanceId, payload);
+        });
     }
 }

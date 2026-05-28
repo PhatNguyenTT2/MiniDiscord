@@ -8,13 +8,16 @@ import com.discordmini.chathistory.model.dto.MessageResponse;
 import com.discordmini.chathistory.repository.MessageRepository;
 import com.discordmini.chathistory.repository.ReadReceiptRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -24,6 +27,7 @@ public class MessageService {
     private final MessageRepository messageRepository;
     private final ReadReceiptRepository readReceiptRepository;
     private final MembershipClient membershipClient;
+    private final RabbitTemplate rabbitTemplate;
     private static final int MAX_LIMIT = 100;
 
     public List<MessageResponse> getMessages(String userId, String roomId, String channelId, String before, int limit) {
@@ -71,6 +75,47 @@ public class MessageService {
         message.setDeleted(true);
         message.setDeletedAt(Instant.now());
         messageRepository.save(message);
+
+        // Broadcast deleted event
+        Map<String, Object> event = new HashMap<>();
+        event.put("eventType", "MESSAGE_DELETED");
+        event.put("channelId", message.getChannelId());
+        event.put("roomId", message.getRoomId());
+        event.put("messageId", messageId);
+
+        rabbitTemplate.convertAndSend("chat.exchange", "message.system", event);
+    }
+
+    public MessageResponse editMessage(String userId, String messageId, String newContent) {
+        Message message = messageRepository.findByMessageId(messageId)
+                .orElseThrow(() -> new ResourceNotFoundException("Message not found: " + messageId));
+
+        if (!userId.equals(message.getSenderId())) {
+            throw new ForbiddenException("Only the sender can edit this message");
+        }
+
+        if (message.isDeleted()) {
+            throw new ForbiddenException("Cannot edit a deleted message");
+        }
+
+        Instant now = Instant.now();
+        message.setContent(newContent);
+        message.setEdited(true);
+        message.setUpdatedAt(now);
+        Message saved = messageRepository.save(message);
+
+        // Broadcast edited event
+        Map<String, Object> event = new HashMap<>();
+        event.put("eventType", "MESSAGE_EDITED");
+        event.put("channelId", message.getChannelId());
+        event.put("roomId", message.getRoomId());
+        event.put("messageId", messageId);
+        event.put("content", newContent);
+        event.put("editedAt", now.toString());
+
+        rabbitTemplate.convertAndSend("chat.exchange", "message.system", event);
+
+        return MessageResponse.from(saved);
     }
 
     public void clearAllHistory() {

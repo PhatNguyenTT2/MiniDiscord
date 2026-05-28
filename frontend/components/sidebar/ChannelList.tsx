@@ -8,7 +8,7 @@ import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/uiStore";
 import { useRoomStore } from "@/stores/roomStore";
-import { useChatStore } from "@/stores/chatStore";
+import { useNotificationStore } from "@/stores/notificationStore";
 import { useAuthStore } from "@/stores/authStore";
 import { CreateChannelModal } from "../server/CreateChannelModal";
 import type { Channel } from "@/types";
@@ -24,17 +24,9 @@ function ChannelItem({
   isActive: boolean;
   onClick: () => void;
 }) {
-  const { fetchUnreadCount, unreadCounts } = useChatStore();
-
-  useEffect(() => {
-    // Only fetch if we don't already have it
-    if (!unreadCounts[channel.id]) {
-      fetchUnreadCount(roomId, channel.id);
-    }
-  }, [roomId, channel.id]); // Removed fetchUnreadCount to prevent re-fetch loop if function reference changes
-
-  const unreadData = unreadCounts[channel.id];
-  const hasUnread = unreadData && unreadData.count > 0 && !isActive;
+  const getUnreadCount = useNotificationStore((s) => s.getUnreadCount);
+  const count = getUnreadCount(channel.id);
+  const hasUnread = count > 0 && !isActive;
 
   const Icon = channel.type === "TEXT" ? Hash : Volume2;
 
@@ -56,7 +48,7 @@ function ChannelItem({
 
       {hasUnread && (
         <div className="flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-white leading-none">
-          {unreadData.displayCount}
+          {count > 99 ? "99+" : count}
         </div>
       )}
     </button>

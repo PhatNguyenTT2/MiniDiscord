@@ -61,20 +61,20 @@ export default function LoginPage() {
 
   async function onSubmit(data: LoginFormData) {
     await loginAction(data);
-    
+
     const { isAuthenticated, error } = useAuthStore.getState();
     if (isAuthenticated && !error) {
-      router.push("/dashboard");
+      router.push("/channels/me");
     }
   }
 
   async function handleGoogleLoginSuccess(credentialResponse: any) {
     if (credentialResponse.credential) {
       await loginWithGoogle(credentialResponse.credential);
-      
+
       const { isAuthenticated, error } = useAuthStore.getState();
       if (isAuthenticated && !error) {
-        router.push("/dashboard");
+        router.push("/channels/me");
       }
     }
   }

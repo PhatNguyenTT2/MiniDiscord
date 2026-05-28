@@ -509,6 +509,17 @@ export default function DmChatPage() {
     markAsRead(userId);
   }, [userId, markAsRead]);
 
+  const handleTyping = useCallback(() => {
+    if (!token || !roomId || !channelId) return;
+    const client = getStompClient(token);
+    if (!client.connected) return;
+
+    client.publish({
+      destination: "/app/chat.typing",
+      body: JSON.stringify({ roomId, channelId }),
+    });
+  }, [channelId, roomId, token]);
+
   // Auto-scroll to bottom
   const bottomRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -747,7 +758,13 @@ export default function DmChatPage() {
             </div>
           </div>
         ) : (
-          <MessageInput channelName={friendName} isDm onSend={handleSend} />
+          <MessageInput
+            channelId={channelId || "pending"}
+            channelName={friendName}
+            isDm
+            onSend={handleSend}
+            onTyping={handleTyping}
+          />
         )}
       </main>
 
@@ -756,43 +773,45 @@ export default function DmChatPage() {
       </SlidingPanel>
 
       {/* Confirm Modal (Remove Friend / Block) */}
-      {modalType && (
-        <ConfirmModal
-          title={
-            modalType === "REMOVE_FRIEND"
-              ? `${t("modal.removeFriendTitle")} ${friendName}`
-              : `${t("modal.blockTitle")} ${friendName}`
-          }
-          description={
-            modalType === "REMOVE_FRIEND" ? (
-              <p>
-                {t("modal.removeFriendDesc").split("{name}")[0]}
-                <strong className="font-semibold text-white">{friendName}</strong>
-                {t("modal.removeFriendDesc").split("{name}")[1]}
-              </p>
-            ) : (
-              <p>
-                {t("modal.blockDesc").split("{name}")[0]}
-                <strong className="font-semibold text-white">{friendName}</strong>
-                {t("modal.blockDesc").split("{name}")[1]}
-              </p>
-            )
-          }
-          confirmText={
-            modalType === "REMOVE_FRIEND"
-              ? t("modal.removeFriendConfirm")
-              : t("modal.blockConfirm")
-          }
-          onClose={() => setModalType(null)}
-          onConfirm={() => {
-            if (modalType === "REMOVE_FRIEND") {
-              setRelationship("none");
-            } else {
-              setRelationship("blocked");
+      {
+        modalType && (
+          <ConfirmModal
+            title={
+              modalType === "REMOVE_FRIEND"
+                ? `${t("modal.removeFriendTitle")} ${friendName}`
+                : `${t("modal.blockTitle")} ${friendName}`
             }
-          }}
-        />
-      )}
+            description={
+              modalType === "REMOVE_FRIEND" ? (
+                <p>
+                  {t("modal.removeFriendDesc").split("{name}")[0]}
+                  <strong className="font-semibold text-white">{friendName}</strong>
+                  {t("modal.removeFriendDesc").split("{name}")[1]}
+                </p>
+              ) : (
+                <p>
+                  {t("modal.blockDesc").split("{name}")[0]}
+                  <strong className="font-semibold text-white">{friendName}</strong>
+                  {t("modal.blockDesc").split("{name}")[1]}
+                </p>
+              )
+            }
+            confirmText={
+              modalType === "REMOVE_FRIEND"
+                ? t("modal.removeFriendConfirm")
+                : t("modal.blockConfirm")
+            }
+            onClose={() => setModalType(null)}
+            onConfirm={() => {
+              if (modalType === "REMOVE_FRIEND") {
+                setRelationship("none");
+              } else {
+                setRelationship("blocked");
+              }
+            }}
+          />
+        )
+      }
     </>
   );
 }

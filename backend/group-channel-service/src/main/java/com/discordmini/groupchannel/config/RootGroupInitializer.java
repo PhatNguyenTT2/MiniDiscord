@@ -23,9 +23,13 @@ public class RootGroupInitializer implements ApplicationRunner {
         log.info("Checking for root group channel...");
         roomService.getOrCreateRootGroup();
         if (migrateExisting) {
-            log.info("Migrating existing users to root group...");
-            int count = roomService.migrateExistingUsersToRootGroup();
-            log.info("Migrated {} users to root group.", count);
+            try {
+                log.info("Migrating existing users to root group...");
+                int count = roomService.migrateExistingUsersToRootGroup();
+                log.info("Migrated {} users to root group.", count);
+            } catch (Exception e) {
+                log.warn("Migration failed (non-fatal, will retry on next restart): {}", e.getMessage());
+            }
         }
         log.info("Root group channel initialized.");
     }
