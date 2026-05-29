@@ -1,6 +1,6 @@
 "use client";
 
-import { Smile, Reply, Forward, Bookmark, MoreHorizontal } from "lucide-react";
+import { Smile, Reply, Forward, Bookmark, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { EmojiPicker } from "@/components/ui/EmojiPicker";
 import { cn } from "@/lib/utils";
 
@@ -31,9 +31,13 @@ function ActionButton({
 interface MessageActionsProps {
   onReaction?: (emoji: string) => void;
   onReply?: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  canEdit?: boolean;
+  canDelete?: boolean;
 }
 
-export function MessageActions({ onReaction, onReply }: MessageActionsProps) {
+export function MessageActions({ onReaction, onReply, onEdit, onDelete, canEdit, canDelete }: MessageActionsProps) {
   function handleEmojiSelect(emoji: string) {
     onReaction?.(emoji);
   }
@@ -60,9 +64,16 @@ export function MessageActions({ onReaction, onReply }: MessageActionsProps) {
       <ActionButton label="Chuyển tiếp">
         <Forward className="h-4 w-4" />
       </ActionButton>
-      <ActionButton label="Đánh dấu">
-        <Bookmark className="h-4 w-4" />
-      </ActionButton>
+      {canEdit && (
+        <ActionButton label="Chỉnh sửa" onClick={onEdit}>
+          <Pencil className="h-4 w-4" />
+        </ActionButton>
+      )}
+      {canDelete && (
+        <ActionButton label="Xóa" onClick={onDelete}>
+          <Trash2 className="h-4 w-4 text-red-500 hover:text-red-600" />
+        </ActionButton>
+      )}
       <ActionButton label="Thêm">
         <MoreHorizontal className="h-4 w-4" />
       </ActionButton>

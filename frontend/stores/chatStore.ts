@@ -30,6 +30,10 @@ interface ChatState {
 
   sendChannelMessage: (channelId: string, roomId: string, content: string) => void;
   addOptimisticMessage: (channelId: string, message: Message) => void;
+  editMessage: (channelId: string, messageId: string, content: string) => Promise<void>;
+  deleteMessage: (channelId: string, messageId: string, type: "FOR_ME" | "EVERYONE") => Promise<void>;
+
+  // Handlers for WS events
   updateMessage: (channelId: string, messageId: string, content: string, editedAt: string) => void;
   removeMessage: (channelId: string, messageId: string) => void;
 
@@ -39,7 +43,8 @@ interface ChatState {
 
   setReplyingTo: (target: ReplyTarget | null) => void;
   clearReplyingTo: () => void;
-  addReaction: (channelId: string, messageId: string, emoji: string) => void;
+  addReaction: (channelId: string, messageId: string, emoji: string) => Promise<void>;
+  updateReactions: (channelId: string, messageId: string, reactions: any[]) => void;
 
   /* API: Fetch history */
   isLoading: boolean;
@@ -157,6 +162,54 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
+  editMessage: async (channelId, messageId, content) => {
+    const previousState = get().channelMessages[channelId] || [];
+
+    // Optimistic update
+    get().updateMessage(channelId, messageId, content, new Date().toISOString());
+
+    try {
+      await api.put(`/messages/${messageId}`, { content });
+    } catch (err) {
+      console.error("[chatStore] Failed to edit message, reverting", err);
+      set((state) => ({
+        channelMessages: {
+          ...state.channelMessages,
+          [channelId]: previousState,
+        },
+      }));
+    }
+  },
+
+  deleteMessage: async (channelId, messageId, type) => {
+    const previousState = get().channelMessages[channelId] || [];
+    const msgs = get().channelMessages[channelId] ?? [];
+
+    // Optimistic update
+    if (type === "FOR_ME") {
+      set((state) => ({
+        channelMessages: {
+          ...state.channelMessages,
+          [channelId]: msgs.filter((m) => m.id !== messageId) // remove entirely for UI
+        }
+      }));
+    } else {
+      get().removeMessage(channelId, messageId); // set isDeleted
+    }
+
+    try {
+      await api.delete(`/messages/${messageId}?type=${type}`);
+    } catch (err) {
+      console.error("[chatStore] Failed to delete message, reverting", err);
+      set((state) => ({
+        channelMessages: {
+          ...state.channelMessages,
+          [channelId]: previousState,
+        },
+      }));
+    }
+  },
+
   updateMessage: (channelId, messageId, content, editedAt) => {
     set((state) => {
       const msgs = state.channelMessages[channelId] ?? [];
@@ -231,10 +284,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  addReaction: (channelId, messageId, emoji) => {
+  addReaction: async (channelId, messageId, emoji) => {
     const user = useAuthStore.getState().user;
     if (!user) return;
 
+    // 1. Snapshot previous state for rollback
+    const previousState = get().channelMessages[channelId] || [];
+
+    // 2. Optimistic update
     set((state) => {
       const msgs = state.channelMessages[channelId];
       if (!msgs) return state;
@@ -282,6 +339,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
         channelMessages: {
           ...state.channelMessages,
           [channelId]: updated,
+        },
+      };
+    });
+
+    // 3. Persist to API
+    try {
+      await api.put(`/messages/${messageId}/reactions`, { emoji });
+    } catch (err) {
+      console.error("[chatStore] Failed to toggle reaction, reverting", err);
+      set((state) => ({
+        channelMessages: {
+          ...state.channelMessages,
+          [channelId]: previousState,
+        },
+      }));
+    }
+  },
+
+  updateReactions: (channelId, messageId, reactions) => {
+    set((state) => {
+      const msgs = state.channelMessages[channelId];
+      if (!msgs) return state;
+      return {
+        channelMessages: {
+          ...state.channelMessages,
+          [channelId]: msgs.map((m) =>
+            m.id === messageId
+              ? { ...m, reactions: reactions.map((r: any) => ({ ...r, count: r.userIds.length })) }
+              : m
+          ),
         },
       };
     });

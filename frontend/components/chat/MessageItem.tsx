@@ -9,8 +9,9 @@ import { useRoomStore } from "@/stores/roomStore";
 import { useAuthStore } from "@/stores/authStore";
 import { CURRENT_USER } from "@/lib/mock-data";
 import type { Message } from "@/types";
-import { useTranslation } from "@/lib/i18n";
-import { getDateLocale } from "@/lib/i18n";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { useTranslation, getDateLocale } from "@/lib/i18n";
+import { useState, useRef, useEffect } from "react";
 
 interface MessageItemProps {
   message: Message;
@@ -44,6 +45,13 @@ export function MessageItem({ message, isGrouped = false, channelId }: MessageIt
   const replyingTo = useChatStore((s) => s.replyingTo);
   const setReplyingTo = useChatStore((s) => s.setReplyingTo);
   const addReaction = useChatStore((s) => s.addReaction);
+  const editMessage = useChatStore((s) => s.editMessage);
+  const deleteMessage = useChatStore((s) => s.deleteMessage);
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(message.content);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const editInputRef = useRef<HTMLTextAreaElement>(null);
 
   const currentUserId = useAuthStore((s) => s.user?.id);
   const members = useRoomStore((s) => s.members[message.roomId] ?? EMPTY_MEMBERS);
@@ -72,6 +80,58 @@ export function MessageItem({ message, isGrouped = false, channelId }: MessageIt
     if (channelId) {
       addReaction(channelId, message.id, emoji);
     }
+  }
+
+  function handleSaveEdit() {
+    if (!channelId || editContent.trim() === message.content) {
+      setIsEditing(false);
+      return;
+    }
+    if (editContent.trim() === "") {
+      setIsEditing(false); // Can't edit to empty, could delete instead but simple cancel is safer
+      return;
+    }
+    editMessage(channelId, message.id, editContent.trim());
+    setIsEditing(false);
+  }
+
+  function handleDelete() {
+    if (channelId) {
+      const type = message.senderId === currentUserId ? "EVERYONE" : "FOR_ME";
+      deleteMessage(channelId, message.id, type);
+    }
+  }
+
+  useEffect(() => {
+    if (isEditing && editInputRef.current) {
+      editInputRef.current.focus();
+      // move cursor to end
+      editInputRef.current.setSelectionRange(editContent.length, editContent.length);
+    }
+  }, [isEditing]);
+
+  const isOwnMessage = message.senderId === currentUserId;
+  const parentMessage = useChatStore((s) => s.channelMessages[channelId || ""]?.find(m => m.id === message.replyTo?.messageId));
+  const replyContent = parentMessage?.isDeleted ? t("chat.replyDeleted") || "Tin nhắn trả lời này đã bị xóa" : message.replyTo?.content;
+  const isReplyDeleted = parentMessage?.isDeleted || false;
+
+  if (message.isDeleted) {
+    return (
+      <div className={cn("group flex gap-4 px-4 py-1 transition-colors hover:bg-background-secondary/30", !isGrouped && "mt-3 pt-1")}>
+        <div className="w-10 shrink-0">
+          {!isGrouped && <StatusAvatar src={message.senderAvatar} fallback={message.senderName} status={status as any} size="lg" />}
+        </div>
+        <div className="flex-1 min-w-0">
+          {!isGrouped && (
+            <div className="flex items-baseline gap-2 mb-0.5">
+              <span className="font-semibold text-foreground text-[15px]">{message.senderName}</span>
+              <time className="text-[12px] text-muted-foreground">{formatFullDate(message.createdAt)}</time>
+            </div>
+          )}
+          <p className="text-[14px] text-muted-foreground italic">Tin nhắn này đã bị xóa.</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -124,13 +184,39 @@ export function MessageItem({ message, isGrouped = false, channelId }: MessageIt
             <span className="font-semibold text-accent cursor-pointer hover:underline">
               @{message.replyTo.senderName}
             </span>
-            <span className="truncate">{message.replyTo.content}</span>
+            <span className={cn("truncate", isReplyDeleted && "italic")}>
+              {replyContent}
+            </span>
           </div>
         )}
 
-        <p className="text-[15px] text-foreground leading-relaxed break-words whitespace-pre-line">
-          {message.content}
-        </p>
+        {isEditing ? (
+          <div className="mt-1">
+            <textarea
+              ref={editInputRef}
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSaveEdit();
+                } else if (e.key === "Escape") {
+                  setIsEditing(false);
+                  setEditContent(message.content);
+                }
+              }}
+              className="w-full bg-[#383a40] text-white p-3 rounded-md border-none focus:outline-none focus:ring-0 resize-none min-h-[40px] text-[15px]"
+              rows={Math.min(10, editContent.split("\n").length)}
+            />
+            <div className="text-[11px] text-muted-foreground mt-1">
+              esc để <span className="text-accent cursor-pointer hover:underline" onClick={() => { setIsEditing(false); setEditContent(message.content); }}>hủy bỏ</span> • enter để <span className="text-accent cursor-pointer hover:underline" onClick={handleSaveEdit}>lưu lại</span>
+            </div>
+          </div>
+        ) : (
+          <p className="text-[15px] text-foreground leading-relaxed break-words whitespace-pre-line">
+            {message.content}
+          </p>
+        )}
 
         {/* Attachment */}
         {message.fileUrl && (
@@ -169,7 +255,7 @@ export function MessageItem({ message, isGrouped = false, channelId }: MessageIt
         )}
 
         {/* Reactions */}
-        {message.reactions.length > 0 && (
+        {message.reactions?.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-1">
             {message.reactions.map((reaction, i) => {
               const hasReacted = reaction.userIds.includes(CURRENT_USER.id);
@@ -199,7 +285,30 @@ export function MessageItem({ message, isGrouped = false, channelId }: MessageIt
       </div>
 
       {/* Action bar on hover */}
-      <MessageActions onReaction={handleReaction} onReply={handleReply} />
+      {!isEditing && (
+        <MessageActions
+          onReaction={handleReaction}
+          onReply={handleReply}
+          onEdit={() => { setIsEditing(true); setEditContent(message.content); }}
+          onDelete={() => setIsDeleteModalOpen(true)}
+          canEdit={isOwnMessage}
+          canDelete={true} // Anyone can delete (either for themselves or everyone)
+        />
+      )}
+
+      {isDeleteModalOpen && (
+        <ConfirmModal
+          title={isOwnMessage ? "Xóa tin nhắn" : "Ẩn tin nhắn này"}
+          description={
+            isOwnMessage
+              ? "Bạn có chắc chắn muốn xóa tin nhắn này không? Tin nhắn sẽ bị xóa cho mọi người trong kênh."
+              : "Bạn có chắc chắn muốn ẩn tin nhắn này không? Tin nhắn sẽ chỉ biến mất phía bạn."
+          }
+          confirmText="Xóa"
+          onClose={() => setIsDeleteModalOpen(false)}
+          onConfirm={handleDelete}
+        />
+      )}
     </div>
   );
 }

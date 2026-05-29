@@ -9,6 +9,8 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 @Data
 @Builder
@@ -43,13 +45,27 @@ public class Message {
     @Builder.Default
     private boolean isDeleted = false;
     private Instant deletedAt; // TTL anchor
-
+    @Builder.Default
+    private List<String> deletedForUsers = new ArrayList<>();
     // Timestamps
     private Instant createdAt;
     private Instant updatedAt;
 
     // Reply reference (optional)
     private ReplyTo replyTo;
+
+    // Reactions
+    @Builder.Default
+    private List<Reaction> reactions = new ArrayList<>();
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class Reaction {
+        private String emoji;
+        private List<String> userIds;
+    }
 
     @Data
     @Builder

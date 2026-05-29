@@ -47,9 +47,10 @@ public class MessageController {
     @DeleteMapping("/{messageId}")
     public ResponseEntity<ApiResponse<Void>> deleteMessage(
             @RequestHeader("X-User-Id") String userId,
-            @PathVariable String messageId) {
+            @PathVariable String messageId,
+            @RequestParam(defaultValue = "EVERYONE") String type) {
 
-        messageService.softDeleteMessage(userId, messageId);
+        messageService.softDeleteMessage(userId, messageId, type);
         return ResponseEntity.ok(ApiResponse.ok("Message deleted", null));
     }
 
@@ -66,6 +67,21 @@ public class MessageController {
 
         MessageResponse response = messageService.editMessage(userId, messageId, newContent);
         return ResponseEntity.ok(ApiResponse.ok("Message edited", response));
+    }
+
+    @PutMapping("/{messageId}/reactions")
+    public ResponseEntity<ApiResponse<MessageResponse>> toggleReaction(
+            @RequestHeader("X-User-Id") String userId,
+            @PathVariable String messageId,
+            @RequestBody Map<String, String> body) {
+
+        String emoji = body.get("emoji");
+        if (emoji == null || emoji.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("Emoji is required", "BAD_REQUEST"));
+        }
+
+        MessageResponse response = messageService.toggleReaction(userId, messageId, emoji);
+        return ResponseEntity.ok(ApiResponse.ok("Reaction toggled", response));
     }
 
     @PutMapping("/rooms/{roomId}/channels/{channelId}/read")

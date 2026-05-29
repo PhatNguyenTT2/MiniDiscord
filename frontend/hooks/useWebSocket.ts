@@ -140,6 +140,11 @@ function handleRoomMessage(msg: IMessage) {
       return;
     }
 
+    if (eventType === "MESSAGE_REACTED") {
+      useChatStore.getState().updateReactions(data.channelId, data.messageId, data.reactions);
+      return;
+    }
+
     if (eventType === "TYPING_START") {
       const currentUserId = useAuthStore.getState().user?.id;
       if (data.userId === currentUserId) return; // Don't show own typing

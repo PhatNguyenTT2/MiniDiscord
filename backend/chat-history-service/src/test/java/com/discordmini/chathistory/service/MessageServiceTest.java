@@ -11,6 +11,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.mongodb.core.MongoTemplate;
 
 import java.util.List;
 import java.util.Optional;
@@ -29,6 +30,9 @@ class MessageServiceTest {
     @Mock
     private MembershipClient membershipClient;
 
+    @Mock
+    private MongoTemplate mongoTemplate;
+
     @InjectMocks
     private MessageService messageService;
 
@@ -40,7 +44,8 @@ class MessageServiceTest {
         Message message = Message.builder().id("1").messageId("msg-uuid-1").content("test").build();
 
         doNothing().when(membershipClient).verifyMembership(userId, roomId);
-        when(messageRepository.findByRoomIdAndChannelIdAndIsDeletedFalseOrderByIdDesc(eq(roomId), eq(channelId), any(PageRequest.class)))
+        when(messageRepository.findByRoomIdAndChannelIdFilteredUser(eq(roomId), eq(channelId), eq(userId),
+                any(PageRequest.class)))
                 .thenReturn(List.of(message));
 
         List<MessageResponse> result = messageService.getMessages(userId, roomId, channelId, null, 50);
@@ -57,14 +62,15 @@ class MessageServiceTest {
         String channelId = "channel1";
 
         doNothing().when(membershipClient).verifyMembership(userId, roomId);
-        when(messageRepository.findByRoomIdAndChannelIdAndIsDeletedFalseOrderByIdDesc(eq(roomId), eq(channelId), any(PageRequest.class)))
+        when(messageRepository.findByRoomIdAndChannelIdFilteredUser(eq(roomId), eq(channelId), eq(userId),
+                any(PageRequest.class)))
                 .thenReturn(List.of());
 
         // limit > 100 should be clamped to 100
         messageService.getMessages(userId, roomId, channelId, null, 999);
 
-        verify(messageRepository).findByRoomIdAndChannelIdAndIsDeletedFalseOrderByIdDesc(
-                eq(roomId), eq(channelId), argThat(pageable -> pageable.getPageSize() == 100));
+        verify(messageRepository).findByRoomIdAndChannelIdFilteredUser(
+                eq(roomId), eq(channelId), eq(userId), argThat(pageable -> pageable.getPageSize() == 100));
     }
 
     @Test
@@ -75,7 +81,7 @@ class MessageServiceTest {
 
         when(messageRepository.findByMessageId(messageId)).thenReturn(Optional.of(message));
 
-        messageService.softDeleteMessage(userId, messageId);
+        messageService.softDeleteMessage(userId, messageId, "EVERYONE");
 
         assertTrue(message.isDeleted());
         assertNotNull(message.getDeletedAt());
@@ -90,7 +96,7 @@ class MessageServiceTest {
 
         when(messageRepository.findByMessageId(messageId)).thenReturn(Optional.of(message));
 
-        assertThrows(ForbiddenException.class, () -> messageService.softDeleteMessage(userId, messageId));
+        assertThrows(ForbiddenException.class, () -> messageService.softDeleteMessage(userId, messageId, "EVERYONE"));
         verify(messageRepository, never()).save(any());
     }
 }

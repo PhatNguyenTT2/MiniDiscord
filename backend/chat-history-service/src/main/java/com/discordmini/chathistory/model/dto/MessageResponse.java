@@ -7,6 +7,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Data
 @Builder
@@ -30,6 +32,17 @@ public class MessageResponse {
     private Instant createdAt;
     private Instant updatedAt;
     private Message.ReplyTo replyTo;
+    private List<ReactionResponse> reactions;
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ReactionResponse {
+        private String emoji;
+        private List<String> userIds;
+        private int count;
+    }
 
     public static MessageResponse from(Message message) {
         return MessageResponse.builder()
@@ -49,6 +62,13 @@ public class MessageResponse {
                 .createdAt(message.getCreatedAt())
                 .updatedAt(message.getUpdatedAt())
                 .replyTo(message.getReplyTo())
+                .reactions(message.getReactions() != null ? message.getReactions().stream()
+                        .map(r -> ReactionResponse.builder()
+                                .emoji(r.getEmoji())
+                                .userIds(r.getUserIds() != null ? r.getUserIds() : List.of())
+                                .count(r.getUserIds() != null ? r.getUserIds().size() : 0)
+                                .build())
+                        .collect(Collectors.toList()) : List.of())
                 .build();
     }
 }
