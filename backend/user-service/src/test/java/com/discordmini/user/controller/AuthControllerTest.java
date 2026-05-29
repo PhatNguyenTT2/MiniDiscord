@@ -69,7 +69,7 @@ class AuthControllerTest {
     @Test
     void login_ValidRequest_ShouldReturn200() throws Exception {
         LoginRequest request = new LoginRequest();
-        request.setEmail("test@test.com");
+        request.setIdentifier("test@test.com");
         request.setPassword("123456");
 
         AuthResponse response = AuthResponse.builder().token("jwt-token").build();

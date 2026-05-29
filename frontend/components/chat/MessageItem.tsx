@@ -37,6 +37,8 @@ function formatFullDate(dateStr: string) {
   });
 }
 
+const EMPTY_MEMBERS: any[] = [];
+
 export function MessageItem({ message, isGrouped = false, channelId }: MessageItemProps) {
   const { t } = useTranslation();
   const replyingTo = useChatStore((s) => s.replyingTo);
@@ -44,7 +46,7 @@ export function MessageItem({ message, isGrouped = false, channelId }: MessageIt
   const addReaction = useChatStore((s) => s.addReaction);
 
   const currentUserId = useAuthStore((s) => s.user?.id);
-  const members = useRoomStore((s) => s.members[message.roomId] || []);
+  const members = useRoomStore((s) => s.members[message.roomId] ?? EMPTY_MEMBERS);
   const senderMember = members.find((m) => m.userId === message.senderId);
   const status = message.senderId === currentUserId
     ? "ONLINE"

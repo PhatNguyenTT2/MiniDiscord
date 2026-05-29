@@ -10,6 +10,10 @@ import com.discordmini.groupchannel.repository.RoomRepository;
 import com.discordmini.groupchannel.client.UserResponse;
 import com.discordmini.groupchannel.client.UserServiceClient;
 import com.discordmini.groupchannel.model.dto.MemberDetailResponse;
+import com.discordmini.groupchannel.model.dto.MemberPageResponse;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -99,11 +103,20 @@ public class MembershipService {
         }
     }
 
-    public List<MemberDetailResponse> getMembers(UUID roomId) {
-        List<RoomParticipant> participants = participantRepository.findByRoomId(roomId);
+    public MemberPageResponse getMembersPaginated(UUID roomId, int limit, Instant beforeJoinedAt) {
+        int clampedLimit = Math.min(Math.max(limit, 1), 100);
+        Pageable pageable = PageRequest.of(0, clampedLimit);
+
+        List<RoomParticipant> participants = (beforeJoinedAt != null)
+                ? participantRepository.findByRoomIdAndJoinedAtBeforeOrderByJoinedAtDesc(roomId, beforeJoinedAt,
+                        pageable)
+                : participantRepository.findByRoomIdOrderByJoinedAtDesc(roomId, pageable);
+
         if (participants.isEmpty()) {
-            return List.of();
+            return new MemberPageResponse(List.of(), false);
         }
+
+        boolean hasMore = participants.size() == clampedLimit;
 
         List<UUID> userIds = participants.stream()
                 .map(RoomParticipant::getUserId)
@@ -111,7 +124,7 @@ public class MembershipService {
 
         List<UserResponse> users = userServiceClient.getUsersByIds(userIds);
 
-        return participants.stream().map(p -> {
+        List<MemberDetailResponse> memberDetails = participants.stream().map(p -> {
             UserResponse user = users.stream()
                     .filter(u -> u.getId().equals(p.getUserId()))
                     .findFirst()
@@ -126,5 +139,7 @@ public class MembershipService {
                     .joinedAt(p.getJoinedAt())
                     .build();
         }).toList();
+
+        return new MemberPageResponse(memberDetails, hasMore);
     }
 }

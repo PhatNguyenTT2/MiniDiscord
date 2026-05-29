@@ -3,6 +3,7 @@
     "welcomeBack": "Chào mừng trở lại!",
     "gladToSeeYou": "Rất vui được gặp lại bạn!",
     "email": "Email",
+    "emailOrUsername": "Email hoặc Tên đăng nhập",
     "password": "Mật khẩu",
     "forgotPassword": "Quên mật khẩu?",
     "login": "Đăng nhập",
@@ -20,6 +21,7 @@
   },
   "validation": {
     "emailInvalid": "Email không hợp lệ",
+    "identifierRequired": "Vui lòng nhập email hoặc tên đăng nhập",
     "passwordMin": "Mật khẩu tối thiểu 6 ký tự",
     "usernameMin": "Tên người dùng tối thiểu 3 ký tự",
     "usernameMax": "Tên người dùng tối đa 50 ký tự",

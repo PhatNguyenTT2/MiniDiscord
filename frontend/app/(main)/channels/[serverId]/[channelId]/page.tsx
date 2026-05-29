@@ -21,23 +21,29 @@ import { useCallback, useRef, useState, useEffect } from "react";
 export default function ChannelPage() {
   const params = useParams();
   const channelId = params?.channelId as string;
+  const roomId = params?.serverId as string;
   const showMemberList = useUIStore((s) => s.showMemberList);
   const sidebarWidth = useUIStore((s) => s.sidebarWidth);
   const setSidebarWidth = useUIStore((s) => s.setSidebarWidth);
 
-  const { channels } = useRoomStore();
+  const { channels, fetchMembers } = useRoomStore();
 
   let channelName = "general";
-  let roomId = "r1";
 
   for (const [rId, cList] of Object.entries(channels)) {
     const ch = cList.find((c) => c.id === channelId);
     if (ch) {
       channelName = ch.name;
-      roomId = rId;
       break;
     }
   }
+
+  // Cover 'hard refresh' cases by ensuring we load the members for the current server
+  useEffect(() => {
+    if (roomId) {
+      fetchMembers(roomId);
+    }
+  }, [roomId, fetchMembers]);
 
   // Read messages from in-memory store
   const messages = useChatStore((s) => s.getChannelMessages(channelId));
@@ -96,9 +102,10 @@ export default function ChannelPage() {
     const client = getStompClient(token);
     if (!client.connected) return;
 
+    const username = useAuthStore.getState().user?.username;
     client.publish({
       destination: "/app/chat.typing",
-      body: JSON.stringify({ roomId, channelId }),
+      body: JSON.stringify({ roomId, channelId, username }),
     });
   }, [channelId, roomId, token]);
 

@@ -141,6 +141,8 @@ function handleRoomMessage(msg: IMessage) {
     }
 
     if (eventType === "TYPING_START") {
+      const currentUserId = useAuthStore.getState().user?.id;
+      if (data.userId === currentUserId) return; // Don't show own typing
       useChatStore.getState().setTyping(data.channelId, data.userId, data.username);
       return;
     }
@@ -165,12 +167,15 @@ function handleRoomMessage(msg: IMessage) {
       replyTo: data.replyTo || null,
     });
 
-    // Increment unread count logic
+    // Increment unread count logic — skip own messages
     if (eventType === "TEXT" || eventType === "FILE" || eventType === "MESSAGE_NEW") {
+      const currentUserId = useAuthStore.getState().user?.id;
+      if (data.senderId === currentUserId) return; // Don't count own messages as unread
+
       const activeChannelId = useUIStore.getState().activeChannelId;
       const isFocused = typeof document !== 'undefined' && document.hasFocus();
 
-      // Increment unread if user is NOT looking at this channel, OR if the window is blurred (lướt tab khác)
+      // Increment unread if user is NOT looking at this channel, OR if the window is blurred
       if (data.channelId !== activeChannelId || !isFocused) {
         useNotificationStore.getState().incrementUnread(data.channelId);
       }
@@ -214,7 +219,7 @@ function handleNotification(msg: IMessage) {
         }
         break;
       case "ROOM_CREATED":
-        useRoomStore.getState().fetchMyRooms();
+        useRoomStore.getState().fetchMyRooms(true); // Skip cache for new room
         break;
       default:
         console.log("[STOMP] Unknown notification type:", type);

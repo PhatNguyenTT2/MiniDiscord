@@ -29,13 +29,14 @@ interface RoomState {
   rooms: Room[];
   channels: Record<string, Channel[]>; // roomId -> channels
   members: Record<string, MemberDetailResponse[]>; // roomId -> members
+  memberHasMore: Record<string, boolean>; // roomId -> hasMore
   lastActivityMap: Record<string, number>; // roomId -> timestamp (ms)
   isLoading: boolean;
   error: string | null;
 
   fetchMyRooms: (skipCache?: boolean) => Promise<void>;
   fetchChannels: (roomId: string) => Promise<void>;
-  fetchMembers: (roomId: string) => Promise<void>;
+  fetchMembers: (roomId: string, beforeJoinedAt?: string) => Promise<void>;
   createRoom: (name: string, type?: "GROUP" | "DM") => Promise<Room>;
   findOrCreateDmRoom: (userId: string) => Promise<Room>;
   getDmRoomForUser: (userId: string) => { roomId: string, channelId: string } | null;
@@ -50,6 +51,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   rooms: [],
   channels: {},
   members: {},
+  memberHasMore: {},
   lastActivityMap: {},
   isLoading: false,
   error: null,
@@ -75,11 +77,10 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       // Parallel fetch: channels for all rooms + members for DM rooms
       const fetchPromises = rooms.map(async (room) => {
         try {
-          const promises: Promise<void>[] = [get().fetchChannels(room.id)];
-          if (room.type === "DM") {
-            promises.push(get().fetchMembers(room.id));
-          }
-          await Promise.all(promises);
+          await get().fetchChannels(room.id);
+          console.log("[roomStore] Auto-fetching members for room:", room.id);
+          await get().fetchMembers(room.id);
+          // Small delay between rooms to avoid rate limit (60 req / 10s);
         } catch (err) {
           console.warn("[roomStore] Skipping room", room.id, "due to error");
         }
@@ -110,15 +111,27 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     }
   },
 
-  fetchMembers: async (roomId: string) => {
+  fetchMembers: async (roomId: string, beforeJoinedAt?: string) => {
     const MAX_RETRIES = 2;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const res = await api.get<{ message: string; data: MemberDetailResponse[] }>(`/rooms/${roomId}/members`);
+        const params: Record<string, any> = { limit: 50 };
+        if (beforeJoinedAt) params.before = beforeJoinedAt;
+
+        const res = await api.get<{ message: string; data: { members: MemberDetailResponse[]; hasMore: boolean } }>(
+          `/rooms/${roomId}/members`,
+          { params }
+        );
         console.log("[roomStore] fetchMembers result for", roomId, ":", res.data.data);
-        set({
-          members: { ...get().members, [roomId]: res.data.data },
-        });
+        const { members: page, hasMore } = res.data.data;
+
+        set((state) => ({
+          members: {
+            ...state.members,
+            [roomId]: beforeJoinedAt ? [...(state.members[roomId] || []), ...page] : page,
+          },
+          memberHasMore: { ...state.memberHasMore, [roomId]: hasMore },
+        }));
         return;
       } catch (error: any) {
         if (error.response?.status === 429 && attempt < MAX_RETRIES) {

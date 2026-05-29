@@ -91,7 +91,7 @@ class AuthServiceTest {
     @Test
     void login_Success() {
         LoginRequest request = new LoginRequest();
-        request.setEmail("test@test.com");
+        request.setIdentifier("test@test.com");
         request.setPassword("123456");
 
         User user = User.builder()
@@ -116,7 +116,7 @@ class AuthServiceTest {
     @Test
     void login_WrongPassword_ShouldThrowException() {
         LoginRequest request = new LoginRequest();
-        request.setEmail("test@test.com");
+        request.setIdentifier("test@test.com");
         request.setPassword("wrong-pw");
 
         User user = User.builder()
@@ -129,14 +129,15 @@ class AuthServiceTest {
         when(userRepository.findByEmail("test@test.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("wrong-pw", "hashed-pw")).thenReturn(false);
 
-        BadCredentialsException exception = assertThrows(BadCredentialsException.class, () -> authService.login(request));
-        assertEquals("Invalid email or password", exception.getMessage());
+        BadCredentialsException exception = assertThrows(BadCredentialsException.class,
+                () -> authService.login(request));
+        assertEquals("Invalid email/username or password", exception.getMessage());
     }
 
     @Test
     void login_OauthUserWithEmptyPassword_ShouldThrowException() {
         LoginRequest request = new LoginRequest();
-        request.setEmail("oauth@test.com");
+        request.setIdentifier("oauth@test.com");
         request.setPassword("123456");
 
         // OAuth user created with empty password
@@ -150,7 +151,8 @@ class AuthServiceTest {
         when(userRepository.findByEmail("oauth@test.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("123456", "")).thenReturn(false);
 
-        BadCredentialsException exception = assertThrows(BadCredentialsException.class, () -> authService.login(request));
-        assertEquals("Invalid email or password", exception.getMessage());
+        BadCredentialsException exception = assertThrows(BadCredentialsException.class,
+                () -> authService.login(request));
+        assertEquals("Invalid email/username or password", exception.getMessage());
     }
 }

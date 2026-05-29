@@ -12,7 +12,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
+import com.discordmini.groupchannel.model.dto.MemberPageResponse;
+import org.springframework.format.annotation.DateTimeFormat;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -63,9 +65,12 @@ public class RoomController {
     }
 
     @GetMapping("/{roomId}/members")
-    public ResponseEntity<ApiResponse<List<com.discordmini.groupchannel.model.dto.MemberDetailResponse>>> getMembers(
-            @PathVariable UUID roomId) {
-        return ResponseEntity.ok(ApiResponse.ok("Members fetched", membershipService.getMembers(roomId)));
+    public ResponseEntity<ApiResponse<MemberPageResponse>> getMembers(
+            @PathVariable UUID roomId,
+            @RequestParam(defaultValue = "50") int limit,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant before) {
+        return ResponseEntity
+                .ok(ApiResponse.ok("Members fetched", membershipService.getMembersPaginated(roomId, limit, before)));
     }
 
     @GetMapping("/{roomId}/members/{userId}")

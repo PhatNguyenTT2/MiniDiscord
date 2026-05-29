@@ -5,14 +5,11 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(
-    name = "room_participants",
-    uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "room_id"})
-)
+@Table(name = "room_participants", uniqueConstraints = @UniqueConstraint(columnNames = { "user_id", "room_id" }))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -37,8 +34,8 @@ public class RoomParticipant {
 
     @CreationTimestamp
     @Column(name = "joined_at", updatable = false)
-    private LocalDateTime joinedAt;
+    private Instant joinedAt;
 
     @Column(name = "muted_until")
-    private LocalDateTime mutedUntil;
+    private Instant mutedUntil;
 }

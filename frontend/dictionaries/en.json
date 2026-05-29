@@ -3,6 +3,7 @@
     "welcomeBack": "Welcome back!",
     "gladToSeeYou": "We're glad to see you again!",
     "email": "Email",
+    "emailOrUsername": "Email or Username",
     "password": "Password",
     "forgotPassword": "Forgot your password?",
     "login": "Log In",
@@ -20,6 +21,7 @@
   },
   "validation": {
     "emailInvalid": "Invalid email address",
+    "identifierRequired": "Email or username is required",
     "passwordMin": "Password must be at least 6 characters",
     "usernameMin": "Username must be at least 3 characters",
     "usernameMax": "Username must be at most 50 characters",

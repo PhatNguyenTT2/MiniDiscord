@@ -15,4 +15,5 @@ public class RoomCreatedEvent {
     private UUID ownerId;
     private String name;
     private RoomType type;
+    private UUID targetUserId; // For DM rooms: the other participant
 }

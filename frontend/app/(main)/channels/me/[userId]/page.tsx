@@ -514,9 +514,10 @@ export default function DmChatPage() {
     const client = getStompClient(token);
     if (!client.connected) return;
 
+    const username = useAuthStore.getState().user?.username;
     client.publish({
       destination: "/app/chat.typing",
-      body: JSON.stringify({ roomId, channelId }),
+      body: JSON.stringify({ roomId, channelId, username }),
     });
   }, [channelId, roomId, token]);
 

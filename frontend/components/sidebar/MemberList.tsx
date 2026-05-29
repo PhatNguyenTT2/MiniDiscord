@@ -5,26 +5,18 @@ import { StatusAvatar } from "@/components/ui/StatusAvatar";
 import { useTranslation } from "@/lib/i18n";
 import { useRoomStore } from "@/stores/roomStore";
 import { useParams } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { MemberDetailResponse } from "@/types";
 
 export function MemberList() {
   const { t } = useTranslation();
   const params = useParams();
-  const { channels, members, fetchMembers } = useRoomStore();
+  const { channels, members, fetchMembers, memberHasMore } = useRoomStore();
 
   const activeChannelId = (params?.channelId as string) || null;
-  let activeRoomId: string | null = null;
+  const activeRoomId = (params?.serverId as string) || null;
 
-  if (activeChannelId) {
-    for (const [rId, cList] of Object.entries(channels)) {
-      if (cList.some((c) => c.id === activeChannelId)) {
-        activeRoomId = rId;
-        break;
-      }
-    }
-  }
-
+  // Initial load
   useEffect(() => {
     if (activeRoomId) {
       fetchMembers(activeRoomId);
@@ -32,8 +24,24 @@ export function MemberList() {
   }, [activeRoomId, fetchMembers]);
 
   const roomMembers = activeRoomId ? (members[activeRoomId] || []) : [];
+  const hasMore = activeRoomId ? (memberHasMore[activeRoomId] ?? true) : false;
+
   const online = roomMembers.filter((u) => u.status !== "OFFLINE");
   const offline = roomMembers.filter((u) => u.status === "OFFLINE");
+
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!sentinelRef.current || !hasMore || !activeRoomId) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && roomMembers.length > 0) {
+        const lastMember = roomMembers[roomMembers.length - 1];
+        fetchMembers(activeRoomId, lastMember.joinedAt);
+      }
+    });
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [activeRoomId, hasMore, roomMembers, fetchMembers]);
 
   return (
     <div className="flex h-full w-[240px] flex-col bg-[#2b2d31] border-l border-border">
@@ -46,6 +54,7 @@ export function MemberList() {
           title={`${t("members.offline")} — ${offline.length}`}
           users={offline}
         />
+        {hasMore && <div ref={sentinelRef} className="h-4" />}
       </ScrollArea>
     </div>
   );

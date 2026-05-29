@@ -67,7 +67,7 @@ public class RoomService {
 
                 // 4. Publish Event (Will be handled asynchronously after commit)
                 eventPublisher.publishEvent(
-                                new RoomCreatedEvent(room.getId(), ownerId, room.getName(), room.getType()));
+                                new RoomCreatedEvent(room.getId(), ownerId, room.getName(), room.getType(), null));
 
                 return room;
         }
@@ -208,7 +208,8 @@ public class RoomService {
                 channelRepository.save(defaultChannel);
 
                 eventPublisher.publishEvent(
-                                new RoomCreatedEvent(room.getId(), ownerId, room.getName(), room.getType()));
+                                new RoomCreatedEvent(room.getId(), ownerId, room.getName(), room.getType(),
+                                                targetUserId));
 
                 return room;
         }

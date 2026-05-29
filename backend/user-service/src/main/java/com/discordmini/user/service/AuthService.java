@@ -74,8 +74,19 @@ public class AuthService {
         }
 
         public AuthResponse login(LoginRequest request) {
-                User user = userRepository.findByEmail(request.getEmail())
-                                .orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
+                String identifier = request.getIdentifier().trim();
+
+                // Determine if identifier is email or username
+                User user;
+                if (identifier.contains("@")) {
+                        user = userRepository.findByEmail(identifier)
+                                        .orElseThrow(() -> new BadCredentialsException(
+                                                        "Invalid email/username or password"));
+                } else {
+                        user = userRepository.findByUsername(identifier)
+                                        .orElseThrow(() -> new BadCredentialsException(
+                                                        "Invalid email/username or password"));
+                }
 
                 if (!user.getIsActive()) {
                         throw new BaseException("Account is deactivated", HttpStatus.FORBIDDEN, "ACCOUNT_INACTIVE");
@@ -83,7 +94,7 @@ public class AuthService {
 
                 if (user.getPasswordHash() == null || user.getPasswordHash().isEmpty()
                                 || !passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-                        throw new BadCredentialsException("Invalid email or password");
+                        throw new BadCredentialsException("Invalid email/username or password");
                 }
 
                 String token = jwtService.generateToken(

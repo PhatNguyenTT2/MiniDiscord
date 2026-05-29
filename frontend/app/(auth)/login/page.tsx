@@ -45,7 +45,7 @@ export default function LoginPage() {
   const error = useAuthStore((state) => state.error);
 
   const loginSchema = z.object({
-    email: z.string().email(t("validation.emailInvalid")),
+    identifier: z.string().min(1, t("validation.identifierRequired")),
     password: z.string().min(6, t("validation.passwordMin")),
   });
 
@@ -60,7 +60,7 @@ export default function LoginPage() {
   });
 
   async function onSubmit(data: LoginFormData) {
-    await loginAction(data);
+    await loginAction({ identifier: data.identifier, password: data.password });
 
     const { isAuthenticated, error } = useAuthStore.getState();
     if (isAuthenticated && !error) {
@@ -102,23 +102,23 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-1.5">
               <label
-                htmlFor="login-email"
+                htmlFor="login-identifier"
                 className="block text-xs font-bold uppercase tracking-wide text-muted-foreground"
               >
-                {t("auth.email")}{" "}
+                {t("auth.emailOrUsername")}{" "}
                 <span className="text-destructive">*</span>
               </label>
               <Input
-                id="login-email"
-                type="email"
-                placeholder="name@example.com"
+                id="login-identifier"
+                type="text"
+                placeholder="name@example.com or username"
                 className="h-10"
-                {...register("email")}
-                aria-invalid={!!errors.email}
+                {...register("identifier")}
+                aria-invalid={!!errors.identifier}
               />
-              {errors.email && (
+              {errors.identifier && (
                 <p className="text-xs text-destructive">
-                  {errors.email.message}
+                  {errors.identifier.message}
                 </p>
               )}
             </div>
