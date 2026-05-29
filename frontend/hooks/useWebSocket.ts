@@ -46,28 +46,23 @@ export function useWebSocket() {
       // fetches fresh presence data from Redis, not stale cache
       clearRoomCache();
 
-      // Clear stale room subscriptions from previous connection
-      subscriptionsRef.current.forEach((sub, key) => {
-        if (key !== "/user/queue/notifications") {
-          subscriptionsRef.current.delete(key);
-        }
-      });
+      // ── CRITICAL: Clear ALL stale subscription refs from previous connection ──
+      // Old StompSubscription objects are dead after disconnect.
+      // If we don't clear, the Map still has old keys and the re-subscribe
+      // loop below will skip rooms thinking they're already subscribed.
+      subscriptionsRef.current.clear();
 
       // Personal notification channel
       const notifKey = "/user/queue/notifications";
-      if (!subscriptionsRef.current.has(notifKey)) {
-        const sub = client.subscribe(notifKey, handleNotification);
-        subscriptionsRef.current.set(notifKey, sub);
-      }
+      const notifSub = client.subscribe(notifKey, handleNotification);
+      subscriptionsRef.current.set(notifKey, notifSub);
 
-      // Re-subscribe to current rooms immediately to prevent message drop
+      // Re-subscribe to ALL current rooms immediately to prevent message drop
       const currentRooms = useRoomStore.getState().rooms;
       currentRooms.forEach((room) => {
         const roomKey = `/topic/room.${room.id}`;
-        if (!subscriptionsRef.current.has(roomKey)) {
-          const sub = client.subscribe(roomKey, handleRoomMessage);
-          subscriptionsRef.current.set(roomKey, sub);
-        }
+        const sub = client.subscribe(roomKey, handleRoomMessage);
+        subscriptionsRef.current.set(roomKey, sub);
       });
 
       // Refresh ALL data after WebSocket connects to get accurate Redis presence.
@@ -89,7 +84,9 @@ export function useWebSocket() {
     };
 
     client.onWebSocketClose = () => {
-      console.log("[STOMP] WebSocket closed");
+      console.log("[STOMP] WebSocket closed — clearing stale subscriptions");
+      // Clear all subscription refs so onConnect re-subscribes cleanly
+      subscriptionsRef.current.clear();
       useNetworkStore.getState().setWsStatus("connecting");
       useAuthStore.getState().setOwnStatus("OFFLINE");
     };
@@ -141,12 +138,14 @@ function handleRoomMessage(msg: IMessage) {
     }
 
     if (eventType === "MESSAGE_REACTED") {
+      console.log("[STOMP] MESSAGE_REACTED:", data.channelId, data.messageId, data.reactions?.length);
       useChatStore.getState().updateReactions(data.channelId, data.messageId, data.reactions);
       return;
     }
 
     if (eventType === "TYPING_START") {
       const currentUserId = useAuthStore.getState().user?.id;
+      console.log("[STOMP] TYPING_START:", { channelId: data.channelId, userId: data.userId, username: data.username });
       if (data.userId === currentUserId) return; // Don't show own typing
       useChatStore.getState().setTyping(data.channelId, data.userId, data.username);
       return;
@@ -154,6 +153,7 @@ function handleRoomMessage(msg: IMessage) {
 
     useChatStore.getState().receiveMessage(data.channelId, {
       id: data.messageId,
+      messageId: data.messageId,
       roomId: data.roomId,
       channelId: data.channelId,
       senderId: data.senderId,

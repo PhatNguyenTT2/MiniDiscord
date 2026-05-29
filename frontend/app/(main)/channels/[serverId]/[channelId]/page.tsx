@@ -71,10 +71,13 @@ export default function ChannelPage() {
       const client = getStompClient(token);
       if (!client.connected) return;
 
+      const currentUser = useAuthStore.getState().user;
       const payload = {
         roomId,
         channelId,
         content,
+        senderName: currentUser?.username || "User",
+        senderAvatar: currentUser?.avatarUrl || null,
         fileUrl: attachment?.fileUrl,
         fileName: attachment?.fileName,
         fileSize: attachment?.fileSize,
@@ -120,6 +123,18 @@ export default function ChannelPage() {
 
   const handleScrollStateChange = useCallback((isAtBottom: boolean) => {
     setShowJumpBanner(!isAtBottom);
+  }, []);
+
+  // Auto-hide MemberList when viewport is narrow
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth < 1024 && useUIStore.getState().showMemberList) {
+        useUIStore.setState({ showMemberList: false });
+      }
+    };
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   return (

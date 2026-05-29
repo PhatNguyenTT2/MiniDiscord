@@ -27,7 +27,6 @@ export function ServerList() {
   const { t } = useTranslation();
   const [showCreateServer, setShowCreateServer] = useState(false);
   const getUnreadCount = useNotificationStore((s) => s.getUnreadCount);
-  const markAsRead = useNotificationStore((s) => s.markAsRead);
 
   const { rooms, channels } = useRoomStore();
 
@@ -36,7 +35,6 @@ export function ServerList() {
   const isDashboard = pathname?.includes("/channels/@me") || pathname?.startsWith("/channels/me") || pathname === "/channels";
 
   function handleServerClick(roomId: string) {
-    markAsRead(roomId);
     const roomChannels = channels[roomId] || [];
     if (roomChannels.length > 0) {
       const defaultChannel = roomChannels.find((c) => c.type === "TEXT") || roomChannels[0];
@@ -71,17 +69,21 @@ export function ServerList() {
           <Separator className="mx-auto w-8" />
 
           {/* Server icons (exclude DM rooms — those belong in DMSidebar) */}
-          {rooms.filter(room => room.type !== "DM").map((room) => (
-            <ServerIcon
-              key={room.id}
-              name={room.name}
-              iconUrl={room.iconUrl}
-              isActive={activeRoomId === room.id}
-              hasNotification={getUnreadCount(room.id) > 0}
-              unreadCount={getUnreadCount(room.id)}
-              onClick={() => handleServerClick(room.id)}
-            />
-          ))}
+          {rooms.filter(room => room.type !== "DM").map((room) => {
+            const roomChannels = channels[room.id] || [];
+            const roomUnreadCount = roomChannels.reduce((sum, ch) => sum + getUnreadCount(ch.id), 0);
+            return (
+              <ServerIcon
+                key={room.id}
+                name={room.name}
+                iconUrl={room.iconUrl}
+                isActive={activeRoomId === room.id}
+                hasNotification={roomUnreadCount > 0}
+                unreadCount={roomUnreadCount}
+                onClick={() => handleServerClick(room.id)}
+              />
+            );
+          })}
 
           <Separator className="mx-auto w-8" />
 

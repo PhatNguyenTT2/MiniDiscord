@@ -7,16 +7,27 @@ import { FriendsPage } from "@/components/friends/FriendsPage";
 import { ActiveNowPanel } from "@/components/friends/ActiveNowPanel";
 import { ResizeHandle } from "@/components/ui/ResizeHandle";
 import { useUIStore } from "@/stores/uiStore";
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export default function DashboardPage() {
   const sidebarWidth = useUIStore((s) => s.sidebarWidth);
   const setSidebarWidth = useUIStore((s) => s.setSidebarWidth);
+  const [showActiveNow, setShowActiveNow] = useState(true);
 
   const handleResize = useCallback(
     (delta: number) => setSidebarWidth(sidebarWidth + delta),
     [sidebarWidth, setSidebarWidth]
   );
+
+  // Auto-hide ActiveNowPanel when viewport is narrow
+  useEffect(() => {
+    const onResize = () => {
+      setShowActiveNow(window.innerWidth >= 1024);
+    };
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   return (
     <>
@@ -43,9 +54,8 @@ export default function DashboardPage() {
         <FriendsPage />
       </main>
 
-      {/* Column 4: Active Now */}
-      <ActiveNowPanel />
+      {/* Column 4: Active Now — auto-hides on narrow viewport */}
+      {showActiveNow && <ActiveNowPanel />}
     </>
   );
 }
-

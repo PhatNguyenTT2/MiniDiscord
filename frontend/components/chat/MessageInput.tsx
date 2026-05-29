@@ -162,7 +162,7 @@ export function MessageInput({ channelId, channelName, isDm, onSend, onTyping }:
     >
       {/* Floating shell keeps the composer inside column 3 and visually detached from the screen edges. */}
       <div
-        className="shadow-[0_12px_30px_rgba(0,0,0,0.24)]"
+        className="relative shadow-[0_12px_30px_rgba(0,0,0,0.24)]"
         style={{
           borderRadius: "var(--floating-bar-radius)",
           backgroundColor: "#383a40",
@@ -184,7 +184,7 @@ export function MessageInput({ channelId, channelName, isDm, onSend, onTyping }:
             <div className="flex min-w-0 items-center gap-2">
               <Reply className="h-3.5 w-3.5 shrink-0 rotate-180 text-accent" />
               <span className="text-sm text-muted-foreground">
-                Đang trả lời{" "}
+                {t("chat.replyingTo")}{" "}
                 <strong className="font-semibold text-foreground">
                   {replyingTo.senderName}
                 </strong>
@@ -197,7 +197,7 @@ export function MessageInput({ channelId, channelName, isDm, onSend, onTyping }:
               type="button"
               onClick={clearReplyingTo}
               className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground cursor-pointer"
-              aria-label="Hủy trả lời"
+              aria-label={t("chat.cancelReply")}
             >
               <X className="h-4 w-4" />
             </button>
@@ -352,18 +352,48 @@ export function MessageInput({ channelId, channelName, isDm, onSend, onTyping }:
           </div>
         </form>
 
-        {/* Typing Indicator */}
+        {/* Typing Indicator — absolute overlay ABOVE chatbox, matching Discord's native UX */}
         {typingUsers.length > 0 && (
-          <div className="absolute -bottom-6 left-0 text-xs text-muted-foreground font-medium animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <div className="absolute -top-6 left-0 right-0 h-6 px-4 flex items-center text-xs text-muted-foreground font-medium animate-in fade-in slide-in-from-bottom-2 duration-200 z-10 pointer-events-none"
+            style={{ background: 'linear-gradient(to bottom, transparent, var(--background-primary) 40%)' }}>
             <span className="flex items-center gap-1.5">
-              <span className="flex gap-0.5 mt-[3px]">
+              <span className="flex gap-0.5 mt-[1px]">
                 <span className="w-1 h-1 rounded-full bg-accent animate-bounce" style={{ animationDelay: '0ms' }}></span>
                 <span className="w-1 h-1 rounded-full bg-accent animate-bounce" style={{ animationDelay: '150ms' }}></span>
                 <span className="w-1 h-1 rounded-full bg-accent animate-bounce" style={{ animationDelay: '300ms' }}></span>
               </span>
-              {typingUsers.length === 1 && <span><strong className="text-foreground">{typingUsers[0].username}</strong> đang nhập...</span>}
-              {typingUsers.length === 2 && <span><strong className="text-foreground">{typingUsers[0].username}</strong> và <strong className="text-foreground">{typingUsers[1].username}</strong> đang nhập...</span>}
-              {typingUsers.length > 2 && <span>Nhiều người đang nhập...</span>}
+              {typingUsers.length === 1 && (
+                <span>
+                  {(() => {
+                    const template = t("chat.typingSingle");
+                    const parts = template.split(/(\{username\})/);
+                    return parts.map((part, i) => {
+                      if (part === "{username}") {
+                        return <strong key={i} className="text-foreground">{typingUsers[0].username}</strong>;
+                      }
+                      return part;
+                    });
+                  })()}
+                </span>
+              )}
+              {typingUsers.length === 2 && (
+                <span>
+                  {(() => {
+                    const template = t("chat.typingDouble");
+                    const parts = template.split(/(\{username1\}|\{username2\})/);
+                    return parts.map((part, i) => {
+                      if (part === "{username1}") {
+                        return <strong key={i} className="text-foreground">{typingUsers[0].username}</strong>;
+                      }
+                      if (part === "{username2}") {
+                        return <strong key={i} className="text-foreground">{typingUsers[1].username}</strong>;
+                      }
+                      return part;
+                    });
+                  })()}
+                </span>
+              )}
+              {typingUsers.length > 2 && <span>{t("chat.typingMultiple")}</span>}
             </span>
           </div>
         )}

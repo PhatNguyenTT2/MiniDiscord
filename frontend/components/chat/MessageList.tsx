@@ -18,6 +18,9 @@ interface MessageListProps {
   roomId?: string;
   /** Called when scroll-at-bottom state changes */
   onScrollStateChange?: (isAtBottom: boolean) => void;
+  memberAvatarMap?: Record<string, string | null>;
+  memberStatusMap?: Record<string, string>;
+  welcomeHeader?: React.ReactNode;
 }
 
 /** Exposed imperative handle for parent components */
@@ -38,7 +41,16 @@ function isDifferentDay(a: string, b: string): boolean {
 }
 
 export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
-  function MessageList({ messages, channelName, channelId, roomId, onScrollStateChange }, ref) {
+  function MessageList({
+    messages,
+    channelName,
+    channelId,
+    roomId,
+    onScrollStateChange,
+    memberAvatarMap,
+    memberStatusMap,
+    welcomeHeader
+  }, ref) {
     const { t } = useTranslation();
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
@@ -62,6 +74,12 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
     // Track whether unread banner is dismissed
     const [isDismissed, setIsDismissed] = useState(false);
 
+    // ── CRITICAL: Flag to prevent auto-dismiss timer from clearing manual "Mark as Unread" ──
+    const manuallyMarkedRef = useRef(false);
+
+    // Track if we have performed initial scroll behavior for a channel entry
+    const hasInitialScrolledRef = useRef<string | null>(null);
+
     // Track scroll position
     const [isAtBottom, setIsAtBottom] = useState(true);
 
@@ -69,6 +87,8 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
     useEffect(() => {
       setIsDismissed(false);
       setIsAtBottom(true);
+      manuallyMarkedRef.current = false; // Reset manual flag on channel switch
+      hasInitialScrolledRef.current = null; // Reset scroll state for new channel entry
 
       // Track active channel for notification logic
       useUIStore.getState().setActiveChannelId(channelId || null);
@@ -80,20 +100,74 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
 
       return () => {
         useUIStore.getState().setActiveChannelId(null);
+        if (channelId && !manuallyMarkedRef.current) {
+          markAsRead(channelId);
+        }
       }
-    }, [roomId, channelId, fetchMessages]);
+    }, [roomId, channelId, fetchMessages, markAsRead]);
 
-    // Auto-dismiss: mark as read after 5s of viewing the channel
+    // Resilient Auto-Scroll on initial mount or channel switch
+    useEffect(() => {
+      if (!roomId || !channelId || isLoading || messages.length === 0) return;
+
+      if (hasInitialScrolledRef.current !== channelId) {
+        hasInitialScrolledRef.current = channelId;
+
+        if (unreadCount > 0) {
+          // Gotcha 2: Pagination Mismatch Defense
+          if (unreadCount > messages.length) {
+            requestAnimationFrame(() => {
+              setTimeout(() => {
+                if (scrollContainerRef.current) {
+                  scrollContainerRef.current.scrollTop = 0;
+                  setIsAtBottom(false);
+                  onScrollStateChange?.(false);
+                }
+              }, 100);
+            });
+          } else if (firstUnreadIndex >= 0) {
+            // Gotcha 1: DOM paint race condition timing delay
+            requestAnimationFrame(() => {
+              setTimeout(() => {
+                if (unreadDividerRef.current) {
+                  unreadDividerRef.current.scrollIntoView({
+                    behavior: "auto", // "auto" is faster and completely reliable on initial mount load
+                    block: "center",
+                  });
+                  setIsAtBottom(false);
+                  onScrollStateChange?.(false);
+                } else {
+                  bottomRef.current?.scrollIntoView({ behavior: "auto" });
+                  setIsAtBottom(true);
+                  onScrollStateChange?.(true);
+                }
+              }, 100);
+            });
+          }
+        } else {
+          // Standard scroll to bottom on entry if no unread messages
+          requestAnimationFrame(() => {
+            bottomRef.current?.scrollIntoView({ behavior: "auto" });
+            setIsAtBottom(true);
+            onScrollStateChange?.(true);
+          });
+        }
+      }
+    }, [roomId, channelId, isLoading, messages.length, unreadCount, firstUnreadIndex, onScrollStateChange]);
+
     useEffect(() => {
       if (!channelId || unreadCount <= 0 || isDismissed) return;
+      const el = scrollContainerRef.current;
+      if (!el) return;
 
-      const timer = setTimeout(() => {
-        markAsRead(channelId);
-        setIsDismissed(true);
-      }, 5000);
-
-      return () => clearTimeout(timer);
-    }, [channelId, unreadCount, isDismissed, markAsRead]);
+      // If content fits completely inside the viewport, user has seen everything
+      requestAnimationFrame(() => {
+        if (el.scrollHeight <= el.clientHeight && !manuallyMarkedRef.current) {
+          markAsRead(channelId);
+          setIsDismissed(true);
+        }
+      });
+    }, [channelId, messages.length, unreadCount, isDismissed, markAsRead]);
 
     // Scroll to first unread divider
     const scrollToFirstUnread = useCallback(() => {
@@ -132,6 +206,11 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
       const atBottom = distanceFromBottom < 100;
       setIsAtBottom(atBottom);
       onScrollStateChange?.(atBottom);
+
+      if (atBottom && unreadCount > 0 && !manuallyMarkedRef.current) {
+        markAsRead(channelId!);
+        setIsDismissed(true);
+      }
 
       // Top detection (Infinite scroll up)
       if (el.scrollTop < 100 && !isLoading && messages.length > 0 && roomId && channelId) {
@@ -181,17 +260,19 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
           style={{ paddingBottom: "var(--floating-message-input-offset)" }}
         >
           {/* Welcome header */}
-          <div className="px-4 pt-16 pb-4">
-            <div className="flex h-[68px] w-[68px] items-center justify-center rounded-full bg-secondary mb-3">
-              <Hash className="h-10 w-10 text-foreground" />
+          {welcomeHeader || (
+            <div className="px-4 pt-16 pb-4">
+              <div className="flex h-[68px] w-[68px] items-center justify-center rounded-full bg-secondary mb-3">
+                <Hash className="h-10 w-10 text-foreground" />
+              </div>
+              <h2 className="text-[1.5rem] font-bold text-foreground leading-snug">
+                {t("chat.welcomeTitle", { channelName })}
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground leading-relaxed max-w-[480px]">
+                {t("chat.welcomeDesc", { channelName })}
+              </p>
             </div>
-            <h2 className="text-[1.5rem] font-bold text-foreground leading-snug">
-              {t("chat.welcomeTitle", { channelName })}
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground leading-relaxed max-w-[480px]">
-              {t("chat.welcomeDesc", { channelName })}
-            </p>
-          </div>
+          )}
 
           {/* Messages with date separators and unread divider */}
           <div className="pb-2">
@@ -227,6 +308,15 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
                     message={msg}
                     isGrouped={isGrouped && !showDateSeparator}
                     channelId={channelId}
+                    memberAvatarMap={memberAvatarMap}
+                    memberStatusMap={memberStatusMap}
+                    onMarkUnread={() => {
+                      if (channelId) {
+                        manuallyMarkedRef.current = true; // Prevent auto-dismiss
+                        setIsDismissed(false); // Re-show the unread banner
+                        useNotificationStore.getState().setUnreadFromMessage(channelId, i, messages.length);
+                      }
+                    }}
                   />
                 </div>
               );

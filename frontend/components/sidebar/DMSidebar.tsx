@@ -77,7 +77,6 @@ export function DMSidebar({ activeUserId }: { activeUserId?: string }) {
   const pathname = usePathname();
   const sidebarWidth = useUIStore((s) => s.sidebarWidth);
   const getUnreadCount = useNotificationStore((s) => s.getUnreadCount);
-  const markAsRead = useNotificationStore((s) => s.markAsRead);
   const [isNewMessageModalOpen, setIsNewMessageModalOpen] = useState(false);
 
   const isDashboard = pathname === "/channels/@me" || pathname?.startsWith("/channels/me") || pathname?.startsWith("/channels/@me");
@@ -200,7 +199,6 @@ export function DMSidebar({ activeUserId }: { activeUserId?: string }) {
                   unreadCount={dm.channelId ? getUnreadCount(dm.channelId) : 0}
                   isActive={activeUserId === dm.recipientId}
                   onClick={() => {
-                    if (dm.channelId) markAsRead(dm.channelId);
                     router.push(`/channels/@me/${dm.recipientId}`);
                   }}
                 />

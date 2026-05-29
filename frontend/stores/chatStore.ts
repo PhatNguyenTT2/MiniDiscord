@@ -160,6 +160,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
       };
     });
+
+    // Auto-remove optimistic message if server hasn't broadcasted real message in 10s
+    setTimeout(() => {
+      set((state) => {
+        const msgs = state.channelMessages[channelId] || [];
+        if (msgs.some((m) => m.id === message.id)) {
+          return {
+            channelMessages: {
+              ...state.channelMessages,
+              [channelId]: msgs.filter((m) => m.id !== message.id),
+            },
+          };
+        }
+        return state;
+      });
+    }, 10000);
   },
 
   editMessage: async (channelId, messageId, content) => {
@@ -190,7 +206,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set((state) => ({
         channelMessages: {
           ...state.channelMessages,
-          [channelId]: msgs.filter((m) => m.id !== messageId) // remove entirely for UI
+          [channelId]: msgs.filter((m) => m.id !== messageId && m.messageId !== messageId) // remove entirely for UI
         }
       }));
     } else {
@@ -214,7 +230,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => {
       const msgs = state.channelMessages[channelId] ?? [];
       const updated = msgs.map(msg =>
-        msg.id === messageId
+        msg.id === messageId || msg.messageId === messageId
           ? { ...msg, content, isEdited: true, editedAt }
           : msg
       );
@@ -231,7 +247,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => {
       const msgs = state.channelMessages[channelId] ?? [];
       const updated = msgs.map(msg =>
-        msg.id === messageId
+        msg.id === messageId || msg.messageId === messageId
           ? { ...msg, isDeleted: true, content: "" }
           : msg
       );
@@ -248,7 +264,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => {
       const users = state.typingUsers[channelId] || [];
       const existing = users.find(u => u.userId === userId);
-      const expiresAt = Date.now() + 3000;
+      const expiresAt = Date.now() + 5000; // Increased to 5s to overlap 3s emit throttle
 
       let nextUsers;
       if (existing) {
@@ -260,7 +276,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Schedule cleanup
       setTimeout(() => {
         useChatStore.getState().clearTyping(channelId, userId);
-      }, 3000);
+      }, 5000);
 
       return {
         typingUsers: {
@@ -297,7 +313,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (!msgs) return state;
 
       const updated = msgs.map((msg) => {
-        if (msg.id !== messageId) return msg;
+        if (msg.id !== messageId && msg.messageId !== messageId) return msg;
 
         const existingIdx = msg.reactions.findIndex((r) => r.emoji === emoji);
         let newReactions = [...msg.reactions];
@@ -365,7 +381,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         channelMessages: {
           ...state.channelMessages,
           [channelId]: msgs.map((m) =>
-            m.id === messageId
+            m.id === messageId || m.messageId === messageId
               ? { ...m, reactions: reactions.map((r: any) => ({ ...r, count: r.userIds.length })) }
               : m
           ),
@@ -377,11 +393,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
 
   receiveMessage: (channelId, message) => {
+    // Clear typing indicator instantly if this user was typing
+    useChatStore.getState().clearTyping(channelId, message.senderId);
+
     set((state) => {
       const existing = state.channelMessages[channelId] || [];
 
       // Prevent duplicates if server broadcast reaches us twice
-      if (existing.some((m) => m.id === message.id)) {
+      if (existing.some((m) => m.id === message.id || (m.messageId && m.messageId === message.id) || (message.messageId && m.id === message.messageId))) {
         return state;
       }
 

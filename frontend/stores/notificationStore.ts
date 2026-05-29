@@ -24,6 +24,9 @@ interface NotificationState {
 
   /** Get total unread across all DMs or specific ids */
   getTotalUnread: (ids?: string[]) => number;
+
+  /** Set unread count based on message position from end */
+  setUnreadFromMessage: (channelId: string, messageIndex: number, totalMessages: number) => void;
 }
 
 export const useNotificationStore = create<NotificationState>((set, get) => ({
@@ -66,5 +69,14 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       return ids.reduce((sum, id) => sum + (counts[id] ?? 0), 0);
     }
     return Object.values(counts).reduce((sum, c) => sum + c, 0);
+  },
+
+  setUnreadFromMessage: (channelId, messageIndex, totalMessages) => {
+    set((state) => ({
+      unreadCounts: {
+        ...state.unreadCounts,
+        [channelId]: Math.max(1, totalMessages - messageIndex),
+      },
+    }));
   },
 }));

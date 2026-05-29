@@ -1,5 +1,6 @@
 export interface Message {
-  id: string;
+  id: string; // ObjectId from DB or temporary UUID
+  messageId?: string; // Always UUID from WebSocket
   roomId: string;
   channelId: string;
   senderId: string;
