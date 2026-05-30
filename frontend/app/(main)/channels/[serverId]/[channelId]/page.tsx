@@ -13,6 +13,7 @@ import { SlidingPanel } from "@/components/ui/SlidingPanel";
 import { useUIStore } from "@/stores/uiStore";
 import { useChatStore } from "@/stores/chatStore";
 import { useAuthStore } from "@/stores/authStore";
+import { useNotificationStore } from "@/stores/notificationStore";
 import { useRoomStore } from "@/stores/roomStore";
 import { getStompClient } from "@/lib/websocket";
 import { useParams } from "next/navigation";
@@ -81,6 +82,15 @@ export default function ChannelPage() {
         destination: "/app/chat.send",
         body: JSON.stringify(payload),
       });
+
+      // Sending a message implicitly marks channel as read
+      if (channelId) {
+        useNotificationStore.getState().markAsRead(channelId);
+      }
+      const lastRealId = useChatStore.getState().getChannelMessages(channelId).slice(-1)[0]?.id;
+      if (roomId && channelId && lastRealId && !lastRealId.startsWith('optimistic-')) {
+        useChatStore.getState().markChannelAsRead(roomId, channelId, lastRealId);
+      }
 
       clearReplyingTo();
     },

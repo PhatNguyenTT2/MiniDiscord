@@ -106,6 +106,18 @@ public class MessageController {
         return ResponseEntity.ok(ApiResponse.ok(unread));
     }
 
+    @PutMapping("/rooms/{roomId}/channels/{channelId}/mark-unread")
+    public ResponseEntity<ApiResponse<ReadReceiptResponse>> markAsUnread(
+            @RequestHeader("X-User-Id") String userId,
+            @PathVariable String roomId,
+            @PathVariable String channelId,
+            @RequestBody Map<String, String> body) {
+
+        ReadReceiptResponse result = readReceiptService.markAsUnread(
+                userId, roomId, channelId, body.get("messageId"));
+        return ResponseEntity.ok(ApiResponse.ok("Marked as unread", result));
+    }
+
     @PostMapping("/danger/clear-db")
     public ResponseEntity<ApiResponse<Void>> clearAllHistory() {
         messageService.clearAllHistory();

@@ -26,7 +26,7 @@ export function ServerList() {
   const pathname = usePathname();
   const { t } = useTranslation();
   const [showCreateServer, setShowCreateServer] = useState(false);
-  const getUnreadCount = useNotificationStore((s) => s.getUnreadCount);
+  const unreadCounts = useNotificationStore((s) => s.unreadCounts);
 
   const { rooms, channels } = useRoomStore();
 
@@ -71,7 +71,7 @@ export function ServerList() {
           {/* Server icons (exclude DM rooms — those belong in DMSidebar) */}
           {rooms.filter(room => room.type !== "DM").map((room) => {
             const roomChannels = channels[room.id] || [];
-            const roomUnreadCount = roomChannels.reduce((sum, ch) => sum + getUnreadCount(ch.id), 0);
+            const roomUnreadCount = roomChannels.reduce((sum, ch) => sum + (unreadCounts[ch.id] ?? 0), 0);
             return (
               <ServerIcon
                 key={room.id}

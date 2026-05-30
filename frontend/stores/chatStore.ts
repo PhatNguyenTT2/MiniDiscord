@@ -29,6 +29,7 @@ interface ChatState {
 
   fetchUnreadCount: (roomId: string, channelId: string) => Promise<void>;
   markChannelAsRead: (roomId: string, channelId: string, lastMessageId: string) => Promise<void>;
+  markChannelAsUnread: (roomId: string, channelId: string, messageId: string) => Promise<void>;
 
   sendChannelMessage: (channelId: string, roomId: string, content: string) => void;
   addOptimisticMessage: (channelId: string, message: Message) => void;
@@ -106,6 +107,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  markChannelAsUnread: async (roomId, channelId, messageId) => {
+    try {
+      const res = await api.put(`/messages/rooms/${roomId}/channels/${channelId}/mark-unread`, { messageId });
+      const data = res.data.data;
+      set((state) => ({
+        unreadCounts: { ...state.unreadCounts, [channelId]: data }
+      }));
+      useNotificationStore.getState().setUnreadCount(channelId, data.count);
+    } catch (err) {
+      console.error("Failed to mark channel as unread:", err);
+    }
+  },
+
   setReplyingTo: (target) => set({ replyingTo: target }),
   clearReplyingTo: () => set({ replyingTo: null }),
 
@@ -127,8 +141,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const existing = state.channelMessages[channelId] || [];
 
         // If 'before' is provided, we are fetching older messages (scrolling up)
-        // We prepend (unshift) history to existing messages.
-        // If 'before' is omitted, it's initial load, replace entirely.
+        // $lt cursor is strict, no duplicates possible
         const merged = before
           ? [...fetchedMessages, ...existing]
           : fetchedMessages;
@@ -163,12 +176,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
         )
       ]);
 
+      // Deduplicate: $lte in before includes cursor msg, $gt in after excludes it,
+      // but guard against any edge-case duplicates
+      const all = [...beforeRes.data.data, ...afterRes.data.data];
+      const seen = new Map<string, Message>();
+      for (const msg of all) {
+        if (!seen.has(msg.id)) seen.set(msg.id, msg);
+      }
+
       set({
         channelMessages: {
           ...get().channelMessages,
-          // beforeRes includes the cursor message (thanks to $lte in backend)
-          // afterRes includes messages forward in time
-          [channelId]: [...beforeRes.data.data, ...afterRes.data.data]
+          [channelId]: Array.from(seen.values())
         },
         isLoading: false
       });

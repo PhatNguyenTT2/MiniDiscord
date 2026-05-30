@@ -4,9 +4,10 @@ import com.discordmini.chathistory.client.MembershipClient;
 import com.discordmini.chathistory.model.document.Message;
 import com.discordmini.chathistory.model.document.ReadReceipt;
 import com.discordmini.chathistory.model.dto.ReadReceiptResponse;
-import com.discordmini.chathistory.repository.MessageRepository;
 import com.discordmini.chathistory.repository.ReadReceiptRepository;
 import lombok.RequiredArgsConstructor;
+import org.bson.types.ObjectId;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -19,37 +20,98 @@ import java.time.LocalDateTime;
 public class ReadReceiptService {
 
     private final ReadReceiptRepository readReceiptRepository;
-    private final MessageRepository messageRepository;
     private final MembershipClient membershipClient;
     private final MongoTemplate mongoTemplate;
 
     private static final int UNREAD_CAP = 100;
 
+    /**
+     * Mark channel as read up to the given message ID.
+     * Uses ObjectId comparison instead of string lexicographic order.
+     */
     public void markAsRead(String userId, String roomId, String channelId, String lastReadMessageId) {
         membershipClient.verifyMembership(userId, roomId);
 
-        // Atomic update: only update if new ID is greater
-        long modified = readReceiptRepository.updateLastReadIfNewer(userId, channelId, lastReadMessageId,
-                LocalDateTime.now());
+        ObjectId resolvedId = resolveToObjectId(lastReadMessageId);
+        if (resolvedId == null) {
+            return; // Cannot resolve — skip silently
+        }
 
-        if (modified == 0) {
-            // Either no receipt exists or the existing one has a newer ID
+        readReceiptRepository.findByUserIdAndChannelId(userId, channelId)
+                .ifPresentOrElse(
+                        existing -> {
+                            ObjectId existingId = resolveToObjectId(existing.getLastReadMessageId());
+                            // Only update if new ID is strictly greater (newer message)
+                            if (existingId == null || resolvedId.compareTo(existingId) > 0) {
+                                existing.setLastReadMessageId(resolvedId.toHexString());
+                                existing.setLastReadAt(LocalDateTime.now());
+                                readReceiptRepository.save(existing);
+                            }
+                        },
+                        () -> {
+                            // First time reading this channel
+                            ReadReceipt receipt = ReadReceipt.builder()
+                                    .userId(userId)
+                                    .roomId(roomId)
+                                    .channelId(channelId)
+                                    .lastReadMessageId(resolvedId.toHexString())
+                                    .lastReadAt(LocalDateTime.now())
+                                    .build();
+                            readReceiptRepository.save(receipt);
+                        });
+    }
+
+    /**
+     * Mark channel as unread starting from a specific message.
+     * Rolls back lastReadMessageId to the message BEFORE the target.
+     */
+    public ReadReceiptResponse markAsUnread(String userId, String roomId, String channelId, String targetMessageId) {
+        membershipClient.verifyMembership(userId, roomId);
+
+        ObjectId targetId = resolveToObjectId(targetMessageId);
+        if (targetId == null) {
+            throw new IllegalArgumentException("Cannot resolve message ID: " + targetMessageId);
+        }
+
+        // Find the message immediately BEFORE the target message in this channel
+        Query beforeQuery = new Query();
+        beforeQuery.addCriteria(Criteria.where("roomId").is(roomId));
+        beforeQuery.addCriteria(Criteria.where("channelId").is(channelId));
+        beforeQuery.addCriteria(Criteria.where("isDeleted").is(false));
+        beforeQuery.addCriteria(Criteria.where("_id").lt(targetId));
+        beforeQuery.with(Sort.by(Sort.Direction.DESC, "_id"));
+        beforeQuery.limit(1);
+
+        Message previousMessage = mongoTemplate.findOne(beforeQuery, Message.class);
+
+        if (previousMessage == null) {
+            // Target is the first message — delete the receipt entirely
+            readReceiptRepository.findByUserIdAndChannelId(userId, channelId)
+                    .ifPresent(readReceiptRepository::delete);
+        } else {
+            // Roll back watermark to the previous message
             readReceiptRepository.findByUserIdAndChannelId(userId, channelId)
                     .ifPresentOrElse(
                             existing -> {
-                                /* Already has a newer read — do nothing */ },
+                                existing.setLastReadMessageId(previousMessage.getId());
+                                existing.setLastReadAt(LocalDateTime.now());
+                                readReceiptRepository.save(existing);
+                            },
                             () -> {
-                                // First time reading this channel
+                                // No receipt exists — create one pointing to the previous message
                                 ReadReceipt receipt = ReadReceipt.builder()
                                         .userId(userId)
                                         .roomId(roomId)
                                         .channelId(channelId)
-                                        .lastReadMessageId(lastReadMessageId)
+                                        .lastReadMessageId(previousMessage.getId())
                                         .lastReadAt(LocalDateTime.now())
                                         .build();
                                 readReceiptRepository.save(receipt);
                             });
         }
+
+        // Return fresh unread count
+        return getUnreadCount(userId, roomId, channelId);
     }
 
     public ReadReceiptResponse getUnreadCount(String userId, String roomId, String channelId) {
@@ -65,20 +127,7 @@ public class ReadReceiptService {
         query.addCriteria(Criteria.where("isDeleted").is(false));
 
         if (lastReadId != null) {
-            // lastReadMessageId may be an ObjectId string OR a UUID (from WebSocket
-            // events).
-            // Try ObjectId first; if invalid, look up the actual message by its UUID
-            // messageId field.
-            org.bson.types.ObjectId cursorId = tryParseObjectId(lastReadId);
-            if (cursorId == null) {
-                // Fallback: look up the message document by its UUID messageId field
-                Query lookup = new Query(Criteria.where("messageId").is(lastReadId));
-                lookup.fields().include("_id");
-                var doc = mongoTemplate.findOne(lookup, Message.class);
-                if (doc != null) {
-                    cursorId = new org.bson.types.ObjectId(doc.getId());
-                }
-            }
+            ObjectId cursorId = resolveToObjectId(lastReadId);
             if (cursorId != null) {
                 query.addCriteria(Criteria.where("_id").gt(cursorId));
             }
@@ -99,12 +148,31 @@ public class ReadReceiptService {
                 .build();
     }
 
-    /** Try to parse a string as MongoDB ObjectId. Returns null if invalid. */
-    private org.bson.types.ObjectId tryParseObjectId(String id) {
-        try {
-            return new org.bson.types.ObjectId(id);
-        } catch (IllegalArgumentException e) {
+    /**
+     * Resolve a message identifier (ObjectId hex or UUID messageId) to an ObjectId.
+     * Returns null if resolution fails.
+     */
+    private ObjectId resolveToObjectId(String id) {
+        if (id == null)
             return null;
+
+        // Try direct ObjectId parse first
+        try {
+            return new ObjectId(id);
+        } catch (IllegalArgumentException ignored) {
         }
+
+        // Fallback: look up by UUID messageId field
+        Query lookup = new Query(Criteria.where("messageId").is(id));
+        lookup.fields().include("_id");
+        Message doc = mongoTemplate.findOne(lookup, Message.class);
+        if (doc != null) {
+            try {
+                return new ObjectId(doc.getId());
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+
+        return null;
     }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, useImperativeHandle, forwardRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, useImperativeHandle, forwardRef, memo } from "react";
 import { MessageItem } from "@/components/chat/MessageItem";
 import { DateSeparator } from "@/components/chat/DateSeparator";
 import { UnreadBanner, NewMessageDivider } from "@/components/chat/UnreadBanner";
@@ -42,7 +42,7 @@ function isDifferentDay(a: string, b: string): boolean {
   );
 }
 
-export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
+export const MessageList = memo(forwardRef<MessageListHandle, MessageListProps>(
   function MessageList({
     messages,
     channelName,
@@ -58,7 +58,9 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const unreadDividerRef = useRef<HTMLDivElement>(null);
-    const getUnreadCount = useNotificationStore((s) => s.getUnreadCount);
+    const bottomDetectorRef = useRef<HTMLDivElement>(null);
+    // REACTIVE selector: subscribes to THIS channel's unread count only
+    const unreadCount = useNotificationStore((s) => channelId ? (s.unreadCounts[channelId] ?? 0) : 0);
     const markAsRead = useNotificationStore((s) => s.markAsRead);
     const fetchMessages = useChatStore((s) => s.fetchMessages);
     const fetchUnreadCount = useChatStore((s) => s.fetchUnreadCount);
@@ -67,8 +69,10 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
     // Gate initial scroll behind backend unread fetch
     const [isUnreadReady, setIsUnreadReady] = useState(false);
 
-    // Determine unread state for this channel
-    const unreadCount = channelId ? getUnreadCount(channelId) : 0;
+    // Gate visibility — hide scroll container until positioned to prevent flash
+    const [isPositioned, setIsPositioned] = useState(false);
+
+    // unreadCount is computed reactively by the Zustand selector above (line 63)
 
     // The first unread message is calculated from the end of the list
     const firstUnreadIndex = unreadCount > 0
@@ -81,17 +85,14 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
     // Track whether unread banner is dismissed
     const [isDismissed, setIsDismissed] = useState(false);
 
-    // ── CRITICAL: Flag to prevent auto-dismiss timer from clearing manual "Mark as Unread" ──
-    const manuallyMarkedRef = useRef(false);
-
-    // Track if we have performed initial scroll behavior for a channel entry
-    const hasInitialScrolledRef = useRef<string | null>(null);
-
-    // Phase 23 Fix 2: Flag to block handleScroll effects during initial scroll animations
-    const initialScrollCompleteRef = useRef(false);
-
-    // Track whether user actually reached bottom during this visit
+    // ── Refs (zero re-render) ──
+    const isAtBottomRef = useRef(false);
     const hasReachedBottomRef = useRef(false);
+    const manuallyMarkedUnreadRef = useRef(false);
+    const isReadyToDetectRef = useRef(false);
+    const hasInitialScrolledRef = useRef<string | null>(null);
+    const isFetchingOlderRef = useRef(false);
+    const isProgrammaticScrollRef = useRef(false);
 
     // Refs to avoid stale closures in cleanup without adding deps
     const roomIdRef = useRef(roomId);
@@ -99,49 +100,23 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
     const channelIdRef = useRef(channelId);
     channelIdRef.current = channelId;
 
-    const scrollDismissTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-    // Track scroll position - init to false to prevent initial auto-scroll misfire
-    const [isAtBottom, setIsAtBottom] = useState(false);
-
-    // Phase 24 Fix: Debounced backend sync
-    const debouncedTimerRef = useRef<NodeJS.Timeout | null>(null);
     const latestMessageIdRef = useRef<string | null>(null);
-
     useEffect(() => {
       if (messages.length > 0) {
         latestMessageIdRef.current = messages[messages.length - 1].id;
       }
     }, [messages]);
 
-    const syncBackendRead = useCallback((chanId: string, bypassDebounce = false) => {
-      if (!roomId || !onMarkAsReadBackend || !latestMessageIdRef.current) return;
-
-      if (debouncedTimerRef.current) {
-        clearTimeout(debouncedTimerRef.current);
-      }
-
-      if (bypassDebounce) {
-        onMarkAsReadBackend(roomId, chanId, latestMessageIdRef.current);
-      } else {
-        debouncedTimerRef.current = setTimeout(() => {
-          if (latestMessageIdRef.current) {
-            onMarkAsReadBackend(roomId, chanId, latestMessageIdRef.current);
-          }
-        }, 500);
-      }
-    }, [roomId, onMarkAsReadBackend]);
-
-    // Reset dismissed state when channelId changes
-    // Fix 2: Only depend on channelId to prevent cleanup from firing on ref changes
+    // Reset state when channelId changes + initial fetch
     useEffect(() => {
       setIsDismissed(false);
-      setIsAtBottom(false);
-      setIsUnreadReady(false); // Block initial scroll until backend unread is fetched
-      manuallyMarkedRef.current = false; // Reset manual flag on channel switch
-      hasInitialScrolledRef.current = null; // Reset scroll state for new channel entry
-      initialScrollCompleteRef.current = false; // Reset scroll timing flag
-      hasReachedBottomRef.current = false; // Reset bottom guard
+      isAtBottomRef.current = false;
+      setIsUnreadReady(false);
+      setIsPositioned(false);
+      manuallyMarkedUnreadRef.current = false;
+      hasInitialScrolledRef.current = null;
+      hasReachedBottomRef.current = false;
+      isReadyToDetectRef.current = false;
 
       // Track active channel for notification logic
       useUIStore.getState().setActiveChannelId(channelId || null);
@@ -150,34 +125,32 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
       const rid = roomIdRef.current;
       if (rid && channelId) {
         const store = useChatStore.getState();
-        // Pre-fetch watermark first
         store.fetchUnreadCount(rid, channelId).then(() => {
           const state = useChatStore.getState();
           const unreadInfo = state.unreadCounts[channelId];
 
-          // Got watermark? Load bidirectional context around the watermark!
           if (unreadInfo && unreadInfo.count > 0 && unreadInfo.lastReadMessageId) {
             return store.fetchMessagesAround(rid, channelId, unreadInfo.lastReadMessageId);
           } else {
-            // No unread => just load latest 50
             return store.fetchMessages(rid, channelId);
           }
         }).finally(() => {
           setIsUnreadReady(true);
         });
       } else {
-        setIsUnreadReady(true); // No fetch needed
+        setIsUnreadReady(true);
       }
 
       return () => {
         useUIStore.getState().setActiveChannelId(null);
-        // Only fire on true unmount/channel switch — refs ensure fresh values
         const cid = channelIdRef.current;
-        // Guard: Only mark read if user reached the bottom!
-        if (cid && !manuallyMarkedRef.current && hasReachedBottomRef.current) {
+        const rId = roomIdRef.current;
+        // Only mark-as-read if:
+        // 1. User scrolled to bottom (hasReachedBottomRef)
+        // 2. AND user did NOT manually mark-as-unread (manuallyMarkedUnreadRef)
+        if (cid && rId && hasReachedBottomRef.current && !manuallyMarkedUnreadRef.current) {
           useNotificationStore.getState().markAsRead(cid);
-          const rId = roomIdRef.current;
-          if (rId && latestMessageIdRef.current) {
+          if (latestMessageIdRef.current) {
             onMarkAsReadBackend?.(rId, cid, latestMessageIdRef.current);
           }
         }
@@ -185,65 +158,88 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [channelId]);
 
-    // Resilient Auto-Scroll on initial mount or channel switch
-    useEffect(() => {
-      if (!roomId || !channelId || isLoading || messages.length === 0 || !isUnreadReady) return;
+    // Instant scroll positioning — useLayoutEffect fires BEFORE browser paint
+    useLayoutEffect(() => {
+      if (!isUnreadReady) return;
+      const storeState = useChatStore.getState();
+      const cid = channelIdRef.current;
+      if (!cid || storeState.isLoading) return;
 
-      if (hasInitialScrolledRef.current !== channelId) {
-        hasInitialScrolledRef.current = channelId;
+      const msgs = storeState.getChannelMessages(cid);
+      if (msgs.length === 0) return;
 
-        if (unreadCount > 0) {
-          // Gotcha 2: Pagination Mismatch Defense
-          if (unreadCount > messages.length) {
-            requestAnimationFrame(() => {
-              setTimeout(() => {
-                if (scrollContainerRef.current) {
-                  scrollContainerRef.current.scrollTop = 0;
-                  setIsAtBottom(false);
-                  onScrollStateChange?.(false);
-                }
-                // Delay flag so trailing scroll events from scrollIntoView don't auto-dismiss
-                setTimeout(() => { initialScrollCompleteRef.current = true; }, 500);
-              }, 100);
-            });
-          } else if (firstUnreadIndex >= 0) {
-            // Gotcha 1: DOM paint race condition timing delay
-            requestAnimationFrame(() => {
-              setTimeout(() => {
-                if (unreadDividerRef.current) {
-                  unreadDividerRef.current.scrollIntoView({
-                    // User feedback C: Instant Smart Anchor centering
-                    behavior: "instant",
-                    block: "center",
-                  });
-                  setIsAtBottom(false);
-                  onScrollStateChange?.(false);
-                } else {
-                  bottomRef.current?.scrollIntoView({ behavior: "instant" });
-                  setIsAtBottom(true);
-                  onScrollStateChange?.(true);
-                  hasReachedBottomRef.current = true;
-                }
-                // Delay flag so trailing scroll events from scrollIntoView don't auto-dismiss
-                setTimeout(() => { initialScrollCompleteRef.current = true; }, 500);
-              }, 100);
-            });
+      if (hasInitialScrolledRef.current !== cid) {
+        hasInitialScrolledRef.current = cid;
+
+        const currentUnread = useNotificationStore.getState().getUnreadCount(cid);
+
+        if (currentUnread > 0 && currentUnread <= msgs.length) {
+          if (unreadDividerRef.current) {
+            unreadDividerRef.current.scrollIntoView({ behavior: "instant", block: "center" });
+            isAtBottomRef.current = false;
+            onScrollStateChange?.(false);
+          } else {
+            bottomRef.current?.scrollIntoView({ behavior: "instant" });
+            isAtBottomRef.current = true;
+            onScrollStateChange?.(true);
+            hasReachedBottomRef.current = true;
+          }
+        } else if (currentUnread > msgs.length) {
+          if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTop = 0;
+            isAtBottomRef.current = false;
+            onScrollStateChange?.(false);
           }
         } else {
-          // Standard scroll to bottom on entry if no unread messages
-          requestAnimationFrame(() => {
-            setTimeout(() => {
-              bottomRef.current?.scrollIntoView({ behavior: "instant" });
-              setIsAtBottom(true);
-              onScrollStateChange?.(true);
-              hasReachedBottomRef.current = true;
-              // Delay flag so trailing scroll events don't interfere
-              setTimeout(() => { initialScrollCompleteRef.current = true; }, 300);
-            }, 50);
-          });
+          bottomRef.current?.scrollIntoView({ behavior: "instant" });
+          isAtBottomRef.current = true;
+          onScrollStateChange?.(true);
+          hasReachedBottomRef.current = true;
         }
+
+        setIsPositioned(true);
+        // Open the immunity gate AFTER initial scroll positioning completes
+        setTimeout(() => { isReadyToDetectRef.current = true; }, 300);
       }
-    }, [roomId, channelId, isLoading, messages.length, unreadCount, firstUnreadIndex, onScrollStateChange, isUnreadReady]);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [channelId, isUnreadReady]);
+
+    // ── IntersectionObserver: bottom detection (zero re-render) ──
+    useEffect(() => {
+      const el = bottomDetectorRef.current;
+      if (!el) return;
+
+      const observer = new IntersectionObserver(([entry]) => {
+        if (entry.isIntersecting) {
+          hasReachedBottomRef.current = true;
+          isAtBottomRef.current = true;
+          onScrollStateChange?.(true);
+
+          // IMMUNITY GATE: Block auto mark-as-read during initial mount
+          if (!isReadyToDetectRef.current) return;
+
+          const cid = channelIdRef.current;
+          if (cid && !manuallyMarkedUnreadRef.current) {
+            const currentUnread = useNotificationStore.getState().getUnreadCount(cid);
+            if (currentUnread > 0) {
+              markAsRead(cid);
+              setIsDismissed(true);
+              const rId = roomIdRef.current;
+              if (rId && latestMessageIdRef.current) {
+                onMarkAsReadBackend?.(rId, cid, latestMessageIdRef.current);
+              }
+            }
+          }
+        } else {
+          isAtBottomRef.current = false;
+          onScrollStateChange?.(false);
+        }
+      }, { threshold: 0.1 });
+
+      observer.observe(el);
+      return () => observer.disconnect();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [channelId]);
 
     // Scroll to first unread divider
     const scrollToFirstUnread = useCallback(() => {
@@ -253,87 +249,83 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
       });
     }, []);
 
-    // Handle "Mark as Read"
+    // Handle "Mark as Read" — sync both frontend + backend
     const handleMarkAsRead = useCallback(() => {
       if (channelId) {
         markAsRead(channelId);
         setIsDismissed(true);
+        const rId = roomIdRef.current;
+        if (rId && latestMessageIdRef.current) {
+          onMarkAsReadBackend?.(rId, channelId, latestMessageIdRef.current);
+        }
       }
-    }, [channelId, markAsRead]);
+    }, [channelId, markAsRead, onMarkAsReadBackend]);
 
     // Scroll to bottom (Jump to Present)
     const scrollToBottom = useCallback(() => {
+      isProgrammaticScrollRef.current = true;
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      // Release guard after smooth scroll animation likely completes
+      setTimeout(() => { isProgrammaticScrollRef.current = false; }, 800);
     }, []);
 
     // Expose isAtBottom + scrollToBottom to parent
     useImperativeHandle(ref, () => ({
       scrollToBottom,
-      isAtBottom,
-    }), [scrollToBottom, isAtBottom]);
+      get isAtBottom() { return isAtBottomRef.current; },
+    }), [scrollToBottom]);
 
-    // Detect scroll position
+    // Ref for messages to avoid stale closures in handleScroll
+    const messagesRef = useRef(messages);
+    useEffect(() => {
+      messagesRef.current = messages;
+    }, [messages]);
+
+    // Scroll handler — ONLY infinite scroll up (no auto-dismiss)
     const handleScroll = useCallback(() => {
       const el = scrollContainerRef.current;
-      if (!el) return;
+      if (!el || !isReadyToDetectRef.current) return;
 
-      // Bottom detection
-      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-      const atBottom = distanceFromBottom < 100;
-      setIsAtBottom(atBottom);
-      onScrollStateChange?.(atBottom);
-
-      if (atBottom && initialScrollCompleteRef.current) {
-        hasReachedBottomRef.current = true;
-        // Debounced dismiss — user must stay at bottom 500ms
-        if (unreadCount > 0 && !manuallyMarkedRef.current && document.hasFocus()) {
-          if (scrollDismissTimerRef.current) clearTimeout(scrollDismissTimerRef.current);
-          scrollDismissTimerRef.current = setTimeout(() => {
-            markAsRead(channelId!);
-            setIsDismissed(true);
-            syncBackendRead(channelId!);
-          }, 500);
-        }
-      } else {
-        // Cancel pending auto-dismiss if user scrolled away
-        if (scrollDismissTimerRef.current) {
-          clearTimeout(scrollDismissTimerRef.current);
-          scrollDismissTimerRef.current = null;
-        }
-      }
-
-      // Top detection (Infinite scroll up)
-      // Phase 23 Fix 4: Gate infinite scroll up behind initialScrollCompleteRef to prevent initial bounce
-      if (el.scrollTop < 100 && !isLoading && messages.length > 0 && roomId && channelId && initialScrollCompleteRef.current) {
-        const oldestMessageId = messages[0].id;
-
-        // Save current scroll height to prevent jump
+      // Top detection (Infinite scroll up) — skip during programmatic scroll
+      if (el.scrollTop < 100 && !isLoading && !isFetchingOlderRef.current && !isProgrammaticScrollRef.current && messagesRef.current.length > 0 && roomId && channelId) {
+        isFetchingOlderRef.current = true;
+        const oldestMessageId = messagesRef.current[0].id;
+        const prevScrollTop = el.scrollTop;
         const prevScrollHeight = el.scrollHeight;
 
         fetchMessages(roomId, channelId, oldestMessageId).then(() => {
-          // Adjust scroll position after prepending new items so viewport doesn't jump
           requestAnimationFrame(() => {
             if (scrollContainerRef.current) {
               const newScrollHeight = scrollContainerRef.current.scrollHeight;
-              scrollContainerRef.current.scrollTop = newScrollHeight - prevScrollHeight;
+              const heightDiff = newScrollHeight - prevScrollHeight;
+              // Preserve user's visual position: add prepended content height to their scroll offset
+              if (heightDiff > 0) {
+                scrollContainerRef.current.scrollTop = prevScrollTop + heightDiff;
+              }
+              // If heightDiff === 0, no new messages were prepended — keep user's position as-is
             }
+            isFetchingOlderRef.current = false;
           });
+        }).catch(() => {
+          isFetchingOlderRef.current = false;
         });
       }
-      // Phase 23 Fix 1: Include unreadCount, markAsRead, isDismissed to prevent stale closure bugs
-    }, [onScrollStateChange, isLoading, messages, roomId, channelId, fetchMessages, unreadCount, markAsRead, isDismissed, syncBackendRead]);
+    }, [isLoading, roomId, channelId, fetchMessages]);
 
-    // Auto-scroll to bottom when messages change (only if already at bottom)
+    // Auto-scroll to bottom when NEW messages arrive (only if user was already at bottom)
+    const prevMessagesLenRef = useRef(messages.length);
     useEffect(() => {
-      if (isAtBottom) {
+      if (messages.length > prevMessagesLenRef.current && isAtBottomRef.current) {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
       }
-    }, [messages.length, isAtBottom]);
+      prevMessagesLenRef.current = messages.length;
+    }, [messages.length]);
 
     return (
       <div
         ref={scrollContainerRef}
         className="flex-1 overflow-y-auto relative"
+        style={{ opacity: isPositioned ? 1 : 0 }}
         onScroll={handleScroll}
       >
         {/* Sticky unread banner at top of scroll area */}
@@ -399,12 +391,12 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
                     channelId={channelId}
                     memberAvatarMap={memberAvatarMap}
                     memberStatusMap={memberStatusMap}
-                    onMarkUnread={() => {
-                      if (channelId) {
-                        manuallyMarkedRef.current = true; // Prevent auto-dismiss
-                        setIsDismissed(false); // Re-show the unread banner
-                        useNotificationStore.getState().setUnreadFromMessage(channelId, i, messages.length);
-                        // Phase 23 Fix 3: Imperative scroll — wait for React to render the new divider
+                    onMarkUnread={async () => {
+                      if (channelId && roomId) {
+                        manuallyMarkedUnreadRef.current = true;
+                        setIsDismissed(false);
+                        await useChatStore.getState().markChannelAsUnread(roomId, channelId, msg.id);
+                        // Wait for React to render the new divider, then scroll to it
                         requestAnimationFrame(() => {
                           setTimeout(() => {
                             if (unreadDividerRef.current) {
@@ -419,14 +411,17 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
               );
             })}
           </div>
-
-          {/* Spacer to prevent chatbox from covering content */}
-          <div style={{ height: "var(--floating-message-input-offset)" }} className="shrink-0" />
-
-          {/* Scroll anchor */}
-          <div ref={bottomRef} />
         </div>
+
+        {/* Spacer to prevent chatbox from covering content — outside flex wrapper */}
+        <div style={{ height: "var(--floating-message-input-offset)" }} className="shrink-0" />
+
+        {/* Bottom detector for IntersectionObserver (1px invisible element) */}
+        <div ref={bottomDetectorRef} style={{ height: '1px' }} />
+
+        {/* Scroll anchor */}
+        <div ref={bottomRef} />
       </div>
     );
   }
-);
+));
