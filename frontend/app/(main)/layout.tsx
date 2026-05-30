@@ -8,6 +8,7 @@ import { useUIStore } from "@/stores/uiStore";
 import { AuthGuard } from "@/components/providers/AuthGuard";
 import { ConnectionStatusBanner } from "@/components/ui/ConnectionStatusBanner";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
+import { useSound } from "@/hooks/useSound";
 
 export default function MainLayout({
   children,
@@ -18,6 +19,7 @@ export default function MainLayout({
   const closeSettings = useUIStore((s) => s.closeSettings);
 
   useNetworkStatus();
+  useSound(); // Preloads all sound assets when entering the main app
 
   return (
     <AuthGuard>

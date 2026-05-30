@@ -16,6 +16,7 @@ import { clearRoomCache } from "@/stores/roomStore";
 import { useNetworkStore } from "@/stores/networkStore";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { useUIStore } from "@/stores/uiStore";
+import { soundEngine } from "@/lib/soundEngine";
 
 /**
  * WebSocket lifecycle hook.
@@ -183,6 +184,7 @@ function handleRoomMessage(msg: IMessage) {
       // Increment unread if user is NOT looking at this channel, OR if the window is blurred
       if (data.channelId !== activeChannelId || !isFocused) {
         useNotificationStore.getState().incrementUnread(data.channelId);
+        soundEngine?.play('message_notification');
       }
     }
 

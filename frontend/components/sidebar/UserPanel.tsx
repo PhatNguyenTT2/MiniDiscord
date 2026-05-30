@@ -6,6 +6,7 @@ import { Mic, MicOff, Headphones, HeadphoneOff, Settings } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { useUIStore } from "@/stores/uiStore";
 import { useAuthStore } from "@/stores/authStore";
+import { soundEngine } from "@/lib/soundEngine";
 import { cn } from "@/lib/utils";
 
 export function UserPanel() {
@@ -59,10 +60,12 @@ export function UserPanel() {
     | "dnd";
 
   function toggleMute() {
+    soundEngine?.play(isMuted ? 'unmute' : 'mute');
     setIsMuted((prev) => !prev);
   }
 
   function toggleDeafen() {
+    soundEngine?.play(isDeafened ? 'undeafen' : 'deafen');
     setIsDeafened((prev) => {
       const next = !prev;
       // Discord logic: deafen ON → force mute ON

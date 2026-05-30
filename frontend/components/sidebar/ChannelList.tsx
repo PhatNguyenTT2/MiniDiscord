@@ -10,6 +10,7 @@ import { useUIStore } from "@/stores/uiStore";
 import { useRoomStore } from "@/stores/roomStore";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { useAuthStore } from "@/stores/authStore";
+import { soundEngine } from "@/lib/soundEngine";
 import { CreateChannelModal } from "../server/CreateChannelModal";
 import type { Channel } from "@/types";
 
@@ -145,6 +146,10 @@ export function ChannelList() {
   const canCreateChannel = myRole === "OWNER" || myRole === "ADMIN";
 
   function handleChannelClick(channelId: string) {
+    const channel = roomChannels.find(c => c.id === channelId);
+    if (channel?.type === "VOICE") {
+      soundEngine?.play("voice_join");
+    }
     if (displayRoomId) {
       router.push(`/channels/${displayRoomId}/${channelId}`);
     } else {
