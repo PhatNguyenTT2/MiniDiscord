@@ -1,6 +1,7 @@
 package com.discordmini.chathistory.service;
 
 import com.discordmini.chathistory.client.MembershipClient;
+import com.discordmini.chathistory.model.document.Message;
 import com.discordmini.chathistory.model.document.ReadReceipt;
 import com.discordmini.chathistory.model.dto.ReadReceiptResponse;
 import com.discordmini.chathistory.repository.MessageRepository;
@@ -28,13 +29,15 @@ public class ReadReceiptService {
         membershipClient.verifyMembership(userId, roomId);
 
         // Atomic update: only update if new ID is greater
-        long modified = readReceiptRepository.updateLastReadIfNewer(userId, channelId, lastReadMessageId, LocalDateTime.now());
+        long modified = readReceiptRepository.updateLastReadIfNewer(userId, channelId, lastReadMessageId,
+                LocalDateTime.now());
 
         if (modified == 0) {
             // Either no receipt exists or the existing one has a newer ID
             readReceiptRepository.findByUserIdAndChannelId(userId, channelId)
                     .ifPresentOrElse(
-                            existing -> { /* Already has a newer read — do nothing */ },
+                            existing -> {
+                                /* Already has a newer read — do nothing */ },
                             () -> {
                                 // First time reading this channel
                                 ReadReceipt receipt = ReadReceipt.builder()
@@ -45,8 +48,7 @@ public class ReadReceiptService {
                                         .lastReadAt(LocalDateTime.now())
                                         .build();
                                 readReceiptRepository.save(receipt);
-                            }
-                    );
+                            });
         }
     }
 
@@ -63,7 +65,23 @@ public class ReadReceiptService {
         query.addCriteria(Criteria.where("isDeleted").is(false));
 
         if (lastReadId != null) {
-            query.addCriteria(Criteria.where("_id").gt(new org.bson.types.ObjectId(lastReadId)));
+            // lastReadMessageId may be an ObjectId string OR a UUID (from WebSocket
+            // events).
+            // Try ObjectId first; if invalid, look up the actual message by its UUID
+            // messageId field.
+            org.bson.types.ObjectId cursorId = tryParseObjectId(lastReadId);
+            if (cursorId == null) {
+                // Fallback: look up the message document by its UUID messageId field
+                Query lookup = new Query(Criteria.where("messageId").is(lastReadId));
+                lookup.fields().include("_id");
+                var doc = mongoTemplate.findOne(lookup, Message.class);
+                if (doc != null) {
+                    cursorId = new org.bson.types.ObjectId(doc.getId());
+                }
+            }
+            if (cursorId != null) {
+                query.addCriteria(Criteria.where("_id").gt(cursorId));
+            }
         }
 
         // Bounded count: cap at 100 to avoid full collection scan
@@ -77,6 +95,16 @@ public class ReadReceiptService {
                 .count(Math.min(count, UNREAD_CAP - 1))
                 .displayCount(displayCount)
                 .hasMore(hasMore)
+                .lastReadMessageId(lastReadId)
                 .build();
+    }
+
+    /** Try to parse a string as MongoDB ObjectId. Returns null if invalid. */
+    private org.bson.types.ObjectId tryParseObjectId(String id) {
+        try {
+            return new org.bson.types.ObjectId(id);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 }

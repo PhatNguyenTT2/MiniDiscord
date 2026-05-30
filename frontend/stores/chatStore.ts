@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { Message, ReplyReference } from "@/types";
 import { useAuthStore } from "./authStore";
+import { useNotificationStore } from "./notificationStore";
 import { api } from "@/lib/api";
 
 // Local state has been removed for DM messages since it's now handled by the backend channels flow
@@ -15,6 +16,7 @@ export interface ReadReceipt {
   count: number;
   displayCount: string;
   hasMore: boolean;
+  lastReadMessageId?: string;
 }
 
 interface ChatState {
@@ -50,6 +52,7 @@ interface ChatState {
   isLoading: boolean;
   error: string | null;
   fetchMessages: (roomId: string, channelId: string, before?: string, limit?: number) => Promise<void>;
+  fetchMessagesAround: (roomId: string, channelId: string, aroundId: string, limit?: number) => Promise<void>;
 
   /* WebSocket: receive message from /topic/room.{roomId} */
   receiveMessage: (channelId: string, message: Message) => void;
@@ -76,6 +79,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   fetchUnreadCount: async (roomId, channelId) => {
     try {
       const res = await api.get(`/messages/rooms/${roomId}/channels/${channelId}/unread`);
+      // Hydrate notificationStore from backend watermark
+      useNotificationStore.getState().setUnreadCount(channelId, res.data.data.count);
       set((state) => ({
         unreadCounts: {
           ...state.unreadCounts,
@@ -95,8 +100,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         delete nextUnread[channelId];
         return { unreadCounts: nextUnread };
       });
-      // Sync notification store
-      const { useNotificationStore } = await import("./notificationStore");
       useNotificationStore.getState().markAsRead(channelId);
     } catch (err) {
       console.error("Failed to mark channel as read:", err);
@@ -137,6 +140,37 @@ export const useChatStore = create<ChatState>((set, get) => ({
           },
           isLoading: false,
         };
+      });
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+    }
+  },
+
+  fetchMessagesAround: async (roomId, channelId, aroundId, limit = 25) => {
+    try {
+      set({ isLoading: true, error: null });
+      const { api } = await import("@/lib/api");
+
+      // Parallel fetch using Promise.all as per design review
+      const [beforeRes, afterRes] = await Promise.all([
+        api.get<{ message: string; data: Message[] }>(
+          `/messages/rooms/${roomId}/channels/${channelId}`,
+          { params: { before: aroundId, limit } }
+        ),
+        api.get<{ message: string; data: Message[] }>(
+          `/messages/rooms/${roomId}/channels/${channelId}`,
+          { params: { after: aroundId, limit } }
+        )
+      ]);
+
+      set({
+        channelMessages: {
+          ...get().channelMessages,
+          // beforeRes includes the cursor message (thanks to $lte in backend)
+          // afterRes includes messages forward in time
+          [channelId]: [...beforeRes.data.data, ...afterRes.data.data]
+        },
+        isLoading: false
       });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });

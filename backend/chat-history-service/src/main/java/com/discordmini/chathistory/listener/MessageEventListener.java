@@ -32,6 +32,7 @@ public class MessageEventListener {
         }
 
         Message message = Message.builder()
+                .id(event.getId())
                 .messageId(event.getMessageId())
                 .roomId(event.getRoomId())
                 .channelId(event.getChannelId())

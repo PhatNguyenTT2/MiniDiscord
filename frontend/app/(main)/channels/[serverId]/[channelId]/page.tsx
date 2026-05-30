@@ -52,19 +52,6 @@ export default function ChannelPage() {
   const markChannelAsRead = useChatStore((s) => s.markChannelAsRead);
   const token = useAuthStore((s) => s.token);
 
-  const lastMarkedMsgRef = useRef<string | null>(null);
-
-  // Auto mask as read when viewing this channel
-  useEffect(() => {
-    if (messages.length > 0) {
-      const lastMessage = messages[messages.length - 1];
-      if (lastMarkedMsgRef.current !== lastMessage.id) {
-        lastMarkedMsgRef.current = lastMessage.id;
-        markChannelAsRead(roomId, channelId, lastMessage.id);
-      }
-    }
-  }, [messages, roomId, channelId, markChannelAsRead]);
-
   const handleSend = useCallback(
     (content: string, attachment?: { fileUrl: string; fileName: string; fileSize: number } | null) => {
       if (!token) return;
@@ -166,6 +153,7 @@ export default function ChannelPage() {
           channelName={channelName}
           channelId={channelId}
           roomId={roomId}
+          onMarkAsReadBackend={markChannelAsRead}
           onScrollStateChange={handleScrollStateChange}
         />
 

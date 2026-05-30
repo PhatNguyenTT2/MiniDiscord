@@ -175,7 +175,7 @@ export function MessageItem({
             size="lg"
           />
         ) : (
-          <span className="hidden group-hover:block text-[11px] text-muted-foreground leading-[22px] text-right w-full">
+          <span className="hidden group-hover:block text-[11px] text-muted-foreground leading-[22px] text-right w-full whitespace-nowrap">
             {formatTime(message.createdAt)}
           </span>
         )}

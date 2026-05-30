@@ -18,6 +18,8 @@ interface MessageListProps {
   roomId?: string;
   /** Called when scroll-at-bottom state changes */
   onScrollStateChange?: (isAtBottom: boolean) => void;
+  /** Called to sync read status to backend */
+  onMarkAsReadBackend?: (roomId: string, channelId: string, lastMessageId: string) => void;
   memberAvatarMap?: Record<string, string | null>;
   memberStatusMap?: Record<string, string>;
   welcomeHeader?: React.ReactNode;
@@ -47,6 +49,7 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
     channelId,
     roomId,
     onScrollStateChange,
+    onMarkAsReadBackend,
     memberAvatarMap,
     memberStatusMap,
     welcomeHeader
@@ -58,7 +61,11 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
     const getUnreadCount = useNotificationStore((s) => s.getUnreadCount);
     const markAsRead = useNotificationStore((s) => s.markAsRead);
     const fetchMessages = useChatStore((s) => s.fetchMessages);
+    const fetchUnreadCount = useChatStore((s) => s.fetchUnreadCount);
     const isLoading = useChatStore((s) => s.isLoading);
+
+    // Gate initial scroll behind backend unread fetch
+    const [isUnreadReady, setIsUnreadReady] = useState(false);
 
     // Determine unread state for this channel
     const unreadCount = channelId ? getUnreadCount(channelId) : 0;
@@ -80,35 +87,107 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
     // Track if we have performed initial scroll behavior for a channel entry
     const hasInitialScrolledRef = useRef<string | null>(null);
 
-    // Track scroll position
-    const [isAtBottom, setIsAtBottom] = useState(true);
+    // Phase 23 Fix 2: Flag to block handleScroll effects during initial scroll animations
+    const initialScrollCompleteRef = useRef(false);
+
+    // Track whether user actually reached bottom during this visit
+    const hasReachedBottomRef = useRef(false);
+
+    // Refs to avoid stale closures in cleanup without adding deps
+    const roomIdRef = useRef(roomId);
+    roomIdRef.current = roomId;
+    const channelIdRef = useRef(channelId);
+    channelIdRef.current = channelId;
+
+    const scrollDismissTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Track scroll position - init to false to prevent initial auto-scroll misfire
+    const [isAtBottom, setIsAtBottom] = useState(false);
+
+    // Phase 24 Fix: Debounced backend sync
+    const debouncedTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const latestMessageIdRef = useRef<string | null>(null);
+
+    useEffect(() => {
+      if (messages.length > 0) {
+        latestMessageIdRef.current = messages[messages.length - 1].id;
+      }
+    }, [messages]);
+
+    const syncBackendRead = useCallback((chanId: string, bypassDebounce = false) => {
+      if (!roomId || !onMarkAsReadBackend || !latestMessageIdRef.current) return;
+
+      if (debouncedTimerRef.current) {
+        clearTimeout(debouncedTimerRef.current);
+      }
+
+      if (bypassDebounce) {
+        onMarkAsReadBackend(roomId, chanId, latestMessageIdRef.current);
+      } else {
+        debouncedTimerRef.current = setTimeout(() => {
+          if (latestMessageIdRef.current) {
+            onMarkAsReadBackend(roomId, chanId, latestMessageIdRef.current);
+          }
+        }, 500);
+      }
+    }, [roomId, onMarkAsReadBackend]);
 
     // Reset dismissed state when channelId changes
+    // Fix 2: Only depend on channelId to prevent cleanup from firing on ref changes
     useEffect(() => {
       setIsDismissed(false);
-      setIsAtBottom(true);
+      setIsAtBottom(false);
+      setIsUnreadReady(false); // Block initial scroll until backend unread is fetched
       manuallyMarkedRef.current = false; // Reset manual flag on channel switch
       hasInitialScrolledRef.current = null; // Reset scroll state for new channel entry
+      initialScrollCompleteRef.current = false; // Reset scroll timing flag
+      hasReachedBottomRef.current = false; // Reset bottom guard
 
       // Track active channel for notification logic
       useUIStore.getState().setActiveChannelId(channelId || null);
 
       // Initial fetch when switching to a channel
-      if (roomId && channelId) {
-        fetchMessages(roomId, channelId);
+      const rid = roomIdRef.current;
+      if (rid && channelId) {
+        const store = useChatStore.getState();
+        // Pre-fetch watermark first
+        store.fetchUnreadCount(rid, channelId).then(() => {
+          const state = useChatStore.getState();
+          const unreadInfo = state.unreadCounts[channelId];
+
+          // Got watermark? Load bidirectional context around the watermark!
+          if (unreadInfo && unreadInfo.count > 0 && unreadInfo.lastReadMessageId) {
+            return store.fetchMessagesAround(rid, channelId, unreadInfo.lastReadMessageId);
+          } else {
+            // No unread => just load latest 50
+            return store.fetchMessages(rid, channelId);
+          }
+        }).finally(() => {
+          setIsUnreadReady(true);
+        });
+      } else {
+        setIsUnreadReady(true); // No fetch needed
       }
 
       return () => {
         useUIStore.getState().setActiveChannelId(null);
-        if (channelId && !manuallyMarkedRef.current) {
-          markAsRead(channelId);
+        // Only fire on true unmount/channel switch — refs ensure fresh values
+        const cid = channelIdRef.current;
+        // Guard: Only mark read if user reached the bottom!
+        if (cid && !manuallyMarkedRef.current && hasReachedBottomRef.current) {
+          useNotificationStore.getState().markAsRead(cid);
+          const rId = roomIdRef.current;
+          if (rId && latestMessageIdRef.current) {
+            onMarkAsReadBackend?.(rId, cid, latestMessageIdRef.current);
+          }
         }
       }
-    }, [roomId, channelId, fetchMessages, markAsRead]);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [channelId]);
 
     // Resilient Auto-Scroll on initial mount or channel switch
     useEffect(() => {
-      if (!roomId || !channelId || isLoading || messages.length === 0) return;
+      if (!roomId || !channelId || isLoading || messages.length === 0 || !isUnreadReady) return;
 
       if (hasInitialScrolledRef.current !== channelId) {
         hasInitialScrolledRef.current = channelId;
@@ -123,6 +202,8 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
                   setIsAtBottom(false);
                   onScrollStateChange?.(false);
                 }
+                // Delay flag so trailing scroll events from scrollIntoView don't auto-dismiss
+                setTimeout(() => { initialScrollCompleteRef.current = true; }, 500);
               }, 100);
             });
           } else if (firstUnreadIndex >= 0) {
@@ -131,43 +212,38 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
               setTimeout(() => {
                 if (unreadDividerRef.current) {
                   unreadDividerRef.current.scrollIntoView({
-                    behavior: "auto", // "auto" is faster and completely reliable on initial mount load
+                    // User feedback C: Instant Smart Anchor centering
+                    behavior: "instant",
                     block: "center",
                   });
                   setIsAtBottom(false);
                   onScrollStateChange?.(false);
                 } else {
-                  bottomRef.current?.scrollIntoView({ behavior: "auto" });
+                  bottomRef.current?.scrollIntoView({ behavior: "instant" });
                   setIsAtBottom(true);
                   onScrollStateChange?.(true);
+                  hasReachedBottomRef.current = true;
                 }
+                // Delay flag so trailing scroll events from scrollIntoView don't auto-dismiss
+                setTimeout(() => { initialScrollCompleteRef.current = true; }, 500);
               }, 100);
             });
           }
         } else {
           // Standard scroll to bottom on entry if no unread messages
           requestAnimationFrame(() => {
-            bottomRef.current?.scrollIntoView({ behavior: "auto" });
-            setIsAtBottom(true);
-            onScrollStateChange?.(true);
+            setTimeout(() => {
+              bottomRef.current?.scrollIntoView({ behavior: "instant" });
+              setIsAtBottom(true);
+              onScrollStateChange?.(true);
+              hasReachedBottomRef.current = true;
+              // Delay flag so trailing scroll events don't interfere
+              setTimeout(() => { initialScrollCompleteRef.current = true; }, 300);
+            }, 50);
           });
         }
       }
-    }, [roomId, channelId, isLoading, messages.length, unreadCount, firstUnreadIndex, onScrollStateChange]);
-
-    useEffect(() => {
-      if (!channelId || unreadCount <= 0 || isDismissed) return;
-      const el = scrollContainerRef.current;
-      if (!el) return;
-
-      // If content fits completely inside the viewport, user has seen everything
-      requestAnimationFrame(() => {
-        if (el.scrollHeight <= el.clientHeight && !manuallyMarkedRef.current) {
-          markAsRead(channelId);
-          setIsDismissed(true);
-        }
-      });
-    }, [channelId, messages.length, unreadCount, isDismissed, markAsRead]);
+    }, [roomId, channelId, isLoading, messages.length, unreadCount, firstUnreadIndex, onScrollStateChange, isUnreadReady]);
 
     // Scroll to first unread divider
     const scrollToFirstUnread = useCallback(() => {
@@ -207,13 +283,28 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
       setIsAtBottom(atBottom);
       onScrollStateChange?.(atBottom);
 
-      if (atBottom && unreadCount > 0 && !manuallyMarkedRef.current) {
-        markAsRead(channelId!);
-        setIsDismissed(true);
+      if (atBottom && initialScrollCompleteRef.current) {
+        hasReachedBottomRef.current = true;
+        // Debounced dismiss — user must stay at bottom 500ms
+        if (unreadCount > 0 && !manuallyMarkedRef.current && document.hasFocus()) {
+          if (scrollDismissTimerRef.current) clearTimeout(scrollDismissTimerRef.current);
+          scrollDismissTimerRef.current = setTimeout(() => {
+            markAsRead(channelId!);
+            setIsDismissed(true);
+            syncBackendRead(channelId!);
+          }, 500);
+        }
+      } else {
+        // Cancel pending auto-dismiss if user scrolled away
+        if (scrollDismissTimerRef.current) {
+          clearTimeout(scrollDismissTimerRef.current);
+          scrollDismissTimerRef.current = null;
+        }
       }
 
       // Top detection (Infinite scroll up)
-      if (el.scrollTop < 100 && !isLoading && messages.length > 0 && roomId && channelId) {
+      // Phase 23 Fix 4: Gate infinite scroll up behind initialScrollCompleteRef to prevent initial bounce
+      if (el.scrollTop < 100 && !isLoading && messages.length > 0 && roomId && channelId && initialScrollCompleteRef.current) {
         const oldestMessageId = messages[0].id;
 
         // Save current scroll height to prevent jump
@@ -229,7 +320,8 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
           });
         });
       }
-    }, [onScrollStateChange, isLoading, messages, roomId, channelId, fetchMessages]);
+      // Phase 23 Fix 1: Include unreadCount, markAsRead, isDismissed to prevent stale closure bugs
+    }, [onScrollStateChange, isLoading, messages, roomId, channelId, fetchMessages, unreadCount, markAsRead, isDismissed, syncBackendRead]);
 
     // Auto-scroll to bottom when messages change (only if already at bottom)
     useEffect(() => {
@@ -255,10 +347,7 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
         )}
 
         {/* Reserve bottom space so the floating composer never covers the final messages. */}
-        <div
-          className="flex min-h-full flex-col justify-end"
-          style={{ paddingBottom: "var(--floating-message-input-offset)" }}
-        >
+        <div className="flex min-h-full flex-col justify-end">
           {/* Welcome header */}
           {welcomeHeader || (
             <div className="px-4 pt-16 pb-4">
@@ -315,6 +404,14 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
                         manuallyMarkedRef.current = true; // Prevent auto-dismiss
                         setIsDismissed(false); // Re-show the unread banner
                         useNotificationStore.getState().setUnreadFromMessage(channelId, i, messages.length);
+                        // Phase 23 Fix 3: Imperative scroll — wait for React to render the new divider
+                        requestAnimationFrame(() => {
+                          setTimeout(() => {
+                            if (unreadDividerRef.current) {
+                              unreadDividerRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+                            }
+                          }, 100);
+                        });
                       }
                     }}
                   />
@@ -322,6 +419,9 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(
               );
             })}
           </div>
+
+          {/* Spacer to prevent chatbox from covering content */}
+          <div style={{ height: "var(--floating-message-input-offset)" }} className="shrink-0" />
 
           {/* Scroll anchor */}
           <div ref={bottomRef} />

@@ -48,7 +48,7 @@ class MessageServiceTest {
                 any(PageRequest.class)))
                 .thenReturn(List.of(message));
 
-        List<MessageResponse> result = messageService.getMessages(userId, roomId, channelId, null, 50);
+        List<MessageResponse> result = messageService.getMessages(userId, roomId, channelId, null, null, 50);
 
         assertEquals(1, result.size());
         assertEquals("test", result.get(0).getContent());
@@ -67,7 +67,7 @@ class MessageServiceTest {
                 .thenReturn(List.of());
 
         // limit > 100 should be clamped to 100
-        messageService.getMessages(userId, roomId, channelId, null, 999);
+        messageService.getMessages(userId, roomId, channelId, null, null, 999);
 
         verify(messageRepository).findByRoomIdAndChannelIdFilteredUser(
                 eq(roomId), eq(channelId), eq(userId), argThat(pageable -> pageable.getPageSize() == 100));

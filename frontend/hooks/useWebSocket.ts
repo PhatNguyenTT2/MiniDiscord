@@ -152,7 +152,7 @@ function handleRoomMessage(msg: IMessage) {
     }
 
     useChatStore.getState().receiveMessage(data.channelId, {
-      id: data.messageId,
+      id: data.id || data.messageId,
       messageId: data.messageId,
       roomId: data.roomId,
       channelId: data.channelId,

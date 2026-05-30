@@ -11,6 +11,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ChatMessage {
+    private String id; // Pre-generated ObjectId
     private String messageId; // Optional, server can generate
     private String roomId;
     private String channelId;
@@ -22,5 +23,6 @@ public class ChatMessage {
     private String fileUrl;
     private String fileName;
     private Long fileSize;
+    private String createdAt;
     private ReplyInfo replyTo;
 }

@@ -16,6 +16,7 @@ import org.springframework.stereotype.Controller;
 import java.security.Principal;
 import java.time.Instant;
 import java.util.UUID;
+import org.bson.types.ObjectId;
 
 @Slf4j
 @Controller
@@ -44,6 +45,13 @@ public class ChatWebSocketController {
         // 3. Populate server-controlled fields
         message.setMessageId(UUID.randomUUID().toString());
         message.setSenderId(userId);
+
+        // Pre-generate ObjectId for consistent ID across save + broadcast
+        String objectId = new ObjectId().toHexString();
+        Instant now = Instant.now();
+        message.setId(objectId);
+        message.setCreatedAt(now.toString());
+
         // Note: For a production app, senderName and senderAvatar should be fetched
         // from the User service or a local cache.
         // For now, we assume we either have them or they are fetched.
@@ -54,6 +62,7 @@ public class ChatWebSocketController {
 
         // 4. Build Event for History Service
         MessageEvent event = MessageEvent.builder()
+                .id(objectId)
                 .messageId(message.getMessageId())
                 .roomId(message.getRoomId())
                 .channelId(message.getChannelId())
@@ -66,7 +75,7 @@ public class ChatWebSocketController {
                 .fileName(message.getFileName())
                 .fileSize(message.getFileSize())
                 .replyTo(message.getReplyTo())
-                .createdAt(Instant.now())
+                .createdAt(now)
                 .build();
 
         // 5. Non-blocking Publish

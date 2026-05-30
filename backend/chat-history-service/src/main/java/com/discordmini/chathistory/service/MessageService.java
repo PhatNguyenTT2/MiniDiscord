@@ -35,19 +35,29 @@ public class MessageService {
     private final MongoTemplate mongoTemplate;
     private static final int MAX_LIMIT = 100;
 
-    public List<MessageResponse> getMessages(String userId, String roomId, String channelId, String before, int limit) {
+    public List<MessageResponse> getMessages(String userId, String roomId, String channelId, String before,
+            String after, int limit) {
         membershipClient.verifyMembership(userId, roomId);
 
         int clampedLimit = Math.min(Math.max(limit, 1), MAX_LIMIT);
-        PageRequest pageable = PageRequest.of(0, clampedLimit, Sort.by(Sort.Direction.DESC, "_id"));
 
         List<Message> messages;
+        if (after != null && !after.isBlank()) {
+            // Forward cursor pagination: load chronological messages after the cursor
+            PageRequest ascPageable = PageRequest.of(0, clampedLimit, Sort.by(Sort.Direction.ASC, "_id"));
+            messages = messageRepository.findByRoomIdAndChannelIdFilteredUserAfterCursor(
+                    roomId, channelId, userId, after, ascPageable);
+            // Already ASC, just map and return
+            return messages.stream().map(MessageResponse::from).collect(Collectors.toList());
+        }
+
+        PageRequest descPageable = PageRequest.of(0, clampedLimit, Sort.by(Sort.Direction.DESC, "_id"));
         if (before != null && !before.isBlank()) {
             messages = messageRepository.findByRoomIdAndChannelIdFilteredUserBeforeCursor(
-                    roomId, channelId, userId, before, pageable);
+                    roomId, channelId, userId, before, descPageable);
         } else {
             messages = messageRepository.findByRoomIdAndChannelIdFilteredUser(
-                    roomId, channelId, userId, pageable);
+                    roomId, channelId, userId, descPageable);
         }
 
         // DESC query for cursor pagination, then reverse for chronological display

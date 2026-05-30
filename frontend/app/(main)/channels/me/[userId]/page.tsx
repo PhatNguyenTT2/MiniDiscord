@@ -129,32 +129,9 @@ export default function DmChatPage() {
   const setReplyingTo = useChatStore((s) => s.setReplyingTo);
   const clearReplyingTo = useChatStore((s) => s.clearReplyingTo);
   const markChannelAsRead = useChatStore((s) => s.markChannelAsRead);
-  const fetchMessages = useChatStore((s) => s.fetchMessages);
   const isLoadingMessages = useChatStore((s) => s.isLoading);
 
   const token = useAuthStore((s) => s.token);
-
-  const lastMarkedMsgRef = useRef<string | null>(null);
-
-  // Fetch message history when room/channel are available
-  useEffect(() => {
-    if (roomId && channelId) {
-      fetchMessages(roomId, channelId).catch(err => {
-        console.error("Failed to fetch messages:", err);
-      });
-    }
-  }, [roomId, channelId, fetchMessages]);
-
-  // Auto mark as read when viewing this channel
-  useEffect(() => {
-    if (messages.length > 0 && roomId && channelId) {
-      const lastMessage = messages[messages.length - 1];
-      if (lastMarkedMsgRef.current !== lastMessage.id) {
-        lastMarkedMsgRef.current = lastMessage.id;
-        markChannelAsRead(roomId, channelId, lastMessage.id);
-      }
-    }
-  }, [messages, roomId, channelId, markChannelAsRead]);
 
   // Dynamically auto-hide DM User Panel when viewport drops below 1024px (minimized/narrow screens)
   useEffect(() => {
@@ -199,7 +176,8 @@ export default function DmChatPage() {
                 try {
                   const data = JSON.parse(msg.body);
                   useChatStore.getState().receiveMessage(data.channelId, {
-                    id: data.messageId,
+                    id: data.id || data.messageId,
+                    messageId: data.messageId,
                     roomId: data.roomId,
                     channelId: data.channelId,
                     senderId: data.senderId,
@@ -291,6 +269,16 @@ export default function DmChatPage() {
         destination: "/app/chat.send",
         body: JSON.stringify(payload),
       });
+
+      // Discord behavior: sending a message implicitly marks channel as read
+      if (activeChannelId) {
+        useNotificationStore.getState().markAsRead(activeChannelId);
+      }
+      // Backend sync — use last REAL message ID (not optimistic), fallback handled by cleanup
+      const lastRealId = useChatStore.getState().getChannelMessages(activeChannelId).slice(-1)[0]?.id;
+      if (activeRoomId && activeChannelId && lastRealId && !lastRealId.startsWith('optimistic-')) {
+        useChatStore.getState().markChannelAsRead(activeRoomId, activeChannelId, lastRealId);
+      }
 
       clearReplyingTo();
     },
@@ -384,6 +372,7 @@ export default function DmChatPage() {
             channelName={friendName}
             channelId={channelId}
             roomId={roomId}
+            onMarkAsReadBackend={markChannelAsRead}
             memberAvatarMap={memberAvatarMap}
             memberStatusMap={memberStatusMap}
             onScrollStateChange={handleScrollStateChange}

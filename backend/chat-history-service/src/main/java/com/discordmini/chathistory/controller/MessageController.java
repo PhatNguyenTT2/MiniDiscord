@@ -26,9 +26,10 @@ public class MessageController {
             @PathVariable String roomId,
             @PathVariable String channelId,
             @RequestParam(required = false) String before,
+            @RequestParam(required = false) String after,
             @RequestParam(defaultValue = "50") int limit) {
 
-        List<MessageResponse> messages = messageService.getMessages(userId, roomId, channelId, before, limit);
+        List<MessageResponse> messages = messageService.getMessages(userId, roomId, channelId, before, after, limit);
         return ResponseEntity.ok(ApiResponse.ok(messages));
     }
 

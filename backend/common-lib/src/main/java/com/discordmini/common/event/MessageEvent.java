@@ -14,6 +14,7 @@ import java.time.Instant;
 @AllArgsConstructor
 public class MessageEvent implements Serializable {
 
+    private String id;
     private String messageId;
     private String roomId;
     private String channelId;
