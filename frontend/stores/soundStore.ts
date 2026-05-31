@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { type SoundName } from '@/lib/soundEngine';
 
 export interface SoundSettings {
   masterVolume: number;    // 0-100
@@ -7,6 +8,7 @@ export interface SoundSettings {
   messageSound: boolean;
   voiceSound: boolean;
   callSound: boolean;
+  customSounds: Partial<Record<SoundName, string>>;
 }
 
 interface SoundStore extends SoundSettings {
@@ -15,6 +17,8 @@ interface SoundStore extends SoundSettings {
   toggleMessageSound: (enabled?: boolean) => void;
   toggleVoiceSound: (enabled?: boolean) => void;
   toggleCallSound: (enabled?: boolean) => void;
+  setCustomSound: (name: SoundName, url: string) => void;
+  clearCustomSound: (name: SoundName) => void;
 }
 
 export const useSoundStore = create<SoundStore>()(
@@ -25,12 +29,21 @@ export const useSoundStore = create<SoundStore>()(
       messageSound: true,
       voiceSound: true,
       callSound: true,
+      customSounds: {},
 
       setMasterVolume: (volume) => set({ masterVolume: volume }),
       toggleSoundEnabled: (enabled) => set((s) => ({ soundEnabled: enabled ?? !s.soundEnabled })),
       toggleMessageSound: (enabled) => set((s) => ({ messageSound: enabled ?? !s.messageSound })),
       toggleVoiceSound: (enabled) => set((s) => ({ voiceSound: enabled ?? !s.voiceSound })),
       toggleCallSound: (enabled) => set((s) => ({ callSound: enabled ?? !s.callSound })),
+      setCustomSound: (name, url) => set((s) => ({
+        customSounds: { ...s.customSounds, [name]: url }
+      })),
+      clearCustomSound: (name) => set((s) => {
+        const next = { ...s.customSounds };
+        delete next[name];
+        return { customSounds: next };
+      }),
     }),
     {
       name: 'minidiscord-sound-settings',

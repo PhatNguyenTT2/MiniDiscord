@@ -5,14 +5,15 @@ import com.discordmini.file.model.dto.FileResponse;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
+import io.minio.GetPresignedObjectUrlArgs;
+import io.minio.http.Method;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.tika.Tika;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.InputStream;
+import java.util.concurrent.TimeUnit;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.UUID;
@@ -30,9 +31,11 @@ public class StorageService {
     @Value("${b2.endpoint}")
     private String endpoint;
 
+    @Value("${b2.presign-expiry:3600}")
+    private int presignExpiry;
+
     private static final List<String> ALLOWED_MIME_PREFIXES = List.of(
-            "image/", "audio/", "video/"
-    );
+            "image/", "audio/", "video/");
 
     private static final List<String> ALLOWED_MIME_EXACT = List.of(
             "application/pdf",
@@ -46,21 +49,20 @@ public class StorageService {
     );
 
     private static final List<String> BLOCKED_EXTENSIONS = List.of(
-            ".exe", ".bat", ".sh", ".ps1", ".cmd", ".msi", ".dll", ".vbs"
-    );
+            ".exe", ".bat", ".sh", ".ps1", ".cmd", ".msi", ".dll", ".vbs");
 
-    public FileResponse uploadFile(String userId, MultipartFile file) {
-        if (file.isEmpty()) {
-            throw new FileValidationException("File is empty");
-        }
-
-        String originalFilename = file.getOriginalFilename();
+    public com.discordmini.file.model.dto.PresignResponse generatePresignedUpload(String userId,
+            String originalFilename, String contentType, long fileSize, String purpose) {
         if (originalFilename == null || originalFilename.isBlank()) {
             throw new FileValidationException("File name is missing");
         }
-        
+
         if (originalFilename.length() > 255) {
             throw new FileValidationException("File name is too long");
+        }
+
+        if (fileSize > 25 * 1024 * 1024) { // 25MB max based on old config
+            throw new FileValidationException("File size exceeds 25MB limit");
         }
 
         // 1. Validate Extension
@@ -71,22 +73,27 @@ public class StorageService {
             }
         }
 
-        // 2. Magic Bytes MIME type validation via Apache Tika
-        String detectedMimeType;
-        try (InputStream is = file.getInputStream()) {
-            Tika tika = new Tika();
-            detectedMimeType = tika.detect(is);
-        } catch (Exception e) {
-            log.error("Error reading file for MIME detection", e);
-            throw new FileValidationException("Could not verify file content type");
+        // 2. Purpose-specific Validation
+        if ("sound".equals(purpose)) {
+            if (fileSize > 500 * 1024) { // 500KB max for sounds
+                throw new FileValidationException("Custom sound exceeds 500KB limit");
+            }
+            if (!contentType.equals("audio/mpeg") &&
+                    !contentType.equals("audio/wav") &&
+                    !contentType.equals("audio/ogg")) {
+                throw new FileValidationException("Custom sound must be .mp3, .ogg, or .wav");
+            }
         }
 
-        if (!isMimeTypeAllowed(detectedMimeType)) {
-            log.warn("Blocked file upload. Name: {}, Detected MIME: {}", originalFilename, detectedMimeType);
-            throw new FileValidationException("File type not allowed: " + detectedMimeType);
+        // We can't use Tika here since we don't have the file bytes yet.
+        // We rely on client's contentType and backend's extension + mime type
+        // blocklists.
+        if (!isMimeTypeAllowed(contentType)) {
+            log.warn("Blocked pre-sign request. Name: {}, Requested MIME: {}", originalFilename, contentType);
+            throw new FileValidationException("File type not allowed: " + contentType);
         }
 
-        // 3. Generate key and upload
+        // 3. Generate key
         String extension = getExtension(originalFilename);
         String fileKey = String.format("%s/%s/%s%s",
                 userId,
@@ -94,35 +101,51 @@ public class StorageService {
                 UUID.randomUUID().toString(),
                 extension);
 
-        try (InputStream is = file.getInputStream()) {
-            minioClient.putObject(
-                    PutObjectArgs.builder()
+        try {
+            // Generate PUT URL for browser to upload directly
+            String uploadUrl = minioClient.getPresignedObjectUrl(
+                    GetPresignedObjectUrlArgs.builder()
+                            .method(Method.PUT)
                             .bucket(bucketName)
                             .object(fileKey)
-                            .stream(is, file.getSize(), -1)
-                            .contentType(detectedMimeType)
-                            .build()
-            );
+                            .expiry(Math.min(presignExpiry, 604800), TimeUnit.SECONDS) // Max 7 days
+                            .build());
+
+            // Generate GET URL for immediate preview after upload
+            String viewUrl = minioClient.getPresignedObjectUrl(
+                    GetPresignedObjectUrlArgs.builder()
+                            .method(Method.GET)
+                            .bucket(bucketName)
+                            .object(fileKey)
+                            .expiry(Math.min(presignExpiry, 604800), TimeUnit.SECONDS)
+                            .build());
+
+            return com.discordmini.file.model.dto.PresignResponse.builder()
+                    .uploadUrl(uploadUrl)
+                    .viewUrl(viewUrl)
+                    .fileKey(fileKey)
+                    .expiresIn(presignExpiry)
+                    .build();
+
         } catch (Exception e) {
-            log.error("Failed to upload file to B2", e);
-            throw new RuntimeException("Failed to upload file");
+            log.error("Failed to generate pre-signed URL", e);
+            throw new RuntimeException("Failed to generate upload URL");
         }
+    }
 
-        // B2 S3-compatible public URL format
-        // https://{endpoint}/file/{bucket-name}/{key} OR direct path if endpoint is custom
-        // For standard B2 S3: https://s3.us-west-004.backblazeb2.com/{bucketName}/{fileKey}
-        // Actually, Backblaze B2 S3 public URL format is: https://{endpoint}/{bucketName}/{fileKey}
-        // But commonly with native B2 it's f00X.backblazeb2.com/file/...
-        // Let's use the S3 format since we are using MinIO (S3 SDK).
-        String fileUrl = String.format("%s/%s/%s", endpoint, bucketName, fileKey);
-
-        return FileResponse.builder()
-                .fileUrl(fileUrl)
-                .fileName(originalFilename)
-                .fileSize(file.getSize())
-                .contentType(detectedMimeType)
-                .fileKey(fileKey)
-                .build();
+    public String generatePresignedView(String fileKey) {
+        try {
+            return minioClient.getPresignedObjectUrl(
+                    GetPresignedObjectUrlArgs.builder()
+                            .method(Method.GET)
+                            .bucket(bucketName)
+                            .object(fileKey)
+                            .expiry(Math.min(presignExpiry, 604800), TimeUnit.SECONDS)
+                            .build());
+        } catch (Exception e) {
+            log.error("Failed to generate view URL for key: {}", fileKey, e);
+            throw new RuntimeException("Failed to generate view URL");
+        }
     }
 
     public void deleteFile(String userId, String fileKey) {
@@ -136,8 +159,7 @@ public class StorageService {
                     RemoveObjectArgs.builder()
                             .bucket(bucketName)
                             .object(fileKey)
-                            .build()
-            );
+                            .build());
             log.info("Deleted file: {}", fileKey);
         } catch (Exception e) {
             log.error("Failed to delete file from B2", e);
@@ -146,10 +168,13 @@ public class StorageService {
     }
 
     private boolean isMimeTypeAllowed(String mimeType) {
-        if (mimeType == null) return false;
-        if (ALLOWED_MIME_EXACT.contains(mimeType)) return true;
+        if (mimeType == null)
+            return false;
+        if (ALLOWED_MIME_EXACT.contains(mimeType))
+            return true;
         for (String prefix : ALLOWED_MIME_PREFIXES) {
-            if (mimeType.startsWith(prefix)) return true;
+            if (mimeType.startsWith(prefix))
+                return true;
         }
         return false;
     }

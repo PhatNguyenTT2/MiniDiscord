@@ -30,9 +30,9 @@ export const ALL_SOUNDS: SoundName[] = [
 class SoundEngine {
   private ctx: AudioContext | null = null;
   private buffers = new Map<SoundName, AudioBuffer>();
+  private loadingPromises = new Map<SoundName, Promise<void>>();
   private lastPlayedAt = new Map<SoundName, number>();
 
-  // Lazy init - SSR safe
   private getContext(): AudioContext {
     if (!this.ctx) {
       this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -40,23 +40,64 @@ class SoundEngine {
     return this.ctx;
   }
 
-  async preload(sounds: SoundName[]): Promise<void> {
-    if (typeof window === 'undefined') return;
-    const ctx = this.getContext();
-    await Promise.all(sounds.map(async (name) => {
+  /** Load a single sound on-demand (deduped, cached) */
+  private async loadSound(name: SoundName): Promise<AudioBuffer | null> {
+    if (this.buffers.has(name)) return this.buffers.get(name)!;
+
+    // Dedup: if already loading, wait for existing promise
+    if (this.loadingPromises.has(name)) {
+      await this.loadingPromises.get(name);
+      return this.buffers.get(name) ?? null;
+    }
+
+    const promise = (async () => {
+      const ctx = this.getContext();
+      const customUrl = useSoundStore.getState().customSounds?.[name];
+      const cdnBase = process.env.NEXT_PUBLIC_SOUND_CDN_URL || '/sounds';
+      const defaultUrl = `${cdnBase}/${name}.mp3`;
+
+      // 1. Try Custom Sound first
+      if (customUrl) {
+        try {
+          const res = await fetch(customUrl);
+          if (res.ok) {
+            const arrayBuffer = await res.arrayBuffer();
+            const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+            this.buffers.set(name, audioBuffer);
+            return;
+          }
+        } catch (err) {
+          console.warn(`[SoundEngine] Custom sound broken for ${name}, flushing key and falling back to default`, err);
+          useSoundStore.getState().clearCustomSound(name);
+        }
+      }
+
+      // 2. Fallback to Default URL
       try {
-        const res = await fetch(`/sounds/${name}.mp3`);
+        const res = await fetch(defaultUrl);
         if (!res.ok) return;
         const arrayBuffer = await res.arrayBuffer();
         const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
         this.buffers.set(name, audioBuffer);
       } catch (err) {
-        console.warn(`[SoundEngine] Failed to preload sound: ${name}`, err);
+        console.warn(`[SoundEngine] Failed to load default sound: ${name}`, err);
+      } finally {
+        this.loadingPromises.delete(name);
       }
-    }));
+    })();
+
+    this.loadingPromises.set(name, promise);
+    await promise;
+    return this.buffers.get(name) ?? null;
   }
 
-  play(name: SoundName): void {
+  /** Eagerly preload specific sounds (use sparingly) */
+  async preload(sounds: SoundName[]): Promise<void> {
+    if (typeof window === 'undefined') return;
+    await Promise.all(sounds.map((name) => this.loadSound(name)));
+  }
+
+  async play(name: SoundName): Promise<void> {
     if (typeof window === 'undefined') return;
 
     // 1. Check Zustand store settings
@@ -78,14 +119,14 @@ class SoundEngine {
     this.lastPlayedAt.set(name, now);
 
     const ctx = this.getContext();
-    const buffer = this.buffers.get(name);
+
+    // Lazy load: fetch on first play if not cached
+    const buffer = await this.loadSound(name);
     if (!buffer) return;
 
     try {
-      // Resume if suspended (browser autoplay policy)
       if (ctx.state === 'suspended') ctx.resume();
 
-      // Create new source node for polyphonic playback (audio overlap)
       const source = ctx.createBufferSource();
       source.buffer = buffer;
 

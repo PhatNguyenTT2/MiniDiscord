@@ -26,6 +26,12 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.ok(user));
     }
 
+    @GetMapping("/{userId}")
+    public ResponseEntity<ApiResponse<UserResponse>> getUserById(@PathVariable UUID userId) {
+        UserResponse user = userService.getUserById(userId);
+        return ResponseEntity.ok(ApiResponse.ok(user));
+    }
+
     @PutMapping("/me")
     public ResponseEntity<ApiResponse<UserResponse>> updateProfile(
             Authentication auth,

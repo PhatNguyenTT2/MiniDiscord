@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE)
+@Order(Ordered.HIGHEST_PRECEDENCE + 1) // Run AFTER CorsFilter
 public class SecurityHeaderFilter implements Filter {
 
     @Override
@@ -19,6 +19,12 @@ public class SecurityHeaderFilter implements Filter {
 
         HttpServletRequest request = (HttpServletRequest) req;
         HttpServletResponse response = (HttpServletResponse) res;
+
+        // Skip CORS preflight — CorsFilter handles these
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            chain.doFilter(req, res);
+            return;
+        }
 
         // Skip for actuator
         if (request.getRequestURI().startsWith("/actuator")) {

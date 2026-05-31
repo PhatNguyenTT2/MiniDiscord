@@ -16,12 +16,21 @@ public class SecurityHeaderFilter implements Filter {
     @Override
     public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain)
             throws IOException, ServletException {
-            
+
         HttpServletRequest request = (HttpServletRequest) req;
         HttpServletResponse response = (HttpServletResponse) res;
-        
+
+        String uri = request.getRequestURI();
+
         // Skip for actuator
-        if (request.getRequestURI().startsWith("/actuator")) {
+        if (uri.startsWith("/actuator")) {
+            chain.doFilter(req, res);
+            return;
+        }
+
+        // Skip for inter-service membership check (called by chat-history-service
+        // via lb://group-channel-service without X-User-Id header)
+        if (uri.matches("/api/rooms/[^/]+/members/[^/]+") && "GET".equalsIgnoreCase(request.getMethod())) {
             chain.doFilter(req, res);
             return;
         }

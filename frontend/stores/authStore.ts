@@ -16,6 +16,7 @@ interface AuthState {
   logout: () => void;
   setUser: (user: User) => void;
   setOwnStatus: (status: "ONLINE" | "OFFLINE") => void;
+  updateProfile: (updates: { username?: string; avatarUrl?: string }) => Promise<void>;
   hydrate: () => Promise<void>;
 }
 
@@ -80,6 +81,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setOwnStatus: (status) => set((state) => ({
     user: state.user ? { ...state.user, status } : null
   })),
+
+  updateProfile: async (updates) => {
+    try {
+      const res = await api.put<ApiResponse<User>>("/users/me", updates);
+      const updatedUser = res.data.data;
+      set({ user: updatedUser });
+      localStorage.setItem("user_data", JSON.stringify(updatedUser));
+    } catch (err: any) {
+      console.error("Failed to update profile", err);
+      throw err;
+    }
+  },
 
   hydrate: async () => {
     if (get().isHydrated) return;

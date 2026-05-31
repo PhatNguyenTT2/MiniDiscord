@@ -1,9 +1,9 @@
 package com.discordmini.file.service;
 
 import com.discordmini.file.exception.FileValidationException;
-import com.discordmini.file.model.dto.FileResponse;
+import com.discordmini.file.model.dto.PresignResponse;
 import io.minio.MinioClient;
-import io.minio.PutObjectArgs;
+import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.RemoveObjectArgs;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,10 +13,7 @@ import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
-
-import java.io.ByteArrayInputStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -31,68 +28,72 @@ class StorageServiceTest {
     @InjectMocks
     private StorageService storageService;
 
-    @Captor
-    private ArgumentCaptor<PutObjectArgs> putObjectArgsCaptor;
-
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(storageService, "bucketName", "test-bucket");
         ReflectionTestUtils.setField(storageService, "endpoint", "http://localhost:9000");
+        ReflectionTestUtils.setField(storageService, "presignExpiry", 3600);
     }
 
-    // A valid PNG header to trick Tika into detecting image/png
-    private final byte[] validPngData = new byte[] {
-            (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0, 0, 0, 0, 0
-    };
-
     @Test
-    void uploadFile_ValidImage_ReturnsFileUrl() throws Exception {
-        MockMultipartFile file = new MockMultipartFile(
-                "file", "test.png", "image/png", validPngData);
+    void generatePresignedUpload_ValidImage_ReturnsUrls() throws Exception {
+        when(minioClient.getPresignedObjectUrl(any(GetPresignedObjectUrlArgs.class)))
+                .thenReturn("http://presigned.url");
 
-        FileResponse response = storageService.uploadFile("user1", file);
+        PresignResponse response = storageService.generatePresignedUpload("user1", "test.png", "image/png", 1024L,
+                null);
 
         assertNotNull(response);
-        assertTrue(response.getFileUrl().startsWith("http://localhost:9000/test-bucket/user1/"));
-        assertTrue(response.getFileUrl().endsWith(".png"));
-        assertEquals("test.png", response.getFileName());
-        assertEquals("image/png", response.getContentType());
-        
-        verify(minioClient).putObject(putObjectArgsCaptor.capture());
-        PutObjectArgs args = putObjectArgsCaptor.getValue();
-        assertEquals("test-bucket", args.bucket());
-        assertEquals("image/png", args.contentType());
+        assertEquals("http://presigned.url", response.getUploadUrl());
+        assertEquals("http://presigned.url", response.getViewUrl());
+        assertTrue(response.getFileKey().startsWith("user1/"));
+        assertTrue(response.getFileKey().endsWith(".png"));
+
+        // Should be called twice (PUT and GET)
+        verify(minioClient, times(2)).getPresignedObjectUrl(any(GetPresignedObjectUrlArgs.class));
     }
 
     @Test
-    void uploadFile_EmptyFile_ThrowsException() {
-        MockMultipartFile file = new MockMultipartFile("file", "test.png", "image/png", new byte[0]);
-
-        assertThrows(FileValidationException.class, () -> storageService.uploadFile("user1", file));
-        
-        try {
-            verify(minioClient, never()).putObject(any());
-        } catch (Exception ignored) {}
+    void generatePresignedUpload_MissingFileName_ThrowsException() {
+        assertThrows(FileValidationException.class,
+                () -> storageService.generatePresignedUpload("user1", "", "image/png", 1024L, null));
     }
 
     @Test
-    void uploadFile_BlockedExtension_ThrowsException() {
-        MockMultipartFile file = new MockMultipartFile("file", "test.exe", "application/x-msdownload", "some random data".getBytes());
-
-        assertThrows(FileValidationException.class, () -> storageService.uploadFile("user1", file));
+    void generatePresignedUpload_BlockedExtension_ThrowsException() {
+        assertThrows(FileValidationException.class,
+                () -> storageService.generatePresignedUpload("user1", "test.exe", "application/octet-stream", 1024L,
+                        null));
     }
 
     @Test
-    void uploadFile_MimeSpoofing_ThrowsException() {
-        // Filename says .png, but content is just text (Tika will detect text/plain)
-        MockMultipartFile file = new MockMultipartFile("file", "fake.png", "image/png", "Hello World!".getBytes());
+    void generatePresignedUpload_SizeLimitExceeded_ThrowsException() {
+        assertThrows(FileValidationException.class,
+                () -> storageService.generatePresignedUpload("user1", "test.png", "image/png", 30L * 1024 * 1024,
+                        null));
+    }
 
-        // Wait, text/plain is actually in the allowed whitelist! 
-        // Let's use a byte sequence that Tika detects as application/octet-stream or something blocked.
-        byte[] randomBytes = new byte[] { 0x01, 0x02, 0x03, 0x04 };
-        MockMultipartFile spoofedFile = new MockMultipartFile("file", "fake.png", "image/png", randomBytes);
+    @Test
+    void generatePresignedUpload_SoundPurpose_SizeLimitExceeded_ThrowsException() {
+        assertThrows(FileValidationException.class,
+                () -> storageService.generatePresignedUpload("user1", "test.mp3", "audio/mpeg", 600L * 1024, "sound"));
+    }
 
-        assertThrows(FileValidationException.class, () -> storageService.uploadFile("user1", spoofedFile));
+    @Test
+    void generatePresignedUpload_SoundPurpose_InvalidMime_ThrowsException() {
+        assertThrows(FileValidationException.class,
+                () -> storageService.generatePresignedUpload("user1", "test.mp4", "video/mp4", 100L * 1024, "sound"));
+    }
+
+    @Test
+    void generatePresignedView_Success() throws Exception {
+        when(minioClient.getPresignedObjectUrl(any(GetPresignedObjectUrlArgs.class)))
+                .thenReturn("http://presigned.get.url");
+
+        String url = storageService.generatePresignedView("user1/xyz.png");
+
+        assertEquals("http://presigned.get.url", url);
+        verify(minioClient).getPresignedObjectUrl(any(GetPresignedObjectUrlArgs.class));
     }
 
     @Test
@@ -108,6 +109,7 @@ class StorageServiceTest {
 
         try {
             verify(minioClient, never()).removeObject(any());
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
     }
 }

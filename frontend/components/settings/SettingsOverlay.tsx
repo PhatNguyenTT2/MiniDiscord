@@ -16,12 +16,14 @@ import {
   Camera,
   Sparkles,
   Check,
+  Volume2
 } from "lucide-react";
+import { SoundTab } from "./SoundTab";
 import { CURRENT_USER } from "@/lib/mock-data";
 import { useTranslation, useI18nStore, type Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-type SettingsTab = "account" | "language";
+type SettingsTab = "account" | "language" | "sound";
 
 const LANGUAGES: { key: Locale; label: string; nativeLabel: string }[] = [
   { key: "en", label: "English", nativeLabel: "English" },
@@ -361,6 +363,11 @@ export function SettingsOverlay({ onClose }: { onClose: () => void }) {
       label: t("settings.languageTime"),
       icon: Globe,
     },
+    {
+      key: "sound",
+      label: t("settings.sound"),
+      icon: Volume2,
+    },
   ];
 
   const logout = useAuthStore((s) => s.logout);
@@ -467,7 +474,9 @@ export function SettingsOverlay({ onClose }: { onClose: () => void }) {
             <h1 className="text-sm font-bold text-foreground uppercase tracking-wide">
               {activeTab === "account"
                 ? t("settings.myAccount")
-                : t("settings.languageTime")}
+                : activeTab === "sound"
+                  ? t("settings.sound")
+                  : t("settings.languageTime")}
             </h1>
 
             <div className="flex items-center gap-1">
@@ -489,6 +498,7 @@ export function SettingsOverlay({ onClose }: { onClose: () => void }) {
             <div className="max-w-[580px] mx-auto">
               {activeTab === "account" && <AccountTab />}
               {activeTab === "language" && <LanguageTab />}
+              {activeTab === "sound" && <SoundTab />}
             </div>
           </ScrollArea>
         </div>

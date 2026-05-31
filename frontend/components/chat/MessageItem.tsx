@@ -7,11 +7,14 @@ import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chatStore";
 import { useRoomStore } from "@/stores/roomStore";
 import { useAuthStore } from "@/stores/authStore";
-import { CURRENT_USER } from "@/lib/mock-data";
 import type { Message } from "@/types";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { useTranslation, getDateLocale } from "@/lib/i18n";
 import { useState, useRef, useEffect } from "react";
+import { api } from "@/lib/api";
+
+// Outside component to survive re-renders (cache)
+const resolvedUrlsMap = new Map<string, { url: string; expiresAt: number }>();
 
 interface MessageItemProps {
   message: Message;
@@ -63,23 +66,65 @@ export function MessageItem({
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const editInputRef = useRef<HTMLTextAreaElement>(null);
 
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(() => {
+    if (message.fileKey) {
+      const cached = resolvedUrlsMap.get(message.fileKey);
+      if (cached && Date.now() < cached.expiresAt) return cached.url;
+      return null;
+    }
+    return message.fileUrl || null;
+  });
+
+  useEffect(() => {
+    if (!message.fileKey) return;
+
+    let isMounted = true;
+    const cached = resolvedUrlsMap.get(message.fileKey);
+
+    if (cached && Date.now() < cached.expiresAt - 15 * 60 * 1000) {
+      if (resolvedUrl !== cached.url) setResolvedUrl(cached.url);
+      return;
+    }
+
+    const fetchUrl = async () => {
+      try {
+        const fileServiceUrl = process.env.NEXT_PUBLIC_FILE_SERVICE_URL || "http://localhost:8085";
+        const res = await api.get<{ data: { url: string; expiresIn: number } }>(
+          `${fileServiceUrl}/api/files/url?key=${encodeURIComponent(message.fileKey!)}`
+        );
+        const { url, expiresIn } = res.data.data;
+
+        if (url) {
+          resolvedUrlsMap.set(message.fileKey!, {
+            url,
+            expiresAt: Date.now() + (expiresIn * 1000)
+          });
+          if (isMounted) setResolvedUrl(url);
+        }
+      } catch (err) {
+        console.error("Failed to resolve presigned URL", err);
+        if (isMounted && message.fileUrl && !resolvedUrl) {
+          setResolvedUrl(message.fileUrl);
+        }
+      }
+    };
+
+    fetchUrl();
+    return () => { isMounted = false; };
+  }, [message.fileKey, message.fileUrl]);
+
   const currentUserId = useAuthStore((s) => s.user?.id);
   const members = useRoomStore((s) => s.members[message.roomId] ?? EMPTY_MEMBERS);
   const senderMember = members.find((m) => m.userId === message.senderId);
 
-  // Always prefer UUID (messageId) over MongoDB ObjectId (id) for API calls
   const apiId = message.messageId || message.id;
 
-  // Prefer memberStatusMap/memberAvatarMap if provided (DM context), else fallback to roomStore (Group context)
   const status = message.senderId === currentUserId
     ? "ONLINE"
     : (memberStatusMap?.[message.senderId] || senderMember?.status || "OFFLINE");
 
   const avatarSrc = memberAvatarMap ? memberAvatarMap[message.senderId] : message.senderAvatar;
-
-  // Dynamically resolve senderName: prioritize real-time cached room member username over historical DB 'User-xxxx' placeholder
   const resolvedSenderName = senderMember?.username || message.senderName;
-
   const isBeingReplied = replyingTo?.messageId === message.id;
 
   function handleReply() {
@@ -91,15 +136,11 @@ export function MessageItem({
   }
 
   function handleReaction(emoji: string) {
-    if (channelId) {
-      addReaction(channelId, apiId, emoji);
-    }
+    if (channelId) addReaction(channelId, apiId, emoji);
   }
 
   function handleReactionBadgeClick(emoji: string) {
-    if (channelId) {
-      addReaction(channelId, apiId, emoji);
-    }
+    if (channelId) addReaction(channelId, apiId, emoji);
   }
 
   function handleSaveEdit() {
@@ -108,7 +149,7 @@ export function MessageItem({
       return;
     }
     if (editContent.trim() === "") {
-      setIsEditing(false); // Can't edit to empty, could delete instead but simple cancel is safer
+      setIsEditing(false);
       return;
     }
     editMessage(channelId, apiId, editContent.trim());
@@ -125,7 +166,6 @@ export function MessageItem({
   useEffect(() => {
     if (isEditing && editInputRef.current) {
       editInputRef.current.focus();
-      // move cursor to end
       editInputRef.current.setSelectionRange(editContent.length, editContent.length);
     }
   }, [isEditing]);
@@ -165,7 +205,6 @@ export function MessageItem({
         message.id.startsWith("optimistic-") && "opacity-50"
       )}
     >
-      {/* Avatar or timestamp gutter */}
       <div className="w-10 shrink-0">
         {!isGrouped ? (
           <StatusAvatar
@@ -181,7 +220,6 @@ export function MessageItem({
         )}
       </div>
 
-      {/* Message content */}
       <div className="flex-1 min-w-0">
         {!isGrouped && (
           <div className="flex items-baseline gap-2">
@@ -197,7 +235,6 @@ export function MessageItem({
           </div>
         )}
 
-        {/* Reply reference */}
         {message.replyTo && (
           <div className="flex items-center gap-1 text-xs text-muted-foreground mb-0.5">
             <Reply className="h-3 w-3 rotate-180" />
@@ -238,21 +275,34 @@ export function MessageItem({
           </p>
         )}
 
-        {/* Attachment */}
-        {message.fileUrl && (
+        {(resolvedUrl || message.fileUrl) && (
           <div className="mt-2">
-            {message.fileUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
-              <a href={message.fileUrl} target="_blank" rel="noopener noreferrer">
+            {(!resolvedUrl && message.fileKey) ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground bg-secondary/50 p-3 rounded max-w-[400px]">
+                <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                Loading attachment...
+              </div>
+            ) : (resolvedUrl?.match(/\.(jpeg|jpg|gif|png|webp|svg)($|\?)/i) || message.fileName?.match(/\.(jpeg|jpg|gif|png|webp|svg)$/i)) ? (
+              <a href={resolvedUrl || message.fileUrl || undefined} target="_blank" rel="noopener noreferrer">
                 <img
-                  src={message.fileUrl}
+                  src={resolvedUrl || message.fileUrl || undefined}
                   alt={message.fileName || "attachment"}
                   className="max-w-full sm:max-w-[400px] max-h-[300px] object-cover rounded-md shadow-sm border border-border/50"
                   loading="lazy"
                 />
               </a>
+            ) : (resolvedUrl?.match(/\.(mp4|webm|mov)($|\?)/i) || message.fileName?.match(/\.(mp4|webm|mov)$/i)) ? (
+              <video
+                src={resolvedUrl || message.fileUrl || undefined}
+                controls
+                className="max-w-full sm:max-w-[400px] max-h-[300px] rounded-md shadow-sm border border-border/50"
+                preload="metadata"
+              />
+            ) : (resolvedUrl?.match(/\.(mp3|wav|ogg)($|\?)/i) || message.fileName?.match(/\.(mp3|wav|ogg)$/i)) ? (
+              <audio src={resolvedUrl || message.fileUrl || undefined} controls className="mt-1 max-w-[400px]" />
             ) : (
               <a
-                href={message.fileUrl}
+                href={resolvedUrl || message.fileUrl || undefined}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 p-3 rounded bg-secondary/50 border border-border/50 max-w-[400px] hover:bg-secondary/80 transition-colors"
@@ -274,12 +324,10 @@ export function MessageItem({
           </div>
         )}
 
-        {/* Reactions */}
         {message.reactions?.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-1">
             {message.reactions.map((reaction, i) => {
               const hasReacted = currentUserId ? reaction.userIds.includes(currentUserId) : false;
-              // Resolve usernames from member list for tooltip
               const reactorNames = reaction.userIds.map((uid) => {
                 if (uid === currentUserId) return t("chat.you");
                 const member = members.find((m) => m.userId === uid);
@@ -302,7 +350,6 @@ export function MessageItem({
                   )}
                 >
                   <span>{reaction.emoji}</span>
-                  {/* Calendar-flip animation for count */}
                   <span
                     key={`count-${reaction.emoji}-${reaction.count}`}
                     className={cn(
@@ -319,7 +366,6 @@ export function MessageItem({
         )}
       </div>
 
-      {/* Action bar on hover */}
       {!isEditing && (
         <MessageActions
           onReaction={handleReaction}
@@ -327,7 +373,7 @@ export function MessageItem({
           onEdit={() => { setIsEditing(true); setEditContent(message.content); }}
           onDelete={() => setIsDeleteModalOpen(true)}
           canEdit={isOwnMessage}
-          canDelete={true} // Anyone can delete (either for themselves or everyone)
+          canDelete={true}
           messageContent={message.content}
           isOwnMessage={isOwnMessage}
           onMarkUnread={onMarkUnread}

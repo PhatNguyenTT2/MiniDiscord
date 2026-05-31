@@ -11,7 +11,7 @@ import { MessageInput } from "@/components/chat/MessageInput";
 import { MessageList, type MessageListHandle } from "@/components/chat/MessageList";
 import { ScrollToBottomBanner } from "@/components/chat/ScrollToBottomBanner";
 import { StatusAvatar } from "@/components/ui/StatusAvatar";
-import { Phone, Video, Pin, User, Reply, Server, UserPlus, FileIcon } from "lucide-react";
+import { Phone, Video, Pin, User, Reply, Server, UserPlus, FileIcon, Search } from "lucide-react";
 import { ResizeHandle } from "@/components/ui/ResizeHandle";
 import { SlidingPanel } from "@/components/ui/SlidingPanel";
 import { useUIStore } from "@/stores/uiStore";
@@ -251,6 +251,7 @@ export default function DmChatPage() {
         roomId: activeRoomId,
         channelId: activeChannelId,
         content,
+        type: attachment ? "FILE" : "TEXT",
         senderName: currentUser?.username,
         senderAvatar: currentUser?.avatarUrl,
         fileUrl: attachment?.fileUrl,
@@ -325,192 +326,218 @@ export default function DmChatPage() {
 
       {/* Column 3 is the positioning context for the floating message composer. */}
       <main className="relative flex flex-1 min-w-0 flex-col bg-[#313338]">
-        {/* DM Header */}
-        <div className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-[#313338] px-4">
+        {/* Unified header bar across both columns */}
+        <div className="flex h-12 shrink-0 items-center border-b border-[#1e1f22] bg-[#313338] px-4">
           <div className="flex items-center gap-2">
             <span className="text-[15px] font-semibold text-foreground">
               @ {friendName}
             </span>
           </div>
-          <div className="flex items-center gap-1">
-            <button className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-              <Phone className="h-5 w-5" />
-            </button>
-            <button className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-              <Video className="h-5 w-5" />
-            </button>
-            <button className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-              <Pin className="h-5 w-5" />
-            </button>
-            <button
-              onClick={toggleDmUserPanel}
-              className={cn(
-                "flex h-8 w-8 items-center justify-center rounded-md transition-colors cursor-pointer",
-                showDmUserPanel
-                  ? "text-foreground bg-secondary"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-              aria-label="Toggle user panel"
-            >
-              <User className="h-5 w-5" />
-            </button>
+          <div className="flex items-center gap-4 ml-auto">
+            <div className="flex items-center gap-1">
+              <button className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                <Phone className="h-5 w-5" />
+              </button>
+              <button className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                <Video className="h-5 w-5" />
+              </button>
+              <button className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                <Pin className="h-5 w-5" />
+              </button>
+              <button
+                onClick={toggleDmUserPanel}
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-md transition-colors cursor-pointer",
+                  showDmUserPanel
+                    ? "text-foreground bg-secondary"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                aria-label="Toggle user panel"
+              >
+                <User className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Search Bar */}
+            <div className="w-[144px] hidden md:block">
+              <div className="flex h-6 items-center rounded overflow-hidden bg-[#1e1f22] px-1.5 focus-within:ring-1 focus-within:ring-indigo-500 focus-within:w-[240px] transition-all duration-200">
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm"
+                  className="w-full bg-transparent text-[13px] text-white placeholder-zinc-400 outline-none px-1"
+                />
+                <Search className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Messages */}
-        {(isLoadingMessages && messages.length === 0) ? (
-          <div className="flex-1 overflow-y-auto">
-            <div className="flex h-[68px] w-[68px] items-center justify-center rounded-full bg-secondary mb-3 mt-16 mx-4">
-              <User className="h-10 w-10 text-foreground" />
-            </div>
-            <MessagesSkeleton />
-          </div>
-        ) : (
-          <MessageList
-            ref={messageListRef}
-            messages={messages}
-            channelName={friendName}
-            channelId={channelId}
-            roomId={roomId}
-            onMarkAsReadBackend={markChannelAsRead}
-            memberAvatarMap={memberAvatarMap}
-            memberStatusMap={memberStatusMap}
-            onScrollStateChange={handleScrollStateChange}
-            welcomeHeader={
-              <div className="px-4 pt-4 pb-4">
-                {/* Large Avatar */}
-                <div className="mb-3">
-                  <StatusAvatar
-                    src={friendAvatar}
-                    fallback={friendName}
-                    status={friendStatus as any}
-                    size="xl"
-                  />
+        {/* Unified wrapper that holds Chat + side Panel */}
+        <div className="flex flex-1 min-h-0 relative">
+
+          {/* Chat content container */}
+          <div className="flex flex-1 flex-col min-w-0 relative">
+
+            {/* Messages */}
+            {(isLoadingMessages && messages.length === 0) ? (
+              <div className="flex-1 overflow-y-auto">
+                <div className="flex h-[68px] w-[68px] items-center justify-center rounded-full bg-secondary mb-3 mt-16 mx-4">
+                  <User className="h-10 w-10 text-foreground" />
                 </div>
-
-                {/* Display Name */}
-                <h2 className="text-[2rem] font-bold text-foreground leading-tight">
-                  {friendName}
-                </h2>
-
-                {/* Secondary Username */}
-                <p className="text-[15px] text-muted-foreground mt-0.5">
-                  {friendName.toLowerCase()}
-                </p>
-
-                {/* Description */}
-                <p className="mt-3 text-[15px] leading-relaxed text-muted-foreground">
-                  {t("dm.welcomeMessage")}{" "}
-                  <strong className="font-semibold text-foreground">{friendName}</strong>.
-                </p>
-
-                {/* Mutual Servers + Action Buttons Row */}
-                <div className="mt-3 flex items-center gap-2 flex-wrap">
-                  {/* Mutual Servers Badge */}
-                  {getMutualServersCount(userId) > 0 && (
-                    <div className="flex items-center gap-1.5 rounded-full bg-secondary/60 px-3 py-1 text-[13px] text-muted-foreground">
-                      <Server className="h-3.5 w-3.5" />
-                      <span>{getMutualServersCount(userId)} {t("dm.mutualServers")}</span>
+                <MessagesSkeleton />
+              </div>
+            ) : (
+              <MessageList
+                ref={messageListRef}
+                messages={messages}
+                channelName={friendName}
+                channelId={channelId}
+                roomId={roomId}
+                onMarkAsReadBackend={markChannelAsRead}
+                memberAvatarMap={memberAvatarMap}
+                memberStatusMap={memberStatusMap}
+                onScrollStateChange={handleScrollStateChange}
+                welcomeHeader={
+                  <div className="px-4 pt-4 pb-4">
+                    {/* Large Avatar */}
+                    <div className="mb-3">
+                      <StatusAvatar
+                        src={friendAvatar}
+                        fallback={friendName}
+                        status={friendStatus as any}
+                        size="xl"
+                      />
                     </div>
-                  )}
 
-                  {/* Relationship: friend → show Remove + Block */}
-                  {relationship === "friend" && (
-                    <>
-                      <button
-                        onClick={() => setModalType("REMOVE_FRIEND")}
-                        className="rounded-[3px] border border-border bg-transparent px-4 py-1.5 text-[13px] font-medium text-foreground hover:bg-secondary/50 transition-colors duration-150 cursor-pointer"
-                      >
-                        {t("dm.removeFriend")}
-                      </button>
-                      <button
-                        onClick={() => setModalType("BLOCK")}
-                        className="rounded-[3px] border border-border bg-transparent px-4 py-1.5 text-[13px] font-medium text-foreground hover:bg-secondary/50 transition-colors duration-150 cursor-pointer"
-                      >
-                        {t("dm.block")}
-                      </button>
-                    </>
-                  )}
+                    {/* Display Name */}
+                    <h2 className="text-[2rem] font-bold text-foreground leading-tight">
+                      {friendName}
+                    </h2>
 
-                  {/* Relationship: none → show Add Friend */}
-                  {relationship === "none" && (
-                    <button
-                      onClick={() => setRelationship("friend")}
-                      className="flex items-center gap-1.5 rounded-[3px] bg-accent px-4 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover transition-colors duration-150 cursor-pointer"
-                    >
-                      <UserPlus className="h-3.5 w-3.5" />
-                      {t("dm.addFriend")}
-                    </button>
-                  )}
+                    {/* Secondary Username */}
+                    <p className="text-[15px] text-muted-foreground mt-0.5">
+                      {friendName.toLowerCase()}
+                    </p>
 
-                  {/* Relationship: blocked → show Unblock + Report Spam */}
-                  {relationship === "blocked" && (
-                    <>
-                      <button
-                        onClick={() => setRelationship("none")}
-                        className="rounded-[3px] border border-border bg-transparent px-4 py-1.5 text-[13px] font-medium text-foreground hover:bg-secondary/50 transition-colors duration-150 cursor-pointer"
-                      >
-                        {t("dm.unblock")}
-                      </button>
-                      <button
-                        className="rounded-[3px] bg-destructive px-4 py-1.5 text-[13px] font-medium text-white hover:bg-destructive/80 transition-colors duration-150 cursor-pointer"
-                      >
-                        {t("dm.reportSpam")}
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            }
-          />
-        )}
+                    {/* Description */}
+                    <p className="mt-3 text-[15px] leading-relaxed text-muted-foreground">
+                      {t("dm.welcomeMessage")}{" "}
+                      <strong className="font-semibold text-foreground">{friendName}</strong>.
+                    </p>
 
-        {/* Input wrapper — relative context for floating banner */}
-        <div className="relative">
-          <ScrollToBottomBanner
-            visible={showJumpBanner}
-            onJumpToPresent={() => messageListRef.current?.scrollToBottom()}
-          />
-          {/* Bottom bar: MessageInput or Blocked bar */}
-          {relationship === "blocked" ? (
-            <div
-              className="absolute inset-x-0 z-20 px-4"
-              style={{ bottom: "var(--floating-bar-gap)" }}
-            >
-              <div
-                className="flex items-center justify-between px-4 shadow-[0_12px_30px_rgba(0,0,0,0.24)]"
-                style={{
-                  minHeight: "var(--floating-user-panel-height)",
-                  borderRadius: "var(--floating-bar-radius)",
-                  backgroundColor: "#383a40",
-                }}
-              >
-                <span className="text-sm font-semibold text-zinc-200">
-                  {t("dm.blockedMessage")}
-                </span>
-                <button
-                  onClick={() => setRelationship("none")}
-                  className="shrink-0 rounded bg-[#2b2d31] px-4 py-1.5 text-sm text-white hover:bg-[#1e1f22] transition-colors cursor-pointer"
+                    {/* Mutual Servers + Action Buttons Row */}
+                    <div className="mt-3 flex items-center gap-2 flex-wrap">
+                      {/* Mutual Servers Badge */}
+                      {getMutualServersCount(userId) > 0 && (
+                        <div className="flex items-center gap-1.5 rounded-full bg-secondary/60 px-3 py-1 text-[13px] text-muted-foreground">
+                          <Server className="h-3.5 w-3.5" />
+                          <span>{getMutualServersCount(userId)} {t("dm.mutualServers")}</span>
+                        </div>
+                      )}
+
+                      {/* Relationship: friend → show Remove + Block */}
+                      {relationship === "friend" && (
+                        <>
+                          <button
+                            onClick={() => setModalType("REMOVE_FRIEND")}
+                            className="rounded-[3px] border border-border bg-transparent px-4 py-1.5 text-[13px] font-medium text-foreground hover:bg-secondary/50 transition-colors duration-150 cursor-pointer"
+                          >
+                            {t("dm.removeFriend")}
+                          </button>
+                          <button
+                            onClick={() => setModalType("BLOCK")}
+                            className="rounded-[3px] border border-border bg-transparent px-4 py-1.5 text-[13px] font-medium text-foreground hover:bg-secondary/50 transition-colors duration-150 cursor-pointer"
+                          >
+                            {t("dm.block")}
+                          </button>
+                        </>
+                      )}
+
+                      {/* Relationship: none → show Add Friend */}
+                      {relationship === "none" && (
+                        <button
+                          onClick={() => setRelationship("friend")}
+                          className="flex items-center gap-1.5 rounded-[3px] bg-accent px-4 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover transition-colors duration-150 cursor-pointer"
+                        >
+                          <UserPlus className="h-3.5 w-3.5" />
+                          {t("dm.addFriend")}
+                        </button>
+                      )}
+
+                      {/* Relationship: blocked → show Unblock + Report Spam */}
+                      {relationship === "blocked" && (
+                        <>
+                          <button
+                            onClick={() => setRelationship("none")}
+                            className="rounded-[3px] border border-border bg-transparent px-4 py-1.5 text-[13px] font-medium text-foreground hover:bg-secondary/50 transition-colors duration-150 cursor-pointer"
+                          >
+                            {t("dm.unblock")}
+                          </button>
+                          <button
+                            className="rounded-[3px] bg-destructive px-4 py-1.5 text-[13px] font-medium text-white hover:bg-destructive/80 transition-colors duration-150 cursor-pointer"
+                          >
+                            {t("dm.reportSpam")}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                }
+              />
+            )}
+
+            {/* Input wrapper — relative context for floating banner */}
+            <div className="relative w-full">
+              <ScrollToBottomBanner
+                visible={showJumpBanner}
+                onJumpToPresent={() => messageListRef.current?.scrollToBottom()}
+              />
+              {/* Bottom bar: MessageInput or Blocked bar */}
+              {relationship === "blocked" ? (
+                <div
+                  className="absolute inset-x-0 z-20 px-4"
+                  style={{ bottom: "var(--floating-bar-gap)" }}
                 >
-                  {t("dm.unblock")}
-                </button>
-              </div>
+                  <div
+                    className="flex items-center justify-between px-4 shadow-[0_12px_30px_rgba(0,0,0,0.24)]"
+                    style={{
+                      minHeight: "var(--floating-user-panel-height)",
+                      borderRadius: "var(--floating-bar-radius)",
+                      backgroundColor: "#383a40",
+                    }}
+                  >
+                    <span className="text-sm font-semibold text-zinc-200">
+                      {t("dm.blockedMessage")}
+                    </span>
+                    <button
+                      onClick={() => setRelationship("none")}
+                      className="shrink-0 rounded bg-[#2b2d31] px-4 py-1.5 text-sm text-white hover:bg-[#1e1f22] transition-colors cursor-pointer"
+                    >
+                      {t("dm.unblock")}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <MessageInput
+                  channelId={channelId || "pending"}
+                  channelName={friendName}
+                  isDm
+                  onSend={handleSend}
+                  onTyping={handleTyping}
+                />
+              )}
             </div>
-          ) : (
-            <MessageInput
-              channelId={channelId || "pending"}
-              channelName={friendName}
-              isDm
-              onSend={handleSend}
-              onTyping={handleTyping}
-            />
-          )}
+          </div> {/* End of Chat container */}
+
+          {/* DmUserPanel container (CSS Toggle instead of conditional render / SlidingPanel to avoid API spam) */}
+          <div className={cn("shrink-0 bg-[#2b2d31] overflow-hidden transition-all duration-200 ease-in-out", showDmUserPanel ? "w-[340px]" : "w-0")}>
+            <div className="w-[340px] h-full">
+              <DmUserPanel userId={userId} />
+            </div>
+          </div>
+
         </div>
       </main>
-
-      <SlidingPanel show={showDmUserPanel} width={340}>
-        <DmUserPanel userId={userId} />
-      </SlidingPanel>
 
       {/* Confirm Modal (Remove Friend / Block) */}
       {

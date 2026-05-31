@@ -3,8 +3,10 @@ package com.discordmini.file.controller;
 import com.discordmini.common.dto.ApiResponse;
 import com.discordmini.file.exception.FileValidationException;
 import com.discordmini.file.exception.GlobalExceptionHandler;
-import com.discordmini.file.model.dto.FileResponse;
+import com.discordmini.file.model.dto.PresignRequest;
+import com.discordmini.file.model.dto.PresignResponse;
 import com.discordmini.file.service.StorageService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,12 +14,11 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -25,71 +26,70 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ExtendWith(MockitoExtension.class)
 class FileControllerTest {
 
-    private MockMvc mockMvc;
+        private MockMvc mockMvc;
 
-    @Mock
-    private StorageService storageService;
+        @Mock
+        private StorageService storageService;
 
-    @InjectMocks
-    private FileController fileController;
+        @InjectMocks
+        private FileController fileController;
 
-    @BeforeEach
-    void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(fileController)
-                .setControllerAdvice(new GlobalExceptionHandler())
-                .build();
-    }
+        private ObjectMapper objectMapper = new ObjectMapper();
 
-    @Test
-    void uploadFile_Success_Returns200() throws Exception {
-        MockMultipartFile file = new MockMultipartFile("file", "test.png", "image/png", "data".getBytes());
-        FileResponse mockResponse = FileResponse.builder()
-                .fileUrl("http://localhost/bucket/test.png")
-                .fileName("test.png")
-                .fileSize(4L)
-                .contentType("image/png")
-                .build();
+        @BeforeEach
+        void setUp() {
+                mockMvc = MockMvcBuilders.standaloneSetup(fileController)
+                                .setControllerAdvice(new GlobalExceptionHandler())
+                                .build();
+        }
 
-        when(storageService.uploadFile(eq("user1"), any())).thenReturn(mockResponse);
+        @Test
+        void generatePresignedUpload_Success_Returns200() throws Exception {
+                PresignRequest request = PresignRequest.builder()
+                                .fileName("test.png")
+                                .contentType("image/png")
+                                .fileSize(4000L)
+                                .build();
 
-        mockMvc.perform(multipart("/api/files/upload")
-                        .file(file)
-                        .header("X-User-Id", "user1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.fileUrl").value("http://localhost/bucket/test.png"));
-    }
+                PresignResponse mockResponse = PresignResponse.builder()
+                                .uploadUrl("http://upload.url")
+                                .viewUrl("http://view.url")
+                                .fileKey("user1/2026-05/test.png")
+                                .expiresIn(3600)
+                                .build();
 
-    @Test
-    void uploadFile_MissingUserIdHeader_Returns400() throws Exception {
-        MockMultipartFile file = new MockMultipartFile("file", "test.png", "image/png", "data".getBytes());
+                when(storageService.generatePresignedUpload(eq("user1"), eq("test.png"), eq("image/png"), eq(4000L),
+                                any()))
+                                .thenReturn(mockResponse);
 
-        mockMvc.perform(multipart("/api/files/upload")
-                        .file(file))
-                .andExpect(status().isBadRequest()); // Missing header standard spring response
-    }
+                mockMvc.perform(post("/api/files/presign/upload")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(objectMapper.writeValueAsString(request))
+                                .header("X-User-Id", "user1"))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.success").value(true))
+                                .andExpect(jsonPath("$.data.uploadUrl").value("http://upload.url"));
+        }
 
-    @Test
-    void uploadFile_ValidationFailed_Returns400() throws Exception {
-        MockMultipartFile file = new MockMultipartFile("file", "test.exe", "application/octet-stream", "data".getBytes());
-        when(storageService.uploadFile(eq("user1"), any())).thenThrow(new FileValidationException("Executable files are not allowed"));
+        @Test
+        void getPresignedViewUrl_Success_Returns200() throws Exception {
+                when(storageService.generatePresignedView("user1/2026-05/test.png")).thenReturn("http://view.url");
 
-        mockMvc.perform(multipart("/api/files/upload")
-                        .file(file)
-                        .header("X-User-Id", "user1"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Executable files are not allowed"));
-    }
+                mockMvc.perform(get("/api/files/url")
+                                .param("key", "user1/2026-05/test.png"))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.success").value(true))
+                                .andExpect(jsonPath("$.data.url").value("http://view.url"));
+        }
 
-    @Test
-    void deleteFile_Success_Returns200() throws Exception {
-        doNothing().when(storageService).deleteFile("user1", "user1/test.png");
+        @Test
+        void deleteFile_Success_Returns200() throws Exception {
+                doNothing().when(storageService).deleteFile("user1", "user1/test.png");
 
-        mockMvc.perform(delete("/api/files")
-                        .param("key", "user1/test.png")
-                        .header("X-User-Id", "user1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
-    }
+                mockMvc.perform(delete("/api/files")
+                                .param("key", "user1/test.png")
+                                .header("X-User-Id", "user1"))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.success").value(true));
+        }
 }

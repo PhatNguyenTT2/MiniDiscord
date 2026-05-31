@@ -11,6 +11,7 @@ export interface Message {
   fileUrl: string | null;
   fileName: string | null;
   fileSize: number | null;
+  fileKey?: string | null; // Added for Pre-signed URLs
   reactions: Reaction[];
   isEdited: boolean;
   isDeleted: boolean;
@@ -37,6 +38,7 @@ export interface ChatMessage {
   content: string;
   type: "TEXT" | "IMAGE" | "FILE";
   fileUrl?: string;
+  fileKey?: string; // Added for Pre-signed URLs
 }
 
 export interface TypingEvent {

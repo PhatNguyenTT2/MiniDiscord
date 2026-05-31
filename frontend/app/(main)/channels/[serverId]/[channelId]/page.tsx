@@ -18,6 +18,7 @@ import { useRoomStore } from "@/stores/roomStore";
 import { getStompClient } from "@/lib/websocket";
 import { useParams } from "next/navigation";
 import { useCallback, useRef, useState, useEffect } from "react";
+import { type Message } from "@/types";
 
 export default function ChannelPage() {
   const params = useParams();
@@ -64,6 +65,7 @@ export default function ChannelPage() {
         roomId,
         channelId,
         content,
+        type: attachment ? "FILE" : "TEXT",
         senderName: currentUser?.username || "User",
         senderAvatar: currentUser?.avatarUrl || null,
         fileUrl: attachment?.fileUrl,
@@ -77,6 +79,30 @@ export default function ChannelPage() {
           }
           : null,
       };
+
+      // Optimistic message
+      const optimisticMsg: Message = {
+        id: `optimistic-${Date.now()}`,
+        messageId: `optimistic-${Date.now()}`, // fallback to avoid errors
+        roomId,
+        channelId,
+        senderId: currentUser?.id || "",
+        senderName: currentUser?.username || "User",
+        senderAvatar: currentUser?.avatarUrl || null,
+        type: attachment ? "FILE" : "TEXT",
+        content,
+        fileUrl: attachment?.fileUrl || null,
+        fileName: attachment?.fileName || null,
+        fileSize: attachment?.fileSize || null,
+        reactions: [],
+        isEdited: false,
+        isDeleted: false,
+        editedAt: null,
+        createdAt: new Date().toISOString(),
+        replyTo: payload.replyTo,
+      };
+
+      useChatStore.getState().addOptimisticMessage(channelId, optimisticMsg);
 
       client.publish({
         destination: "/app/chat.send",

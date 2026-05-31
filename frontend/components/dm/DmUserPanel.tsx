@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { StatusAvatar } from "@/components/ui/StatusAvatar";
 import { ScrollArea } from "@/components/ui/ScrollArea";
 import { Button } from "@/components/ui/Button";
@@ -17,6 +18,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { cn } from "@/lib/utils";
 import type { User } from "@/types";
 import { useTranslation } from "@/lib/i18n";
+import { api } from "@/lib/api";
 
 function formatDate(dateStr: string, locale: string = "vi-VN") {
   return new Date(dateStr).toLocaleDateString(locale, {
@@ -26,9 +28,12 @@ function formatDate(dateStr: string, locale: string = "vi-VN") {
   });
 }
 
-function getMutualServers(userId: string): { id: string; name: string; description: string }[] {
-  // TODO: implement with real API
-  return [];
+function getMutualServers(userId: string): { id: string; name: string; description: string; iconUrl?: string }[] {
+  const { rooms, members } = useRoomStore.getState();
+  return rooms
+    .filter(r => r.type === "GROUP")
+    .filter(r => members[r.id]?.some(m => m.userId === userId))
+    .map(r => ({ id: r.id, name: r.name, description: "", iconUrl: r.iconUrl || undefined }));
 }
 
 /* ─── Full Profile Modal (2-column layout) ─────────────────────────── */
@@ -225,9 +230,21 @@ function UserProfileModal({
 export function DmUserPanel({ userId }: { userId: string }) {
   const { t } = useTranslation();
   const [showProfile, setShowProfile] = useState(false);
+  const [apiUser, setApiUser] = useState<User | null>(null);
 
   const friends = useFriendStore((s) => s.friends);
   const { members: allMembers, getDmRoomForUser } = useRoomStore();
+
+  useEffect(() => {
+    // Lazy fetch full user profile to get `createdAt` and fresh data when panel mounts
+    let isMounted = true;
+    api.get<{ data: User }>(`/users/${userId}`)
+      .then(res => {
+        if (isMounted) setApiUser(res.data.data);
+      })
+      .catch(console.error);
+    return () => { isMounted = false; };
+  }, [userId]);
 
   // Resolve user from multiple sources
   const friendEntry = friends.find((f) => f.user.id === userId);
@@ -236,15 +253,15 @@ export function DmUserPanel({ userId }: { userId: string }) {
     ? allMembers[dmRoom.roomId]?.find((m) => m.userId === userId)
     : null;
 
-  const resolvedName = friendEntry?.user.username || roomMember?.username;
+  const resolvedName = apiUser?.username || friendEntry?.user.username || roomMember?.username;
   if (!resolvedName) return null;
 
   const user = {
     id: userId,
     username: resolvedName,
-    avatarUrl: friendEntry?.user.avatarUrl || roomMember?.avatarUrl || null,
+    avatarUrl: apiUser?.avatarUrl || friendEntry?.user.avatarUrl || roomMember?.avatarUrl || null,
     status: (friendEntry?.user.status || roomMember?.status || "OFFLINE") as User["status"],
-    createdAt: new Date().toISOString(),
+    createdAt: apiUser?.createdAt || new Date().toISOString(),
   } as User;
 
   const mutualServers = getMutualServers(userId);
@@ -376,12 +393,12 @@ export function DmUserPanel({ userId }: { userId: string }) {
       </aside>
 
       {/* Full profile modal */}
-      {showProfile && (
-        <UserProfileModal
-          user={user}
-          onClose={() => setShowProfile(false)}
-        />
-      )}
+      {showProfile &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <UserProfileModal user={user} onClose={() => setShowProfile(false)} />,
+          document.body
+        )}
     </>
   );
 }
