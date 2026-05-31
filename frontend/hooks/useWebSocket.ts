@@ -66,12 +66,9 @@ export function useWebSocket() {
         subscriptionsRef.current.set(roomKey, sub);
       });
 
-      // Refresh ALL data after WebSocket connects to get accurate Redis presence.
-      // Delay lets our own PRESENCE_UPDATE propagate through the pipeline first.
-      setTimeout(() => {
-        useFriendStore.getState().fetchFriends();
-        useRoomStore.getState().refreshAllDmMembers();
-      }, 2000);
+      // REMOVED: usePrefetch handles initial data loading.
+      // Real-time PRESENCE_UPDATE events update statuses via
+      // updateFriendStatus() and updateMemberStatus() — no polling needed.
     };
 
     client.onStompError = (frame) => {

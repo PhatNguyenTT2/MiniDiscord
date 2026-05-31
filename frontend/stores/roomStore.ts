@@ -25,6 +25,25 @@ function clearCache() {
 
 export { clearCache as clearRoomCache };
 
+async function backgroundFetchQueue(
+  rooms: Room[],
+  get: () => RoomState,
+) {
+  for (const room of rooms) {
+    // Yield to main thread — không block UI
+    await new Promise(r => setTimeout(r, 500));
+    try {
+      await get().fetchChannels(room.id);
+      await get().fetchMembers(room.id);
+    } catch {
+      console.warn("[roomStore] Background fetch skipped:", room.id);
+    }
+  }
+  // Re-save cache sau khi background hoàn tất
+  const state = get();
+  saveCache(state.rooms, state.channels, state.members);
+}
+
 interface RoomState {
   rooms: Room[];
   channels: Record<string, Channel[]>; // roomId -> channels
@@ -74,25 +93,24 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       console.log("[roomStore] fetchMyRooms:", rooms.map(r => ({ id: r.id, type: r.type, name: r.name })));
       set({ rooms, isLoading: false });
 
-      // Parallel fetch: channels for all rooms + members for DM rooms
-      const fetchPromises = rooms.map(async (room) => {
-        try {
-          await get().fetchChannels(room.id);
-          console.log("[roomStore] Auto-fetching members for room:", room.id);
-          await get().fetchMembers(room.id);
-          // Small delay between rooms to avoid rate limit (60 req / 10s);
-        } catch (err) {
-          console.warn("[roomStore] Skipping room", room.id, "due to error");
-        }
-      });
+      // === Active-First Lazy Loading ===
+      // 1. Detect active room from URL (nếu có)
+      const activeRoomId = typeof window !== 'undefined'
+        ? window.location.pathname.match(/\/channels\/([^/]+)/)?.[1]
+        : null;
+      const activeRoom = activeRoomId && activeRoomId !== '@me'
+        ? rooms.find(r => r.id === activeRoomId)
+        : null;
 
-      // Execute in batches of 2 with delay to avoid backend timeouts
-      for (let i = 0; i < fetchPromises.length; i += 2) {
-        await Promise.all(fetchPromises.slice(i, i + 2));
-        if (i + 2 < fetchPromises.length) {
-          await new Promise(r => setTimeout(r, 200));
-        }
+      // 2. Fetch active room IMMEDIATELY (0 delay)
+      if (activeRoom) {
+        await get().fetchChannels(activeRoom.id);
+        await get().fetchMembers(activeRoom.id);
       }
+
+      // 3. Background queue for remaining rooms
+      const remaining = rooms.filter(r => r.id !== activeRoom?.id);
+      backgroundFetchQueue(remaining, get);
 
       saveCache(get().rooms, get().channels, get().members);
     } catch (error: any) {

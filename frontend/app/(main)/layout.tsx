@@ -1,7 +1,6 @@
 "use client";
 
-import { ServerList } from "@/components/sidebar/ServerList";
-import { UserPanel } from "@/components/sidebar/UserPanel";
+
 import { SettingsOverlay } from "@/components/settings/SettingsOverlay";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { useUIStore } from "@/stores/uiStore";

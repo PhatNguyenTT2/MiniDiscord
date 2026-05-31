@@ -1,7 +1,6 @@
 "use client";
-
 import { useState, useRef, useEffect } from "react";
-import { Send, Upload, FileUp, ImageIcon, Video, AlertTriangle, Smile } from "lucide-react";
+import { FileUp, ImageIcon, Video, AlertTriangle, Smile, Plus } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { EmojiPicker } from "@/components/ui/EmojiPicker";
 import { useFileStore } from "@/stores/fileStore";
@@ -162,7 +161,7 @@ export function MessageInput({ channelId, channelName, isDm, onSend, onTyping, t
       style={{ bottom: "var(--floating-bar-gap)" }}
     >
       <div
-        className="relative shadow-[0_12px_30px_rgba(0,0,0,0.24)]"
+        className="relative shadow-[0_12px_30px_rgba(0,0,0,0.24)] message-input-wrapper overflow-visible"
         style={{
           borderRadius: "var(--floating-bar-radius)",
           backgroundColor: "#383a40",
@@ -254,16 +253,20 @@ export function MessageInput({ channelId, channelName, isDm, onSend, onTyping, t
           </div>
         )}
 
-        <div className="flex items-center gap-2 p-2">
-          <div className="relative" ref={attachRef}>
+        <div
+          className="flex items-center gap-3 px-4"
+          style={{ minHeight: "var(--floating-user-panel-height)" }}
+        >
+          {/* Left Attachment Icon */}
+          <div className="relative shrink-0 flex items-center self-center" ref={attachRef}>
             <button
               onClick={() => setIsAttachOpen(!isAttachOpen)}
-              className="p-3 text-muted-foreground hover:text-white transition-colors disabled:opacity-50 bg-[#404249] hover:bg-[#474950] rounded-full shrink-0"
+              className="w-6 h-6 flex items-center justify-center text-[#b5bac1] hover:text-[#dbdee1] transition-colors disabled:opacity-50 bg-[#404249] hover:bg-[#4e5058] rounded-full shrink-0 cursor-pointer"
               disabled={isUploading}
               aria-label="Add attachment"
               type="button"
             >
-              <Upload className="h-5 w-5" />
+              <Plus className="h-4.5 w-4.5" />
             </button>
 
             {isAttachOpen && (
@@ -286,7 +289,7 @@ export function MessageInput({ channelId, channelName, isDm, onSend, onTyping, t
                         fileInputRef.current.click();
                       }
                     }}
-                    className="flex text-[15px] items-center gap-3 px-3 py-2.5 text-muted-foreground hover:text-white hover:bg-[#5865F2] hover:shadow-sm leading-tight transition-all rounded"
+                    className="flex text-[15px] items-center gap-3 px-3 py-2.5 text-muted-foreground hover:text-white hover:bg-[#5865F2] hover:shadow-sm leading-tight transition-all rounded cursor-pointer animate-in fade-in duration-100"
                   >
                     <item.icon className="h-5 w-5" />
                     <span>{item.label}</span>
@@ -296,7 +299,8 @@ export function MessageInput({ channelId, channelName, isDm, onSend, onTyping, t
             )}
           </div>
 
-          <div className="relative flex-1 rounded-[var(--floating-bar-radius)] bg-[#383a40] min-h-[44px]">
+          {/* Text Input area with Dashboard icons inline on the right */}
+          <div className="relative flex-1 min-w-0 flex items-center">
             <textarea
               ref={inputRef}
               value={message}
@@ -309,34 +313,36 @@ export function MessageInput({ channelId, channelName, isDm, onSend, onTyping, t
                 }
               }}
               placeholder={placeholder}
-              className="w-full bg-transparent text-[#dbdee1] p-[10px] pl-[14px] pr-12 focus:outline-none focus:ring-0 resize-none min-h-[44px] max-h-[50vh] text-[15px] font-medium leading-[22px]"
+              className="w-full bg-transparent text-[#dbdee1] py-[7px] pl-1 pr-[82px] focus:outline-none focus:ring-0 resize-none min-h-[36px] max-h-[50vh] text-[15px] font-medium leading-[22px] placeholder:text-[#6d6f78] self-center"
               disabled={isUploading}
               rows={Math.min(10, Math.max(1, message.split("\n").length))}
             />
 
-            <div className="absolute right-2 bottom-[8px] flex items-center h-[28px] gap-1">
+            {/* Dashboard launcher right icons (Only GIF and Emoji Picker are kept) */}
+            <div className="absolute right-2 top-0 bottom-0 flex items-center gap-1.5 select-none shrink-0 z-10">
+
+              {/* GIF launcher */}
+              <button
+                type="button"
+                className="p-1 text-[#b5bac1] hover:text-[#dbdee1] hover:bg-[#4e5058]/40 rounded transition-all shrink-0 cursor-pointer flex items-center justify-center h-7"
+                title="Search GIFs"
+              >
+                <div className="text-[10px] font-bold px-[5.5px] py-[1.5px] rounded border-2 border-current font-sans tracking-wider leading-none select-none">
+                  GIF
+                </div>
+              </button>
+
+              {/* Emoji Picker launcher */}
               <EmojiPicker onEmojiSelect={handleEmojiSelect}>
                 <button
                   type="button"
                   disabled={isUploading}
-                  className="p-[5px] text-muted-foreground hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="p-[5px] text-[#b5bac1] hover:text-[#dbdee1] hover:bg-[#4e5058]/40 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-all shrink-0 cursor-pointer flex items-center justify-center"
                   title={t("chat.emoji")}
                 >
-                  <Smile className="h-[20px] w-[20px]" />
+                  <Smile className="h-5 w-5" />
                 </button>
               </EmojiPicker>
-
-              <button
-                onClick={submitMessage}
-                disabled={(!message.trim() && !attachment) || isUploading || rateLimitCooldown > 0}
-                className="p-[5px] text-muted-foreground hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                type="button"
-                title={t("chat.send")}
-              >
-                <div className="flex items-center justify-center h-[18px] w-[18px]">
-                  <Send className={cn("h-full w-full", (message.trim() || attachment) && "text-[#5865F2]")} />
-                </div>
-              </button>
             </div>
           </div>
         </div>

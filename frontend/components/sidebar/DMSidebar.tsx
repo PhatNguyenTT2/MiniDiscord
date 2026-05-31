@@ -161,7 +161,7 @@ export function DMSidebar({ activeUserId }: { activeUserId?: string }) {
         </div>
 
         <ScrollArea className="flex-1">
-          <div className="px-3 pt-3">
+          <div className="px-3 pt-3 pb-[var(--floating-user-panel-offset)]">
             {/* Friends nav */}
             <button
               onClick={() => router.push("/channels/@me")}

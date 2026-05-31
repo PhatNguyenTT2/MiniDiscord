@@ -2,8 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { ServerList } from "@/components/sidebar/ServerList";
-import { UserPanel } from "@/components/sidebar/UserPanel";
+import { SidebarWrapper } from "@/components/sidebar/SidebarWrapper";
 import { DMSidebar } from "@/components/sidebar/DMSidebar";
 import { DmUserPanel } from "@/components/dm/DmUserPanel";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
@@ -310,17 +309,10 @@ export default function DmChatPage() {
 
   return (
     <>
-      {/* Left shell combines columns 1 + 2 and keeps a bottom lane free for the floating user panel. */}
-      <div
-        className="relative flex shrink-0 flex-col bg-background-tertiary border-r border-border"
-        style={{ paddingBottom: "var(--floating-user-panel-offset)" }}
-      >
-        <div className="flex flex-1 min-h-0 overflow-hidden">
-          <ServerList />
-          <DMSidebar activeUserId={userId} />
-        </div>
-        <UserPanel />
-      </div>
+      {/* Column 1+2: ServerList + DM Sidebar + UserPanel */}
+      <SidebarWrapper>
+        <DMSidebar activeUserId={userId} />
+      </SidebarWrapper>
 
       <ResizeHandle onResize={handleResize} />
 

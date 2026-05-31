@@ -2,6 +2,25 @@ import { create } from "zustand";
 import { api } from "@/lib/api";
 import type { FriendResponse, PendingFriendResponse, DirectMessage } from "@/types/friend";
 
+const FRIEND_CACHE_KEY = "minidiscord_friends_cache";
+const FRIEND_CACHE_TTL = 5 * 60 * 1000;
+let friendsFetchPromise: Promise<void> | null = null;
+let pendingFetchPromise: Promise<void> | null = null;
+
+function loadFriendCache() {
+  try {
+    const raw = sessionStorage.getItem(FRIEND_CACHE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (Date.now() - data.ts > FRIEND_CACHE_TTL) return null;
+    return data;
+  } catch { return null; }
+}
+
+function saveFriendCache(friends: FriendResponse[], pendingRequests: PendingFriendResponse[]) {
+  sessionStorage.setItem(FRIEND_CACHE_KEY, JSON.stringify({ friends, pendingRequests, ts: Date.now() }));
+}
+
 // ── Debounced re-fetch (Gotcha B: avoid burst API calls) ──────────
 let pendingTimer: ReturnType<typeof setTimeout> | null = null;
 let friendsTimer: ReturnType<typeof setTimeout> | null = null;
@@ -50,22 +69,48 @@ export const useFriendStore = create<FriendState>((set, get) => ({
   error: null,
 
   fetchFriends: async () => {
+    if (friendsFetchPromise) return friendsFetchPromise;
+
+    const cache = loadFriendCache();
+    if (cache?.friends) {
+      set({ friends: cache.friends, isLoading: false });
+    }
+
     try {
-      set({ isLoading: true, error: null });
-      const res = await api.get<FriendResponse[]>("/users/friends");
-      set({ friends: res.data, isLoading: false });
+      if (!cache?.friends) set({ isLoading: true, error: null });
+      friendsFetchPromise = (async () => {
+        const res = await api.get<FriendResponse[]>("/users/friends");
+        set({ friends: res.data, isLoading: false });
+        saveFriendCache(res.data, get().pendingRequests);
+      })();
+      await friendsFetchPromise;
     } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+      if (!cache?.friends) set({ error: error.message, isLoading: false });
+    } finally {
+      friendsFetchPromise = null;
     }
   },
 
   fetchPending: async () => {
+    if (pendingFetchPromise) return pendingFetchPromise;
+
+    const cache = loadFriendCache();
+    if (cache?.pendingRequests) {
+      set({ pendingRequests: cache.pendingRequests, isLoading: false });
+    }
+
     try {
-      set({ isLoading: true, error: null });
-      const res = await api.get<PendingFriendResponse[]>("/users/friends/pending");
-      set({ pendingRequests: res.data, isLoading: false });
+      if (!cache?.pendingRequests) set({ isLoading: true, error: null });
+      pendingFetchPromise = (async () => {
+        const res = await api.get<PendingFriendResponse[]>("/users/friends/pending");
+        set({ pendingRequests: res.data, isLoading: false });
+        saveFriendCache(get().friends, res.data);
+      })();
+      await pendingFetchPromise;
     } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+      if (!cache?.pendingRequests) set({ error: error.message, isLoading: false });
+    } finally {
+      pendingFetchPromise = null;
     }
   },
 

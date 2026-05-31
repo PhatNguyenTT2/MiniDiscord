@@ -9,6 +9,13 @@ import { useAuthStore } from "@/stores/authStore";
 import { soundEngine } from "@/lib/soundEngine";
 import { cn } from "@/lib/utils";
 
+/**
+ * UserPanel — floating card at the bottom of SidebarWrapper.
+ * Mirrors MessageInput's positioning pattern exactly:
+ * - Outer: absolute inset-x-0, bottom: var(--floating-bar-gap), px-4, z-20
+ * - Inner: bg-[#232428], borderRadius: var(--floating-bar-radius), shadow
+ * Column backgrounds show through OUTSIDE the rounded card.
+ */
 export function UserPanel() {
   const { t } = useTranslation();
   const openSettings = useUIStore((s) => s.openSettings);
@@ -19,27 +26,23 @@ export function UserPanel() {
   if (!user) {
     return (
       <div
-        className="absolute inset-x-0 z-20 px-3"
+        className="absolute inset-x-0 z-20 px-2"
         style={{ bottom: "var(--floating-bar-gap)" }}
       >
         <div
-          className="flex items-center gap-2 px-3 shadow-[0_12px_30px_rgba(0,0,0,0.28)]"
+          className="flex items-center gap-2 px-4 shadow-[0_12px_30px_rgba(0,0,0,0.24)]"
           style={{
             minHeight: "var(--floating-user-panel-height)",
             borderRadius: "var(--floating-bar-radius)",
             backgroundColor: "#232428",
           }}
         >
-          {/* Skeleton avatar */}
           <div className="h-8 w-8 rounded-full bg-[#3f4147] animate-pulse shrink-0" />
-
           <div className="min-w-0 flex-1">
             <div className="h-3 w-16 rounded bg-[#3f4147] animate-pulse mb-1.5" />
             <div className="h-2.5 w-12 rounded bg-[#3f4147] animate-pulse" />
           </div>
-
           <div className="flex items-center gap-0.5">
-            {/* Settings button still accessible */}
             <button
               aria-label={t("userPanel.settings")}
               onClick={openSettings}
@@ -60,33 +63,29 @@ export function UserPanel() {
     | "dnd";
 
   function toggleMute() {
-    soundEngine?.play(isMuted ? 'unmute' : 'mute');
+    soundEngine?.play(isMuted ? "unmute" : "mute");
     setIsMuted((prev) => !prev);
   }
 
   function toggleDeafen() {
-    soundEngine?.play(isDeafened ? 'undeafen' : 'deafen');
+    soundEngine?.play(isDeafened ? "undeafen" : "deafen");
     setIsDeafened((prev) => {
       const next = !prev;
-      // Discord logic: deafen ON → force mute ON
-      if (next) {
-        setIsMuted(true);
-      }
+      if (next) setIsMuted(true);
       return next;
     });
   }
 
-  // Mic is visually muted if either isMuted or isDeafened
   const micActive = !isMuted;
   const headphoneActive = !isDeafened;
 
   return (
     <div
-      className="absolute inset-x-0 z-20 px-3"
+      className="absolute inset-x-0 z-20 px-2"
       style={{ bottom: "var(--floating-bar-gap)" }}
     >
       <div
-        className="flex items-center gap-2 px-3 shadow-[0_12px_30px_rgba(0,0,0,0.28)]"
+        className="flex items-center gap-2 px-4 shadow-[0_12px_30px_rgba(0,0,0,0.24)]"
         style={{
           minHeight: "var(--floating-user-panel-height)",
           borderRadius: "var(--floating-bar-radius)",
@@ -101,16 +100,15 @@ export function UserPanel() {
         />
 
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[14px] font-semibold text-foreground leading-tight">
+          <p className="truncate text-[15px] font-semibold text-foreground leading-tight">
             {user.username}
           </p>
-          <p className="truncate text-[12px] text-muted-foreground leading-tight">
+          <p className="truncate text-[13px] text-muted-foreground leading-tight">
             {t(`status.${statusKey}`)}
           </p>
         </div>
 
         <div className="flex items-center gap-0.5">
-          {/* Microphone */}
           <button
             aria-label={t("userPanel.muteMic")}
             onClick={toggleMute}
@@ -128,7 +126,6 @@ export function UserPanel() {
             )}
           </button>
 
-          {/* Headphones */}
           <button
             aria-label={t("userPanel.deafen")}
             onClick={toggleDeafen}
@@ -146,7 +143,6 @@ export function UserPanel() {
             )}
           </button>
 
-          {/* Settings */}
           <button
             aria-label={t("userPanel.settings")}
             onClick={openSettings}

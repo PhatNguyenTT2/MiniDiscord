@@ -27,11 +27,8 @@ export function usePrefetch() {
       ]);
 
       const hasFailure = results.some((r) => r.status === "rejected");
-      const { error: roomError } = useRoomStore.getState();
-      const { error: friendError } = useFriendStore.getState();
-      const hasStoreError = roomError !== null || friendError !== null;
 
-      if ((hasFailure || hasStoreError) && attempt < MAX_RETRIES) {
+      if (hasFailure && attempt < MAX_RETRIES) {
         const delay = BASE_DELAY * Math.pow(2, attempt);
         console.warn(`[Prefetch] Retry ${attempt + 1}/${MAX_RETRIES} in ${delay}ms`);
         setTimeout(() => prefetchWithRetry(attempt + 1), delay);

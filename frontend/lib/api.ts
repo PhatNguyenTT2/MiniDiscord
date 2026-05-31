@@ -20,10 +20,17 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Response interceptor: handle 401
+// Response interceptor: handle 401 and 429
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    if (error.response?.status === 429 && !error.config.__retried) {
+      error.config.__retried = true;
+      const retryAfter = parseInt(error.response.headers?.['retry-after'] || '2', 10);
+      await new Promise(r => setTimeout(r, retryAfter * 1000));
+      return api.request(error.config);
+    }
+
     if (!error.response && error.code === "ERR_NETWORK") {
       useNetworkStore.getState().setWsStatus("disconnected");
     }

@@ -103,11 +103,12 @@
   --channel-sidebar-width: 300px;
   --member-list-width: 240px;
 
-  /* Floating bottom bars */
-  --floating-bar-gap: 12px;
-  --floating-bar-radius: 12px;
-  --floating-user-panel-height: 58px;
-  --floating-user-panel-offset: 82px;
+  /* Floating bottom bars — shared between UserPanel & MessageInput */
+  --floating-bar-gap: 16px;
+  --floating-bar-radius: 10px;
+  --floating-user-panel-height: 56px;
+  --floating-user-panel-offset: 88px;
+  /* gap + height + gap */
   --floating-message-input-offset: 132px;
 }
 

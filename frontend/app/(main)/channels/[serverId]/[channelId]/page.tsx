@@ -1,7 +1,6 @@
 "use client";
 
-import { ServerList } from "@/components/sidebar/ServerList";
-import { UserPanel } from "@/components/sidebar/UserPanel";
+import { SidebarWrapper } from "@/components/sidebar/SidebarWrapper";
 import { ChannelList } from "@/components/sidebar/ChannelList";
 import { ChatHeader } from "@/components/chat/ChatHeader";
 import { MessageList, type MessageListHandle } from "@/components/chat/MessageList";
@@ -162,20 +161,10 @@ export default function ChannelPage() {
 
   return (
     <>
-      {/* Left shell combines columns 1 + 2 and keeps a bottom lane free for the floating user panel. */}
-      <div
-        className="relative flex shrink-0 flex-col bg-background-tertiary border-r border-border"
-        style={{ paddingBottom: "var(--floating-user-panel-offset)" }}
-      >
-        <div className="flex flex-1 min-h-0 overflow-hidden">
-          {/* Column 1: Server List */}
-          <ServerList />
-          {/* Column 2: Channel List */}
-          <ChannelList />
-        </div>
-        {/* UserPanel spanning columns 1+2 */}
-        <UserPanel />
-      </div>
+      {/* Column 1+2: ServerList + Channel Sidebar + UserPanel */}
+      <SidebarWrapper>
+        <ChannelList />
+      </SidebarWrapper>
 
       {/* Resize Handle */}
       <ResizeHandle onResize={handleResize} />

@@ -176,7 +176,7 @@ export function ChannelList() {
       {/* Channel List */}
       <ScrollArea className="flex-1 px-3 pt-4">
         {displayRoomId && (
-          <>
+          <div className="pb-[var(--floating-user-panel-offset)]">
             <ChannelCategory
               roomId={displayRoomId}
               title={t("channels.textChannels")}
@@ -193,7 +193,7 @@ export function ChannelList() {
               onChannelClick={handleChannelClick}
               onAddClick={canCreateChannel ? () => handleAddChannel("VOICE") : undefined}
             />
-          </>
+          </div>
         )}
       </ScrollArea>
 
