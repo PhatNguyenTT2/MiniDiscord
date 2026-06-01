@@ -18,6 +18,7 @@ import { getStompClient } from "@/lib/websocket";
 import { useParams } from "next/navigation";
 import { useCallback, useRef, useState, useEffect } from "react";
 import { type Message } from "@/types";
+import { VoiceChannelView } from "@/components/voice/VoiceChannelView";
 
 export default function ChannelPage() {
   const params = useParams();
@@ -163,6 +164,10 @@ export default function ChannelPage() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  const roomChannels = roomId ? (channels[roomId] || []) : [];
+  const currentChannelObj = roomChannels.find((c) => c.id === channelId);
+  const isVoiceChannel = currentChannelObj?.type === "VOICE";
+
   return (
     <>
       {/* Column 1+2: ServerList + Channel Sidebar + UserPanel */}
@@ -174,32 +179,40 @@ export default function ChannelPage() {
       <ResizeHandle onResize={handleResize} />
 
       {/* Column 3 is the positioning context for the floating message composer. */}
-      <main className="relative flex flex-1 min-w-0 flex-col bg-[#313338]">
-        <ChatHeader channelName={channelName} />
-        <MessageList
-          ref={messageListRef}
-          messages={messages}
-          channelName={channelName}
+      {isVoiceChannel ? (
+        <VoiceChannelView
           channelId={channelId}
           roomId={roomId}
-          onMarkAsReadBackend={markChannelAsRead}
-          onScrollStateChange={handleScrollStateChange}
+          channelName={channelName}
         />
-
-        {/* Input wrapper — relative context for floating banner */}
-        <div className="relative">
-          <ScrollToBottomBanner
-            visible={showJumpBanner}
-            onJumpToPresent={() => messageListRef.current?.scrollToBottom()}
-          />
-          <MessageInput
-            channelId={channelId}
+      ) : (
+        <main className="relative flex flex-1 min-w-0 flex-col bg-[#313338]">
+          <ChatHeader channelName={channelName} />
+          <MessageList
+            ref={messageListRef}
+            messages={messages}
             channelName={channelName}
-            onSend={handleSend}
-            onTyping={handleTyping}
+            channelId={channelId}
+            roomId={roomId}
+            onMarkAsReadBackend={markChannelAsRead}
+            onScrollStateChange={handleScrollStateChange}
           />
-        </div>
-      </main>
+
+          {/* Input wrapper — relative context for floating banner */}
+          <div className="relative">
+            <ScrollToBottomBanner
+              visible={showJumpBanner}
+              onJumpToPresent={() => messageListRef.current?.scrollToBottom()}
+            />
+            <MessageInput
+              channelId={channelId}
+              channelName={channelName}
+              onSend={handleSend}
+              onTyping={handleTyping}
+            />
+          </div>
+        </main>
+      )}
 
       {/* Column 4: Member List (toggleable with slide animation) */}
       <SlidingPanel show={showMemberList} width={240}>

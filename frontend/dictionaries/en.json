@@ -267,8 +267,46 @@
     "connecting": "Reconnecting...",
     "connected": "Connected!"
   },
+  "channelSettings": {
+    "title": "Channel Settings",
+    "overview": "Overview",
+    "permissions": "Permissions",
+    "deleteChannel": "Delete Channel",
+    "channelName": "Channel Name",
+    "channelTopic": "Channel Topic",
+    "topicPlaceholder": "Include a topic for this channel",
+    "privateChannel": "Private Channel",
+    "privateDesc": "If private, only selected members and roles will be able to view this channel.",
+    "permissionsTitle": "Channel Permissions",
+    "permissionsDesc": "Use permissions to customize what actions members can take in this channel.",
+    "deleteConfirm": "Are you sure you want to delete ",
+    "deleteConfirmSuffix": "? This action cannot be undone.",
+    "deleteAction": "Delete Channel",
+    "saveChanges": "Save Changes",
+    "reset": "Reset",
+    "unsavedWarning": "Careful – you have unsaved changes!",
+    "textChannel": "TEXT CHANNEL",
+    "voiceChannel": "VOICE CHANNEL",
+    "cannotDeleteLast": "Cannot delete the last channel of a server"
+  },
   "common": {
     "error": "Error",
     "remove": "Remove"
+  },
+  "voice": {
+    "connectedStatus": "Voice Connected",
+    "disconnect": "Disconnect",
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "deafen": "Deafen",
+    "undeafen": "Undeafen",
+    "channelFull": "Voice channel is full",
+    "joinVoice": "Join Voice Channel",
+    "incomingCall": "Incoming Call",
+    "accept": "Accept",
+    "decline": "Decline",
+    "callEnded": "Call ended",
+    "startCall": "Start Call",
+    "inviteToChannel": "Invite to Voice"
   }
 }

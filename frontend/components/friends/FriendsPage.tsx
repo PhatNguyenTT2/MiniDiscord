@@ -175,7 +175,7 @@ function FriendItem({
   async function handleNavigate() {
     if (!isPending) {
       // Lazy DM: navigate immediately — room creation happens on first message send
-      router.push(`/channels/@me/${user.id}`);
+      router.push(`/channels/me/${user.id}`);
     }
   }
 

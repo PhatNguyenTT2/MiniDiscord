@@ -267,8 +267,46 @@
     "connecting": "Đang kết nối lại...",
     "connected": "Đã kết nối!"
   },
+  "channelSettings": {
+    "title": "Cài Đặt Kênh",
+    "overview": "Tổng quan",
+    "permissions": "Quyền hạn",
+    "deleteChannel": "Xóa Kênh",
+    "channelName": "Tên Kênh",
+    "channelTopic": "Chủ Đề Kênh",
+    "topicPlaceholder": "Thêm một chủ đề cho kênh",
+    "privateChannel": "Kênh Riêng",
+    "privateDesc": "Nếu đặt kênh ở chế độ riêng tư, chỉ có thành viên và vai trò được chọn mới có thể nhìn thấy kênh này.",
+    "permissionsTitle": "Quyền Của Kênh",
+    "permissionsDesc": "Sử dụng quyền để tùy chỉnh ai có thể thực hiện những gì trong kênh này.",
+    "deleteConfirm": "Bạn có chắc chắn muốn xóa ",
+    "deleteConfirmSuffix": "? Hành động này không thể hoàn tác.",
+    "deleteAction": "Xóa Kênh",
+    "saveChanges": "Lưu Thay Đổi",
+    "reset": "Đặt Lại",
+    "unsavedWarning": "Hãy cẩn thận – bạn chưa lưu các thay đổi!",
+    "textChannel": "KÊNH CHAT",
+    "voiceChannel": "KÊNH THOẠI",
+    "cannotDeleteLast": "Không thể xóa kênh cuối cùng của server"
+  },
   "common": {
     "error": "Lỗi",
     "remove": "Xóa"
+  },
+  "voice": {
+    "connectedStatus": "Đã kết nối giọng nói",
+    "disconnect": "Ngắt kết nối",
+    "mute": "Tắt tiếng",
+    "unmute": "Bật tiếng",
+    "deafen": "Tắt âm",
+    "undeafen": "Bật âm",
+    "channelFull": "Kênh thoại đã đầy",
+    "joinVoice": "Tham gia kênh thoại",
+    "incomingCall": "Cuộc gọi đến",
+    "accept": "Chấp nhận",
+    "decline": "Từ chối",
+    "callEnded": "Cuộc gọi kết thúc",
+    "startCall": "Bắt đầu cuộc gọi",
+    "inviteToChannel": "Mời vào Kênh Thoại"
   }
 }

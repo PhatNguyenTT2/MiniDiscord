@@ -32,7 +32,7 @@ export function ServerList() {
 
   // Derive active room from current URL
   const activeRoomId = (params?.serverId as string) || null;
-  const isDashboard = pathname?.includes("/channels/@me") || pathname?.startsWith("/channels/me") || pathname === "/channels";
+  const isDashboard = pathname?.startsWith("/channels/me") || pathname === "/channels";
 
   function handleServerClick(roomId: string) {
     const roomChannels = channels[roomId] || [];
@@ -46,11 +46,11 @@ export function ServerList() {
     <div className="flex h-full w-[72px] flex-col items-center bg-background-tertiary py-3">
       <ScrollArea className="flex-1 w-full">
         <div className="flex flex-col items-center gap-2 px-3">
-          {/* DM Button — navigates to /channels/@me */}
+          {/* DM Button — navigates to /channels/me */}
           <Tooltip>
             <TooltipTrigger asChild>
               <button
-                onClick={() => router.push("/channels/@me")}
+                onClick={() => router.push("/channels/me")}
                 className={cn(
                   "flex h-12 w-12 items-center justify-center transition-all duration-200 cursor-pointer",
                   isDashboard

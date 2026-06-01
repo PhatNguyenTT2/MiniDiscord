@@ -17,7 +17,7 @@ export function ReverseAuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (isHydrated && isAuthenticated) {
-      router.push("/channels/@me");
+      router.push("/channels/me");
     }
   }, [isHydrated, isAuthenticated, router]);
 

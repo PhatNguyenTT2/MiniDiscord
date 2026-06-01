@@ -3,6 +3,7 @@ package com.discordmini.groupchannel.controller;
 import com.discordmini.common.dto.ApiResponse;
 import com.discordmini.groupchannel.model.dto.ChannelRequest;
 import com.discordmini.groupchannel.model.dto.ChannelResponse;
+import com.discordmini.groupchannel.model.dto.UpdateChannelRequest;
 import com.discordmini.groupchannel.model.entity.Channel;
 import com.discordmini.groupchannel.service.ChannelService;
 import jakarta.validation.Valid;
@@ -27,14 +28,7 @@ public class ChannelController {
             @PathVariable UUID roomId,
             @Valid @RequestBody ChannelRequest request) {
         Channel channel = channelService.createChannel(roomId, requesterId, request);
-        ChannelResponse response = ChannelResponse.builder()
-                .id(channel.getId())
-                .roomId(channel.getRoom().getId())
-                .name(channel.getName())
-                .type(channel.getType().name())
-                .position(channel.getPosition())
-                .createdAt(channel.getCreatedAt())
-                .build();
+        ChannelResponse response = mapToResponse(channel);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Channel created successfully", response));
     }
@@ -43,5 +37,37 @@ public class ChannelController {
     public ResponseEntity<ApiResponse<List<ChannelResponse>>> getChannels(@PathVariable UUID roomId) {
         List<ChannelResponse> channels = channelService.getChannels(roomId);
         return ResponseEntity.ok(ApiResponse.ok("Channels fetched", channels));
+    }
+
+    @PutMapping("/rooms/{roomId}/channels/{channelId}")
+    public ResponseEntity<ApiResponse<ChannelResponse>> updateChannel(
+            @RequestHeader("X-User-Id") UUID requesterId,
+            @PathVariable UUID roomId,
+            @PathVariable UUID channelId,
+            @Valid @RequestBody UpdateChannelRequest request) {
+        ChannelResponse response = channelService.updateChannel(roomId, channelId, requesterId, request);
+        return ResponseEntity.ok(ApiResponse.ok("Channel updated successfully", response));
+    }
+
+    @DeleteMapping("/rooms/{roomId}/channels/{channelId}")
+    public ResponseEntity<ApiResponse<Void>> deleteChannel(
+            @RequestHeader("X-User-Id") UUID requesterId,
+            @PathVariable UUID roomId,
+            @PathVariable UUID channelId) {
+        channelService.deleteChannel(roomId, channelId, requesterId);
+        return ResponseEntity.ok(ApiResponse.ok("Channel deleted successfully", null));
+    }
+
+    private ChannelResponse mapToResponse(Channel channel) {
+        return ChannelResponse.builder()
+                .id(channel.getId())
+                .roomId(channel.getRoom().getId())
+                .name(channel.getName())
+                .type(channel.getType().name())
+                .position(channel.getPosition())
+                .createdAt(channel.getCreatedAt())
+                .topic(channel.getTopic())
+                .isPrivate(channel.getIsPrivate())
+                .build();
     }
 }

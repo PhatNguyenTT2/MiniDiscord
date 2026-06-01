@@ -23,7 +23,10 @@ export interface Channel {
   name: string;
   type: "TEXT" | "VOICE";
   position: number;
+  topic?: string | null;
+  isPrivate?: boolean;
 }
+
 
 export interface CreateRoomRequest {
   name: string;

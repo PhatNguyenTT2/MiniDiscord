@@ -1,59 +1,128 @@
-"use client";
-
 import { useState, useEffect } from "react";
-import { useRouter, useParams, usePathname } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { ScrollArea } from "@/components/ui/ScrollArea";
-import { Hash, Volume2, ChevronDown, ChevronRight, Plus } from "lucide-react";
+import { Hash, Volume2, ChevronDown, ChevronRight, Plus, Settings, MicOff, HeadphoneOff } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/uiStore";
 import { useRoomStore } from "@/stores/roomStore";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { useAuthStore } from "@/stores/authStore";
+import { useVoiceStore } from "@/stores/voiceStore";
 import { soundEngine } from "@/lib/soundEngine";
-import { CreateChannelModal } from "../server/CreateChannelModal";
+import { CreateChannelModal } from "@/components/server/CreateChannelModal";
+import { EditChannelModal } from "@/components/server/EditChannelModal";
 import type { Channel } from "@/types";
+
+
+
+interface ChannelItemProps {
+  roomId: string;
+  channel: Channel;
+  isActive: boolean;
+  onClick: () => void;
+  onSettingsClick?: (channel: Channel) => void;
+  canEdit: boolean;
+}
 
 function ChannelItem({
   roomId,
   channel,
   isActive,
   onClick,
-}: {
-  roomId: string;
-  channel: Channel;
-  isActive: boolean;
-  onClick: () => void;
-}) {
+  onSettingsClick,
+  canEdit,
+}: ChannelItemProps) {
   const getUnreadCount = useNotificationStore((s) => s.getUnreadCount);
   const count = getUnreadCount(channel.id);
   const hasUnread = count > 0 && !isActive;
 
+  const participants = useVoiceStore((s) => s.channelParticipants[channel.id] || []);
   const Icon = channel.type === "TEXT" ? Hash : Volume2;
 
   return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "group flex w-full items-center justify-between rounded-md px-3 py-1.5 text-[15px] transition-colors duration-150 cursor-pointer",
-        isActive
-          ? "bg-secondary text-foreground font-medium"
-          : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
-        hasUnread && !isActive && "text-foreground font-medium"
-      )}
-    >
-      <div className="flex items-center gap-2 min-w-0">
-        <Icon className={cn("h-4 w-4 shrink-0", hasUnread ? "text-foreground opacity-100" : "opacity-60")} />
-        <span className="truncate">{channel.name}</span>
-      </div>
+    <div className="flex flex-col">
+      <button
+        onClick={onClick}
+        className={cn(
+          "group flex w-full items-center justify-between rounded-md px-3 py-1.5 text-[15px] transition-colors duration-150 cursor-pointer",
+          isActive
+            ? "bg-secondary text-foreground font-medium"
+            : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
+          hasUnread && !isActive && "text-foreground font-medium"
+        )}
+      >
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <Icon className={cn("h-4 w-4 shrink-0", hasUnread ? "text-foreground opacity-100" : "opacity-60")} />
+          <span className="truncate">{channel.name}</span>
+        </div>
 
-      {hasUnread && (
-        <div className="flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-white leading-none">
-          {count > 99 ? "99+" : count}
+        {hasUnread && (
+          <div className="flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-white leading-none group-hover:hidden">
+            {count > 99 ? "99+" : count}
+          </div>
+        )}
+
+        {canEdit && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSettingsClick?.(channel);
+            }}
+            className="hidden group-hover:block ml-2 text-muted-foreground hover:text-foreground transition-all shrink-0 cursor-pointer"
+            aria-label="Channel Settings"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
+        )}
+      </button>
+
+      {/* Voice Participants List */}
+      {channel.type === "VOICE" && participants.length > 0 && (
+        <div className="space-y-0.5 mt-0.5 mb-1.5 pl-6 pr-2">
+          {participants.map((p) => (
+            <div
+              key={p.userId}
+              className="flex items-center gap-2 py-0.5 rounded transition-colors group/participant cursor-default"
+            >
+              {p.avatarUrl ? (
+                <img
+                  src={p.avatarUrl}
+                  alt={p.username}
+                  className="h-5 w-5 rounded-full shrink-0 object-cover"
+                />
+              ) : (
+                <div className="h-5 w-5 rounded-full bg-[#5865f2]/20 flex items-center justify-center shrink-0">
+                  <span className="text-[10px] font-bold text-[#5865f2] uppercase">
+                    {p.username.substring(0, 2)}
+                  </span>
+                </div>
+              )}
+              <span className="text-[13px] text-[#949ba4] font-medium truncate select-none">
+                {p.username}
+              </span>
+              <div className="flex items-center gap-0.5 ml-auto shrink-0">
+                {p.deafened && <HeadphoneOff className="h-3.5 w-3.5 text-[#ed4245]" />}
+                {p.muted && !p.deafened && <MicOff className="h-3.5 w-3.5 text-[#ed4245]" />}
+              </div>
+            </div>
+          ))}
         </div>
       )}
-    </button>
+    </div>
   );
+}
+
+interface ChannelCategoryProps {
+  roomId: string;
+  title: string;
+  channels: Channel[];
+  activeChannelId: string | null;
+  onChannelClick: (channelId: string) => void;
+  onAddClick?: () => void;
+  onSettingsClick?: (channel: Channel) => void;
+  canEdit: boolean;
 }
 
 function ChannelCategory({
@@ -63,14 +132,9 @@ function ChannelCategory({
   activeChannelId,
   onChannelClick,
   onAddClick,
-}: {
-  roomId: string;
-  title: string;
-  channels: Channel[];
-  activeChannelId: string | null;
-  onChannelClick: (channelId: string) => void;
-  onAddClick?: () => void;
-}) {
+  onSettingsClick,
+  canEdit,
+}: ChannelCategoryProps) {
   const [isOpen, setIsOpen] = useState(true);
 
   return (
@@ -110,6 +174,8 @@ function ChannelCategory({
               channel={ch}
               isActive={ch.id === activeChannelId}
               onClick={() => onChannelClick(ch.id)}
+              onSettingsClick={onSettingsClick}
+              canEdit={canEdit}
             />
           ))}
         </div>
@@ -122,13 +188,14 @@ export function ChannelList() {
   const { t } = useTranslation();
   const router = useRouter();
   const params = useParams();
-  const pathname = usePathname();
   const sidebarWidth = useUIStore((s) => s.sidebarWidth);
+
   const { rooms, channels, getMyRoleInRoom } = useRoomStore();
   const currentUserId = useAuthStore((s) => s.user?.id);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createDefaultType, setCreateDefaultType] = useState<"TEXT" | "VOICE">("TEXT");
+  const [editChannel, setEditChannel] = useState<Channel | null>(null);
 
   // Derive active channel and room from URL params
   const activeChannelId = (params?.channelId as string) || null;
@@ -143,12 +210,18 @@ export function ChannelList() {
   const voiceChannels = roomChannels.filter((c) => c.type === "VOICE");
 
   const myRole = displayRoomId && currentUserId ? getMyRoleInRoom(displayRoomId, currentUserId) : null;
-  const canCreateChannel = myRole === "OWNER" || myRole === "ADMIN";
+  const canEditChannel = myRole === "OWNER" || myRole === "ADMIN";
+
+  useEffect(() => {
+    if (displayRoomId && voiceChannels.length > 0) {
+      useVoiceStore.getState().fetchVoiceStates(displayRoomId, voiceChannels.map(c => c.id));
+    }
+  }, [displayRoomId, voiceChannels.length]);
 
   function handleChannelClick(channelId: string) {
     const channel = roomChannels.find(c => c.id === channelId);
     if (channel?.type === "VOICE") {
-      soundEngine?.play("voice_join");
+      useVoiceStore.getState().joinVoiceChannel(displayRoomId!, channelId);
     }
     if (displayRoomId) {
       router.push(`/channels/${displayRoomId}/${channelId}`);
@@ -183,7 +256,9 @@ export function ChannelList() {
               channels={textChannels}
               activeChannelId={activeChannelId}
               onChannelClick={handleChannelClick}
-              onAddClick={canCreateChannel ? () => handleAddChannel("TEXT") : undefined}
+              onAddClick={canEditChannel ? () => handleAddChannel("TEXT") : undefined}
+              onSettingsClick={setEditChannel}
+              canEdit={canEditChannel}
             />
             <ChannelCategory
               roomId={displayRoomId}
@@ -191,7 +266,9 @@ export function ChannelList() {
               channels={voiceChannels}
               activeChannelId={activeChannelId}
               onChannelClick={handleChannelClick}
-              onAddClick={canCreateChannel ? () => handleAddChannel("VOICE") : undefined}
+              onAddClick={canEditChannel ? () => handleAddChannel("VOICE") : undefined}
+              onSettingsClick={setEditChannel}
+              canEdit={canEditChannel}
             />
           </div>
         )}
@@ -205,6 +282,16 @@ export function ChannelList() {
           defaultType={createDefaultType}
         />
       )}
+
+      {editChannel && displayRoomId && (
+        <EditChannelModal
+          isOpen={!!editChannel}
+          onClose={() => setEditChannel(null)}
+          roomId={displayRoomId}
+          channel={editChannel}
+        />
+      )}
     </div>
   );
 }
+

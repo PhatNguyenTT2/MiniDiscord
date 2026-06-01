@@ -2,6 +2,7 @@
 
 import { ServerList } from "@/components/sidebar/ServerList";
 import { UserPanel } from "@/components/sidebar/UserPanel";
+import { VoiceConnectedPanel } from "@/components/voice/VoiceConnectedPanel";
 
 /**
  * SidebarWrapper — merges Column 1 (ServerList) + Column 2 (sidebar content).
@@ -19,7 +20,8 @@ export function SidebarWrapper({ children }: { children: React.ReactNode }) {
         {children}
       </div>
 
-      {/* UserPanel: absolute overlay at bottom, NO background — transparent */}
+      {/* UserPanel + VoiceConnectedPanel: absolute overlay at bottom */}
+      <VoiceConnectedPanel />
       <UserPanel />
     </div>
   );

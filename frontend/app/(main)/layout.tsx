@@ -8,6 +8,7 @@ import { AuthGuard } from "@/components/providers/AuthGuard";
 import { ConnectionStatusBanner } from "@/components/ui/ConnectionStatusBanner";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { useSound } from "@/hooks/useSound";
+import { IncomingCallModal } from "@/components/voice/IncomingCallModal";
 
 export default function MainLayout({
   children,
@@ -27,6 +28,9 @@ export default function MainLayout({
         <div className="flex h-screen overflow-hidden">
           {children}
         </div>
+
+        {/* Global call popup modal portal */}
+        <IncomingCallModal />
 
         {/* Settings Overlay */}
         {showSettings && <SettingsOverlay onClose={closeSettings} />}

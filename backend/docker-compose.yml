@@ -285,6 +285,8 @@ services:
       - RABBITMQ_VHOST=/
       - RABBITMQ_SSL=false
       - JWT_SECRET=${JWT_SECRET}
+      - METERED_DOMAIN=${METERED_DOMAIN:-}
+      - METERED_SECRET_KEY=${METERED_SECRET_KEY:-}
     deploy:
       resources:
         limits:

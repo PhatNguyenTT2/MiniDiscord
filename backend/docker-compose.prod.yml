@@ -132,6 +132,8 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=prod
       - EUREKA_URL=http://discovery-server:8761/eureka/
+      - METERED_DOMAIN=${METERED_DOMAIN:-}
+      - METERED_SECRET_KEY=${METERED_SECRET_KEY:-}
     deploy:
       resources:
         limits:

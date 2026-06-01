@@ -22,6 +22,8 @@ import { useFriendStore } from "@/stores/friendStore";
 import { useRoomStore } from "@/stores/roomStore";
 import { getStompClient } from "@/lib/websocket";
 import { type Message } from "@/types";
+import { useVoiceStore } from "@/stores/voiceStore";
+import { DmCallView } from "@/components/voice/DmCallView";
 
 function getMutualServersCount(userId: string) {
   // TODO: Implement mutual servers logic with real API
@@ -146,6 +148,7 @@ export default function DmChatPage() {
   const friendAvatar = friend?.user.avatarUrl || roomMember?.avatarUrl || null;
   // Prefer friendStore (real-time PRESENCE_UPDATE), then roomStore.members (also synced)
   const friendStatus = friend?.user.status ?? roomMember?.status ?? "OFFLINE";
+  const activeCallRoomId = useVoiceStore((s) => s.activeCallRoomId);
 
   // Build avatar lookup map for chat messages (covers both current user + recipient)
   const memberAvatarMap = useMemo(() => {
@@ -391,7 +394,15 @@ export default function DmChatPage() {
           </div>
           <div className="flex items-center gap-4 ml-auto">
             <div className="flex items-center gap-1">
-              <button className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+              <button
+                onClick={() => {
+                  if (roomId && userId) {
+                    useVoiceStore.getState().startCall(roomId, userId);
+                  }
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-md text-[#23a55a] hover:text-[#1a7f43] bg-[#23a55a]/10 hover:bg-[#23a55a]/20 transition-all duration-150 cursor-pointer shadow-sm animate-pulse"
+                title={t("voice.startCall")}
+              >
                 <Phone className="h-5 w-5" />
               </button>
               <button className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
@@ -452,6 +463,14 @@ export default function DmChatPage() {
 
           {/* Chat content container */}
           <div className="flex flex-1 flex-col min-w-0 relative">
+            {activeCallRoomId === roomId && (
+              <DmCallView
+                roomId={roomId}
+                recipientId={userId}
+                recipientName={friendName}
+                recipientAvatar={friendAvatar}
+              />
+            )}
 
             {/* Messages */}
             {(isLoadingMessages && messages.length === 0) ? (

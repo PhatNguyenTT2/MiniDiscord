@@ -32,6 +32,13 @@ public class Channel {
     @Column(nullable = false, length = 20)
     private ChannelType type;
 
+    @Column(length = 1024)
+    private String topic;
+
+    @Column(name = "is_private", nullable = false)
+    @Builder.Default
+    private Boolean isPrivate = false;
+
     @Column(nullable = false)
     @Builder.Default
     private Integer position = 0;

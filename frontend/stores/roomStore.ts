@@ -62,9 +62,12 @@ interface RoomState {
   updateMemberStatus: (userId: string, status: string) => void;
   touchRoomActivity: (roomId: string) => void;
   createChannel: (roomId: string, name: string, type: "TEXT" | "VOICE") => Promise<Channel>;
+  updateChannel: (roomId: string, channelId: string, data: { name?: string; topic?: string | null; isPrivate?: boolean }) => Promise<Channel>;
+  deleteChannel: (roomId: string, channelId: string) => Promise<void>;
   getMyRoleInRoom: (roomId: string, userId: string) => "OWNER" | "ADMIN" | "MEMBER" | null;
   refreshAllDmMembers: () => Promise<void>;
 }
+
 
 export const useRoomStore = create<RoomState>((set, get) => ({
   rooms: [],
@@ -98,7 +101,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       const activeRoomId = typeof window !== 'undefined'
         ? window.location.pathname.match(/\/channels\/([^/]+)/)?.[1]
         : null;
-      const activeRoom = activeRoomId && activeRoomId !== '@me'
+      const activeRoom = activeRoomId && activeRoomId !== '@me' && activeRoomId !== 'me'
         ? rooms.find(r => r.id === activeRoomId)
         : null;
 
@@ -248,6 +251,29 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     }
   },
 
+  updateChannel: async (roomId: string, channelId: string, data: { name?: string; topic?: string | null; isPrivate?: boolean }) => {
+    try {
+      clearCache();
+      const res = await api.put<{ message: string; data: Channel }>(`/rooms/${roomId}/channels/${channelId}`, data);
+      await get().fetchChannels(roomId);
+      return res.data.data;
+    } catch (error: any) {
+      set({ error: error.message });
+      throw error;
+    }
+  },
+
+  deleteChannel: async (roomId: string, channelId: string) => {
+    try {
+      clearCache();
+      await api.delete(`/rooms/${roomId}/channels/${channelId}`);
+      await get().fetchChannels(roomId);
+    } catch (error: any) {
+      set({ error: error.message });
+      throw error;
+    }
+  },
+
   getMyRoleInRoom: (roomId: string, userId: string) => {
     const roomMembers = get().members[roomId] || [];
     const me = roomMembers.find(m => m.userId === userId);
@@ -259,3 +285,4 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     await Promise.all(dmRooms.map(r => get().fetchMembers(r.id)));
   },
 }));
+

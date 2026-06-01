@@ -16,6 +16,7 @@ import { clearRoomCache } from "@/stores/roomStore";
 import { useNetworkStore } from "@/stores/networkStore";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { useUIStore } from "@/stores/uiStore";
+import { useVoiceStore } from "@/stores/voiceStore";
 import { soundEngine } from "@/lib/soundEngine";
 
 /**
@@ -57,6 +58,11 @@ export function useWebSocket() {
       const notifKey = "/user/queue/notifications";
       const notifSub = client.subscribe(notifKey, handleNotification);
       subscriptionsRef.current.set(notifKey, notifSub);
+
+      // ── Voice signaling subscription ──
+      const voiceKey = "/user/queue/voice";
+      const voiceSub = client.subscribe(voiceKey, handleVoiceMessage);
+      subscriptionsRef.current.set(voiceKey, voiceSub);
 
       // Re-subscribe to ALL current rooms immediately to prevent message drop
       const currentRooms = useRoomStore.getState().rooms;
@@ -127,6 +133,12 @@ function handleRoomMessage(msg: IMessage) {
 
     if (eventType === "MESSAGE_EDITED") {
       useChatStore.getState().updateMessage(data.channelId, data.messageId, data.content, data.editedAt || new Date().toISOString());
+      return;
+    }
+
+    if (eventType === "VOICE_STATE_UPDATE") {
+      console.log("[STOMP] VOICE_STATE_UPDATE:", data.data);
+      useVoiceStore.getState().handleVoiceStateUpdate(data.data);
       return;
     }
 
@@ -230,5 +242,90 @@ function handleNotification(msg: IMessage) {
     }
   } catch (e) {
     console.error("[STOMP] Failed to parse notification:", e);
+  }
+}
+
+// ── Voice Message signaling handler ──────────────────────────────
+function handleVoiceMessage(msg: IMessage) {
+  try {
+    const data = JSON.parse(msg.body);
+    const type = data.type || data.eventType;
+    console.log("[STOMP] handleVoiceMessage received:", type, data);
+
+    switch (type) {
+      case "VOICE_PEERS":
+        if (data.peers && Array.isArray(data.peers)) {
+          data.peers.forEach((peerId: string) => {
+            useVoiceStore.getState().handleSignal({ type: "INITIATE_OFFER", peerId });
+          });
+        }
+        break;
+      case "SIGNAL_OFFER":
+      case "OFFER":
+        useVoiceStore.getState().handleSignal({
+          type: "SIGNAL_OFFER",
+          fromUserId: data.senderId || data.fromUserId,
+          payload: data.payload,
+        });
+        break;
+      case "SIGNAL_ANSWER":
+      case "ANSWER":
+        useVoiceStore.getState().handleSignal({
+          type: "SIGNAL_ANSWER",
+          fromUserId: data.senderId || data.fromUserId,
+          payload: data.payload,
+        });
+        break;
+      case "SIGNAL_ICE":
+      case "ICE":
+        useVoiceStore.getState().handleSignal({
+          type: "SIGNAL_ICE",
+          fromUserId: data.senderId || data.fromUserId,
+          payload: data.payload,
+        });
+        break;
+      case "CALL_INCOMING":
+        useVoiceStore.getState().handleCallEvent({
+          action: "RING",
+          roomId: data.roomId,
+          callerId: data.callerId,
+          callerName: data.callerName,
+          callerAvatar: data.callerAvatar,
+          targetUserId: data.targetUserId,
+        });
+        break;
+      case "CALL_ACCEPTED":
+        useVoiceStore.getState().handleCallEvent({
+          action: "ACCEPT",
+          roomId: data.roomId,
+          callerId: data.callerId,
+          callerName: data.callerName,
+          callerAvatar: data.callerAvatar,
+          targetUserId: data.targetUserId,
+        });
+        break;
+      case "CALL_DECLINED":
+        useVoiceStore.getState().handleCallEvent({
+          action: "DECLINE",
+          roomId: data.roomId,
+          callerId: data.callerId,
+          callerName: data.callerName,
+          callerAvatar: data.callerAvatar,
+          targetUserId: data.targetUserId,
+        });
+        break;
+      case "CALL_ENDED":
+        useVoiceStore.getState().handleCallEvent({
+          action: "END",
+          roomId: data.roomId,
+          callerId: data.callerId,
+          callerName: data.callerName,
+          callerAvatar: data.callerAvatar,
+          targetUserId: data.targetUserId,
+        });
+        break;
+    }
+  } catch (e) {
+    console.error("[STOMP] Failed to parse voice message:", e);
   }
 }

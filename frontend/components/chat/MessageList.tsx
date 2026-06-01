@@ -168,11 +168,15 @@ export const MessageList = memo(forwardRef<MessageListHandle, MessageListProps>(
 
       const msgs = storeState.getChannelMessages(cid);
       if (msgs.length === 0) {
-        // Empty channel (e.g. just created): show welcome header, no scroll needed
+        // Empty channel (e.g. just created): show welcome header, scroll to bottom to prevent composer cover overlap
         setIsPositioned(true);
         isAtBottomRef.current = true;
         hasReachedBottomRef.current = true;
         onScrollStateChange?.(true);
+
+        // Align bottom spacer
+        bottomRef.current?.scrollIntoView({ behavior: "instant" });
+
         setTimeout(() => { isReadyToDetectRef.current = true; }, 300);
         return;
       }

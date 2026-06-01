@@ -19,4 +19,6 @@ public class ChannelResponse {
   private String type;
   private Integer position;
   private LocalDateTime createdAt;
+  private String topic;
+  private Boolean isPrivate;
 }

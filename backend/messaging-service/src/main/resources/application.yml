@@ -34,3 +34,10 @@ eureka:
   client:
     service-url:
       defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+
+# ── Voice Channel (Metered.ca TURN) ──
+voice:
+  metered:
+    domain: ${METERED_DOMAIN:}
+    secret-key: ${METERED_SECRET_KEY:}
+
