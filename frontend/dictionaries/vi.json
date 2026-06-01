@@ -93,6 +93,27 @@
     "inbox": "Hộp thư",
     "threads": "Chủ đề",
     "search": "Tìm kiếm",
+    "searchFilters": "Bộ lọc",
+    "searchFromUserTitle": "Từ một người dùng cụ thể",
+    "searchFromUserSub": "từ: người dùng",
+    "searchInChannelTitle": "Được gửi trong một kênh cụ thể",
+    "searchInChannelSub": "trong: kênh",
+    "searchHasDataTitle": "Bao gồm một loại dữ liệu cụ thể",
+    "searchHasDataSub": "có: link, tệp nhúng hoặc tệp",
+    "searchMentionsUserTitle": "Đề cập một người dùng cụ thể",
+    "searchMentionsUserSub": "đề cập: người dùng",
+    "searchHistory": "Lịch sử",
+    "searchAction": "Tìm kiếm {query}",
+    "searchFromUserHeader": "Từ Người Dùng",
+    "searchInChannelHeader": "Trong Kênh",
+    "searchHasDataHeader": "Tin Nhắn Có Chứa",
+    "searchMentionsHeader": "Người Dùng Đề Cập",
+    "searchHasImage": "hình ảnh",
+    "searchHasVideo": "video",
+    "searchHasLink": "link",
+    "searchHasFile": "tệp",
+    "searchHasAudio": "âm thanh",
+    "searchHasSticker": "sticker",
     "help": "Trợ giúp",
     "attachFile": "Đính kèm file",
     "addReaction": "Thêm reaction",
@@ -132,7 +153,13 @@
     "copyText": "Sao chép văn bản",
     "pinMessage": "Ghim tin nhắn",
     "markAsUnread": "Đánh dấu chưa đọc",
-    "comingSoon": "Sắp ra mắt"
+    "comingSoon": "Sắp ra mắt",
+    "readyToSend": "Sẵn sàng gửi",
+    "uploading": "Đang tải lên...",
+    "processing": "Đang xử lý...",
+    "errSize": "Tệp vượt quá giới hạn 25MB",
+    "errExecutable": "Không cho phép tải tệp thực thi",
+    "tryAgainOrCompress": "Thử lại với tệp nhỏ hơn hoặc nén tệp trước."
   },
   "members": {
     "online": "Trực tuyến",
@@ -239,5 +266,9 @@
     "offline": "Không có kết nối mạng",
     "connecting": "Đang kết nối lại...",
     "connected": "Đã kết nối!"
+  },
+  "common": {
+    "error": "Lỗi",
+    "remove": "Xóa"
   }
 }

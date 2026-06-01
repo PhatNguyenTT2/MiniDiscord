@@ -143,6 +143,10 @@ export default function ChannelPage() {
   const messageListRef = useRef<MessageListHandle>(null);
   const [showJumpBanner, setShowJumpBanner] = useState(false);
 
+  useEffect(() => {
+    setShowJumpBanner(false);
+  }, [channelId]);
+
   const handleScrollStateChange = useCallback((isAtBottom: boolean) => {
     setShowJumpBanner(!isAtBottom);
   }, []);

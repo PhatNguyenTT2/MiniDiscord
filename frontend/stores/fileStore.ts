@@ -34,7 +34,7 @@ export const useFileStore = create<FileState>((set) => ({
       // Step 1: Get pre-signed upload URL from backend
       // Now it goes through gateway api because it's a lightweight JSON payload
       const presignRes = await api.post<{ message: string; data: PresignResponse }>(
-        `/api/files/presign/upload`,
+        `/files/presign/upload`,
         {
           fileName: file.name,
           contentType: file.type || "application/octet-stream",
@@ -45,12 +45,25 @@ export const useFileStore = create<FileState>((set) => ({
       const presignData = presignRes.data.data;
 
       // Step 2: Upload file directly to MinIO/B2 using the pre-signed PUT URL
-      // We use raw axios to avoid attaching auth headers which cause CORS/Signature errors on B2
+      // Raw axios (not `api`) to avoid auth interceptors.
+      // transformRequest strips any default headers that would break B2's signature.
+      const signedContentType = file.type || "application/octet-stream";
       await axios.put(presignData.uploadUrl, file, {
         headers: {
-          "Content-Type": file.type || "application/octet-stream",
+          "Content-Type": signedContentType,
         },
-        timeout: 120_000, // 2 mins
+        transformRequest: [(data, headers) => {
+          // Remove ALL default headers — B2 rejects unsigned headers
+          if (headers) {
+            Object.keys(headers).forEach((key) => {
+              if (key.toLowerCase() !== "content-type") {
+                delete headers[key];
+              }
+            });
+          }
+          return data;
+        }],
+        timeout: 120_000,
         onUploadProgress: (progressEvent) => {
           if (progressEvent.total) {
             const percentCompleted = Math.round(

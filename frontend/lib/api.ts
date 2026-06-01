@@ -32,7 +32,12 @@ api.interceptors.response.use(
     }
 
     if (!error.response && error.code === "ERR_NETWORK") {
-      useNetworkStore.getState().setWsStatus("disconnected");
+      // Only mark disconnected for non-file-upload requests.
+      // File upload failures should NOT cascade into WebSocket disconnection.
+      const isFileUpload = error.config?.url?.includes("/files/");
+      if (!isFileUpload) {
+        useNetworkStore.getState().setWsStatus("disconnected");
+      }
     }
 
     const config = error.config;

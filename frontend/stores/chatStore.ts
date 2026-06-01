@@ -54,6 +54,13 @@ interface ChatState {
   error: string | null;
   fetchMessages: (roomId: string, channelId: string, before?: string, limit?: number) => Promise<void>;
   fetchMessagesAround: (roomId: string, channelId: string, aroundId: string, limit?: number) => Promise<void>;
+  searchMessages: (roomId: string, channelId: string, filters: {
+    q?: string;
+    from?: string;
+    channel?: string;
+    has?: string;
+    mentions?: string;
+  }) => Promise<Message[]>;
 
   /* WebSocket: receive message from /topic/room.{roomId} */
   receiveMessage: (channelId: string, message: Message) => void;
@@ -144,7 +151,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // $lt cursor is strict, no duplicates possible
         const merged = before
           ? [...fetchedMessages, ...existing]
-          : fetchedMessages;
+          : fetchedMessages.length > 0
+            ? fetchedMessages
+            : existing.filter(m => m.id.startsWith('optimistic-'));
 
         return {
           channelMessages: {
@@ -193,6 +202,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
+    }
+  },
+
+  searchMessages: async (roomId, channelId, filters) => {
+    try {
+      const { api } = await import("@/lib/api"); // import dynamically to avoid circular dependencies
+      const params = new URLSearchParams();
+      if (filters.q) params.set("q", filters.q);
+      if (filters.from) params.set("from", filters.from);
+      if (filters.has) params.set("has", filters.has);
+      if (filters.mentions) params.set("mentions", filters.mentions);
+
+      const res = await api.get<{ message: string; data: Message[] }>(
+        `/messages/rooms/${roomId}/channels/${channelId}/search?${params}`
+      );
+      return res.data.data;
+    } catch (error) {
+      console.error("Failed to search messages in chatStore:", error);
+      return [];
     }
   },
 

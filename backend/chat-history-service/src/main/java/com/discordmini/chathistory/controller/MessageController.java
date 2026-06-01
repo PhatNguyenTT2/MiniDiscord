@@ -38,10 +38,14 @@ public class MessageController {
             @RequestHeader("X-User-Id") String userId,
             @PathVariable String roomId,
             @PathVariable String channelId,
-            @RequestParam String q,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String has,
+            @RequestParam(required = false) String mentions,
             @RequestParam(defaultValue = "50") int limit) {
 
-        List<MessageResponse> messages = messageService.searchMessages(userId, roomId, channelId, q, limit);
+        List<MessageResponse> messages = messageService.advancedSearch(
+                userId, roomId, channelId, q, from, has, mentions, limit);
         return ResponseEntity.ok(ApiResponse.ok(messages));
     }
 

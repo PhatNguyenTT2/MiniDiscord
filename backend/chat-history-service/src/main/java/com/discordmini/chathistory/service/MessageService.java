@@ -23,6 +23,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import org.springframework.data.mongodb.core.query.TextCriteria;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -69,15 +71,69 @@ public class MessageService {
         return responses;
     }
 
-    public List<MessageResponse> searchMessages(String userId, String roomId, String channelId, String keyword,
-            int limit) {
+    public List<MessageResponse> advancedSearch(
+            String userId, String roomId, String channelId,
+            String q, String from, String has, String mentions, int limit) {
         membershipClient.verifyMembership(userId, roomId);
 
         int clampedLimit = Math.min(Math.max(limit, 1), MAX_LIMIT);
-        PageRequest pageable = PageRequest.of(0, clampedLimit);
 
-        return messageRepository.searchByContent(roomId, channelId, keyword, pageable)
-                .stream().map(MessageResponse::from).toList();
+        // Core filter conditions: roomId, channelId, and isDeleted=false
+        Criteria criteria = Criteria.where("roomId").is(roomId)
+                .and("channelId").is(channelId)
+                .and("isDeleted").is(false);
+
+        // Filter: 'from' represents senderId (index-backed by idx_sender_time)
+        if (from != null && !from.trim().isEmpty()) {
+            criteria.and("senderId").is(from);
+        }
+
+        // Filter: 'has' represents message content types (IMAGE, VIDEO, etc.)
+        if (has != null && !has.trim().isEmpty()) {
+            String typeStr = has.toLowerCase().trim();
+            switch (typeStr) {
+                case "image":
+                case "hình ảnh":
+                    criteria.and("type").is("IMAGE");
+                    break;
+                case "video":
+                    criteria.and("type").is("VIDEO");
+                    break;
+                case "link":
+                    // Regex find links: backed partially by compound cursor index scanning
+                    criteria.and("content").regex("https?://", "i");
+                    break;
+                case "file":
+                case "tệp":
+                    criteria.and("type").is("FILE");
+                    break;
+                case "audio":
+                case "âm thanh":
+                    criteria.and("type").is("AUDIO");
+                    break;
+                case "sticker":
+                    criteria.and("type").is("STICKER");
+                    break;
+            }
+        }
+
+        // Filter: 'mentions' represents matches pattern @username in content string
+        if (mentions != null && !mentions.trim().isEmpty()) {
+            criteria.and("content").regex("@" + Pattern.quote(mentions.trim()), "i");
+        }
+
+        Query query = new Query(criteria)
+                .with(Sort.by(Sort.Direction.DESC, "_id")) // descending order by Object ID (cursor)
+                .limit(clampedLimit);
+
+        // Filter: 'q' represents text criteria matching using indexed idx_content_text
+        // index
+        if (q != null && !q.trim().isEmpty()) {
+            query.addCriteria(TextCriteria.forDefaultLanguage().matching(q.trim()));
+        }
+
+        return mongoTemplate.find(query, Message.class)
+                .stream().map(MessageResponse::from).collect(Collectors.toList());
     }
 
     public void softDeleteMessage(String userId, String messageId, String deleteType) {

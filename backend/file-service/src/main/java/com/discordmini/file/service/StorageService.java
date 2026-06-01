@@ -12,6 +12,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Multimap;
 
 import java.util.concurrent.TimeUnit;
 import java.time.YearMonth;
@@ -102,13 +104,21 @@ public class StorageService {
                 extension);
 
         try {
+            // Sign Content-Type in the pre-signed URL so B2 accepts the browser's PUT.
+            // Without this, B2 sees an unsigned Content-Type header → 403 signature
+            // mismatch
+            // → error response omits CORS headers → browser reports as "CORS error".
+            Multimap<String, String> putHeaders = HashMultimap.create();
+            putHeaders.put("Content-Type", contentType);
+
             // Generate PUT URL for browser to upload directly
             String uploadUrl = minioClient.getPresignedObjectUrl(
                     GetPresignedObjectUrlArgs.builder()
                             .method(Method.PUT)
                             .bucket(bucketName)
                             .object(fileKey)
-                            .expiry(Math.min(presignExpiry, 604800), TimeUnit.SECONDS) // Max 7 days
+                            .expiry(Math.min(presignExpiry, 604800), TimeUnit.SECONDS)
+                            .extraHeaders(putHeaders)
                             .build());
 
             // Generate GET URL for immediate preview after upload

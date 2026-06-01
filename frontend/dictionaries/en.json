@@ -93,6 +93,27 @@
     "inbox": "Inbox",
     "threads": "Threads",
     "search": "Search",
+    "searchFilters": "Filters",
+    "searchFromUserTitle": "From a specific user",
+    "searchFromUserSub": "from: user",
+    "searchInChannelTitle": "Sent in a specific channel",
+    "searchInChannelSub": "in: channel",
+    "searchHasDataTitle": "Includes a specific type of data",
+    "searchHasDataSub": "has: link, embed, or file",
+    "searchMentionsUserTitle": "Mentions a specific user",
+    "searchMentionsUserSub": "mentions: user",
+    "searchHistory": "History",
+    "searchAction": "Search {query}",
+    "searchFromUserHeader": "From User",
+    "searchInChannelHeader": "In Channel",
+    "searchHasDataHeader": "Messages Containing",
+    "searchMentionsHeader": "Mentioned Users",
+    "searchHasImage": "image",
+    "searchHasVideo": "video",
+    "searchHasLink": "link",
+    "searchHasFile": "file",
+    "searchHasAudio": "audio",
+    "searchHasSticker": "sticker",
     "help": "Help",
     "attachFile": "Attach file",
     "addReaction": "Add Reaction",
@@ -132,7 +153,13 @@
     "copyText": "Copy Text",
     "pinMessage": "Pin Message",
     "markAsUnread": "Mark as unread",
-    "comingSoon": "Coming soon"
+    "comingSoon": "Coming soon",
+    "readyToSend": "Ready to send",
+    "uploading": "Uploading...",
+    "processing": "Processing...",
+    "errSize": "File exceeds 25MB size limit",
+    "errExecutable": "Executable files are not allowed",
+    "tryAgainOrCompress": "Try again with a smaller file or compress it first."
   },
   "members": {
     "online": "Online",
@@ -239,5 +266,9 @@
     "offline": "No network connection",
     "connecting": "Reconnecting...",
     "connected": "Connected!"
+  },
+  "common": {
+    "error": "Error",
+    "remove": "Remove"
   }
 }

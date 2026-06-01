@@ -93,6 +93,7 @@ export const MessageList = memo(forwardRef<MessageListHandle, MessageListProps>(
     const hasInitialScrolledRef = useRef<string | null>(null);
     const isFetchingOlderRef = useRef(false);
     const isProgrammaticScrollRef = useRef(false);
+    const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Refs to avoid stale closures in cleanup without adding deps
     const roomIdRef = useRef(roomId);
@@ -166,7 +167,15 @@ export const MessageList = memo(forwardRef<MessageListHandle, MessageListProps>(
       if (!cid || storeState.isLoading) return;
 
       const msgs = storeState.getChannelMessages(cid);
-      if (msgs.length === 0) return;
+      if (msgs.length === 0) {
+        // Empty channel (e.g. just created): show welcome header, no scroll needed
+        setIsPositioned(true);
+        isAtBottomRef.current = true;
+        hasReachedBottomRef.current = true;
+        onScrollStateChange?.(true);
+        setTimeout(() => { isReadyToDetectRef.current = true; }, 300);
+        return;
+      }
 
       if (hasInitialScrolledRef.current !== cid) {
         hasInitialScrolledRef.current = cid;
@@ -210,6 +219,8 @@ export const MessageList = memo(forwardRef<MessageListHandle, MessageListProps>(
       if (!el) return;
 
       const observer = new IntersectionObserver(([entry]) => {
+        if (!isReadyToDetectRef.current) return;
+
         if (entry.isIntersecting) {
           hasReachedBottomRef.current = true;
           isAtBottomRef.current = true;
@@ -231,6 +242,7 @@ export const MessageList = memo(forwardRef<MessageListHandle, MessageListProps>(
             }
           }
         } else {
+          if (isProgrammaticScrollRef.current) return;
           isAtBottomRef.current = false;
           onScrollStateChange?.(false);
         }
@@ -265,8 +277,10 @@ export const MessageList = memo(forwardRef<MessageListHandle, MessageListProps>(
     const scrollToBottom = useCallback(() => {
       isProgrammaticScrollRef.current = true;
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-      // Release guard after smooth scroll animation likely completes
-      setTimeout(() => { isProgrammaticScrollRef.current = false; }, 800);
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+      scrollTimeoutRef.current = setTimeout(() => {
+        isProgrammaticScrollRef.current = false;
+      }, 800);
     }, []);
 
     // Expose isAtBottom + scrollToBottom to parent
@@ -316,7 +330,12 @@ export const MessageList = memo(forwardRef<MessageListHandle, MessageListProps>(
     const prevMessagesLenRef = useRef(messages.length);
     useEffect(() => {
       if (messages.length > prevMessagesLenRef.current && isAtBottomRef.current) {
+        isProgrammaticScrollRef.current = true;
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+        if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+        scrollTimeoutRef.current = setTimeout(() => {
+          isProgrammaticScrollRef.current = false;
+        }, 800);
       }
       prevMessagesLenRef.current = messages.length;
     }, [messages.length]);

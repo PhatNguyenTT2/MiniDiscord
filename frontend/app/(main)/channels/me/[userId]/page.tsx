@@ -10,6 +10,8 @@ import { MessageInput } from "@/components/chat/MessageInput";
 import { MessageList, type MessageListHandle } from "@/components/chat/MessageList";
 import { ScrollToBottomBanner } from "@/components/chat/ScrollToBottomBanner";
 import { StatusAvatar } from "@/components/ui/StatusAvatar";
+import { SearchDropdown, type ActiveFilter } from "@/components/chat/SearchDropdown";
+import { parseSearchFilters } from "@/lib/searchParser";
 import { Phone, Video, Pin, User, Reply, Server, UserPlus, FileIcon, Search } from "lucide-react";
 import { ResizeHandle } from "@/components/ui/ResizeHandle";
 import { SlidingPanel } from "@/components/ui/SlidingPanel";
@@ -58,6 +60,64 @@ export default function DmChatPage() {
   const params = useParams();
   const userId = params?.userId as string;
   const { t } = useTranslation();
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [searchValue, setSearchValue] = useState("");
+
+  const searchMessagesAction = useChatStore((s) => s.searchMessages);
+
+  // Active filter state detection
+  const getActiveFilter = (value: string): ActiveFilter => {
+    if (!value.trim()) return "filters";
+    if (value.startsWith("từ:") || value.startsWith("from:")) return "from-user";
+    if (value.startsWith("trong:") || value.startsWith("in:")) return "in-channel";
+    if (value.startsWith("có:") || value.startsWith("has:")) return "has-data";
+    if (value.startsWith("đề cập:") || value.startsWith("mentions:")) return "mentions";
+    return "general";
+  };
+
+  const getFilterQuery = (value: string) => {
+    const colonIdx = value.indexOf(":");
+    return colonIdx >= 0 ? value.slice(colonIdx + 1).trim() : value.trim();
+  };
+
+  const activeFilter = getActiveFilter(searchValue);
+  const filterQuery = getFilterQuery(searchValue);
+
+  const handleSelectFilter = (prefix: string) => {
+    setSearchValue(prefix + " ");
+  };
+
+  const handleSelectUser = (userId: string, username: string) => {
+    if (searchValue.startsWith("đề cập:") || searchValue.startsWith("mentions:")) {
+      const prefix = searchValue.startsWith("m") ? "mentions:" : "đề cập:";
+      setSearchValue(`${prefix}${username} `);
+    } else {
+      const prefix = searchValue.startsWith("f") ? "from:" : "từ:";
+      setSearchValue(`${prefix}${username} `);
+    }
+  };
+
+  const handleSelectChannel = (chanId: string, chanName: string) => {
+    const prefix = searchValue.startsWith("i") ? "in:" : "trong:";
+    setSearchValue(`${prefix}${chanName} `);
+  };
+
+  const handleSelectDataType = (dataType: string) => {
+    const prefix = searchValue.startsWith("h") ? "has:" : "có:";
+    setSearchValue(`${prefix}${dataType} `);
+  };
+
+  const handleSearchSubmit = async () => {
+    if (!roomId || !channelId) return;
+    setIsSearchFocused(false);
+
+    const parsedFilters = parseSearchFilters(searchValue);
+    console.log("[DM Page] Unified query parsed filters: ", parsedFilters);
+
+    // Call store search action
+    const results = await searchMessagesAction(roomId, channelId, parsedFilters);
+    console.log("[DM Page] Results found: ", results);
+  };
   const showDmUserPanel = useUIStore((s) => s.showDmUserPanel);
   const toggleDmUserPanel = useUIStore((s) => s.toggleDmUserPanel);
   const sidebarWidth = useUIStore((s) => s.sidebarWidth);
@@ -303,6 +363,10 @@ export default function DmChatPage() {
   const messageListRef = useRef<MessageListHandle>(null);
   const [showJumpBanner, setShowJumpBanner] = useState(false);
 
+  useEffect(() => {
+    setShowJumpBanner(false);
+  }, [channelId, userId]);
+
   const handleScrollStateChange = useCallback((isAtBottom: boolean) => {
     setShowJumpBanner(!isAtBottom);
   }, []);
@@ -351,15 +415,34 @@ export default function DmChatPage() {
             </div>
 
             {/* Search Bar */}
-            <div className="w-[144px] hidden md:block">
-              <div className="flex h-6 items-center rounded overflow-hidden bg-[#1e1f22] px-1.5 focus-within:ring-1 focus-within:ring-indigo-500 focus-within:w-[240px] transition-all duration-200">
-                <input
-                  type="text"
-                  placeholder="Tìm kiếm"
-                  className="w-full bg-transparent text-[13px] text-white placeholder-zinc-400 outline-none px-1"
-                />
-                <Search className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
-              </div>
+            <div className="relative mx-1">
+              <input
+                type="text"
+                value={searchValue}
+                onChange={(e) => setSearchValue(e.target.value)}
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleSearchSubmit();
+                  }
+                }}
+                placeholder={t("chat.search")}
+                className="h-7 w-36 rounded-md bg-background-tertiary px-2 text-[13px] text-foreground placeholder:text-muted-foreground focus:w-56 transition-all duration-200 outline-none"
+              />
+              <Search className="absolute right-1.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <SearchDropdown
+                type="dm"
+                isOpen={isSearchFocused}
+                activeFilter={activeFilter}
+                filterQuery={filterQuery}
+                members={roomId ? allMembers[roomId] || [] : []}
+                onSelectFilter={handleSelectFilter}
+                onSelectUser={handleSelectUser}
+                onSelectChannel={handleSelectChannel}
+                onSelectDataType={handleSelectDataType}
+                onSearchSubmit={handleSearchSubmit}
+              />
             </div>
           </div>
         </div>
