@@ -4,6 +4,56 @@
 
 ---
 
+## Định lý CAP — Lựa chọn then chốt của hệ thống
+
+Theo **Định lý CAP** (Brewer, 2000), một hệ thống phân tán chỉ có thể đảm bảo đồng thời **hai trong ba** thuộc tính: **Consistency** (Nhất quán), **Availability** (Sẵn sàng), **Partition Tolerance** (Chịu phân vùng mạng). Vì Partition Tolerance là bắt buộc trong bất kỳ hệ thống phân tán thực tế nào, lựa chọn thực sự là giữa **C** và **A**.
+
+### Lựa chọn của MiniDiscord: **AP (Availability + Partition Tolerance)**
+
+MiniDiscord ưu tiên **Availability** — hệ thống phải luôn phản hồi, ngay cả khi một node bị cô lập hoặc dữ liệu chưa đồng bộ xong. Đây là lựa chọn tự nhiên cho ứng dụng nhắn tin real-time, nơi việc **người dùng không thể gửi/nhận tin** gây hậu quả nghiêm trọng hơn việc **tin nhắn đến chậm vài mili giây**.
+
+```mermaid
+graph LR
+    subgraph "Định lý CAP"
+        C["🔒 Consistency<br/>(Nhất quán tuyệt đối)"]
+        A["✅ Availability<br/>(Luôn phản hồi)"]
+        P["✅ Partition Tolerance<br/>(Chịu phân vùng mạng)"]
+    end
+
+    C -.-|"Đánh đổi"| TRADE["Eventual Consistency<br/>(Nhất quán cuối cùng)"]
+    A --- CHOOSE["MiniDiscord chọn AP"]
+    P --- CHOOSE
+
+    style C fill:#f5f5f5,stroke:#999,stroke-dasharray:5 5
+    style A fill:#d4edda,stroke:#28a745
+    style P fill:#d4edda,stroke:#28a745
+    style CHOOSE fill:#fff3cd,stroke:#ffc107
+```
+
+### Bảng ánh xạ CAP theo thành phần
+
+| Thành phần | Mô hình CAP | Giải thích |
+|-----------|-------------|------------|
+| **Redis (Connection Mapping)** | **AP** | Instance ghi `conn:user:{id}` vào Redis và phản hồi ngay. Nếu Redis chưa replicate xong, instance khác có thể đọc giá trị cũ → **Eventual Consistency** qua TTL refresh (60s) |
+| **RabbitMQ (Message Broker)** | **AP** | Tin nhắn được publish và consumer xử lý bất đồng bộ. Nếu consumer down, message nằm trong durable queue chờ xử lý → **không mất dữ liệu**, nhưng nhận **trễ** |
+| **MongoDB (Chat History)** | **CP** (default) | Với Replica Set, MongoDB ưu tiên nhất quán (đọc từ Primary). Tuy nhiên, hệ thống dùng `insert()` + Idempotent Consumer nên **chấp nhận retry** thay vì reject |
+| **WebSocket (STOMP)** | **AP** | Client nhận Optimistic ACK ngay (<50ms). Tin nhắn có thể chưa ghi DB xong → UI hiển thị trước, DB đồng bộ sau |
+| **Redis Pub/Sub (Typing)** | **AP** | Fire-and-forget. Nếu subscriber offline, event bị mất hoàn toàn — **chấp nhận mất** vì dữ liệu phù du |
+
+### Các cơ chế đảm bảo Eventual Consistency
+
+Hệ thống không hy sinh tính nhất quán hoàn toàn, mà áp dụng **Eventual Consistency** — dữ liệu sẽ hội tụ về trạng thái đúng sau một khoảng thời gian ngắn:
+
+| Cơ chế | Đảm bảo | Thời gian hội tụ |
+|--------|---------|-----------------|
+| **Redis TTL + Scheduled Refresh** | Connection mapping luôn chính xác | ≤ 60 giây (refresh cycle) |
+| **Idempotent Consumer** (`insert()` + Unique Index) | Không trùng lặp tin nhắn dù retry | Tức thời (DB-level) |
+| **RabbitMQ Durable Queue + ACK** | Không mất tin nhắn nghiệp vụ | Phụ thuộc queue depth |
+| **STOMP Heartbeat (10s)** | Phát hiện kết nối chết | ≤ 10 giây |
+| **Zombie Cleanup (3 lớp)** | Giải phóng session mồ côi | ≤ 5 phút (TTL worst-case) |
+
+---
+
 ## 1. Kiến trúc Tổng thể (System Architecture)
 
 ### 1.1 Bài toán cốt lõi
@@ -72,6 +122,12 @@ graph TB
     MS2 -->|"fan-out"| C2
 ```
 
+**Giải thích sơ đồ:**
+- **Client Layer → Gateway**: Trình duyệt gửi yêu cầu nâng cấp giao thức (HTTP → WebSocket) đến Spring Cloud Gateway. Gateway xác thực JWT và chuyển tiếp kết nối WebSocket đến một trong N instance của Messaging Service.
+- **Messaging Service → RabbitMQ**: Khi nhận tin nhắn qua WebSocket, instance publish bất đồng bộ (`@Async`) vào RabbitMQ Topic Exchange. RabbitMQ phân phối sự kiện đến đúng service consumer (Chat History ghi DB, hoặc instance khác để fan-out).
+- **Redis (đường nét đứt)**: Redis không nằm trên đường đi chính của tin nhắn mà đóng vai trò **hỗ trợ định tuyến** — lưu trữ bản đồ kết nối (`conn:user:*`), phát sự kiện phù du (typing/presence), và quản lý trạng thái voice call.
+- **Persistence Layer**: MongoDB chịu trách nhiệm ghi lịch sử tin nhắn (write-heavy), PostgreSQL lưu trữ dữ liệu quan hệ (Users, Rooms, Channels).
+
 ### 1.3 Thành phần hệ thống
 
 | Thành phần | Công nghệ | Vai trò |
@@ -137,7 +193,19 @@ sequenceDiagram
     I2->>B: STOMP /topic/room.{roomId}
 ```
 
-**Điểm mấu chốt của luồng:**
+**Giải thích luồng theo từng bước:**
+
+| Bước | Hành động | Ý nghĩa kỹ thuật |
+|------|----------|------------------|
+| ① | Browser A gửi STOMP SEND qua Gateway | Gateway đã xác thực JWT, chỉ forward — không xử lý logic |
+| ② | Instance 1 kiểm tra Rate Limiter | Redis `INCR` nguyên tử đảm bảo đếm chính xác trên toàn cụm |
+| ③ | Trả Optimistic ACK (<50ms) | Client nhận phản hồi ngay. Mọi bước sau chạy **bất đồng bộ** trên thread pool riêng |
+| ④ | Publish vào `chat.exchange` | RabbitMQ nhận event → Chat History Service ghi vào MongoDB bằng `insert()` (Idempotent) |
+| ⑤ | Tra cứu Redis: members + connections | Xác định User B, C thuộc instance nào qua key `conn:user:{id}` |
+| ⑥ | Group-by instance → TargetedMessage | Chỉ gửi đến đúng instance chứa user đích qua `ws.exchange` — **không broadcast toàn cụm** |
+| ⑦ | Instance 2 nhận và push STOMP | `WsMessageListener` broadcast lên `/topic/room.{id}` → chỉ user đang subscribe mới nhận |
+
+**Điểm mấu chốt:**
 
 1. **Non-blocking response**: WebSocket handler trả phản hồi cho client ngay lập tức (<50ms). Mọi tác vụ nặng (ghi DB, fan-out) đều chạy bất đồng bộ trên thread pool riêng qua `@Async("taskExecutor")`.
 2. **Instance-aware routing**: `MessageRouter` tra cứu Redis để biết mỗi thành viên đang kết nối tại instance nào, rồi nhóm (group-by) và gửi `TargetedMessage` chỉ đến đúng instance cần thiết — tránh broadcast thừa.
@@ -159,17 +227,28 @@ sequenceDiagram
     Redis-->>WS: participants = {B}
     WS->>A: VOICE_PEERS {peers: [B]}
 
-    Note over A,B: WebRTC Signaling qua WebSocket
+    rect rgb(240, 248, 255)
+    Note over A,B: Giai đoạn Signaling qua WebSocket
     A->>WS: /voice.signal {target: B, type: "offer", payload: SDP}
-    WS->>B: /user/queue/voice → SIGNAL_OFFER {from: A, payload: SDP}
+    WS->>B: /user/queue/voice - SIGNAL_OFFER {from: A}
     B->>WS: /voice.signal {target: A, type: "answer", payload: SDP}
-    WS->>A: /user/queue/voice → SIGNAL_ANSWER {from: B, payload: SDP}
-    B->>WS: /voice.signal {target: A, type: "ice-candidate", payload: ICE}
-    WS->>A: /user/queue/voice → SIGNAL_ICE-CANDIDATE
+    WS->>A: /user/queue/voice - SIGNAL_ANSWER {from: B}
+    B->>WS: /voice.signal {target: A, type: "ice-candidate"}
+    WS->>A: /user/queue/voice - SIGNAL_ICE_CANDIDATE
+    end
 
-    Note over A,B: Kết nối P2P thiết lập — Media truyền trực tiếp
-    A<-->B: Audio/Video Stream (P2P, không qua Server)
+    Note over A,B: P2P thiết lập - Media truyền trực tiếp
+    A->>B: Audio/Video Stream (WebRTC P2P)
+    B->>A: Audio/Video Stream (WebRTC P2P)
 ```
+
+**Giải thích luồng theo từng giai đoạn:**
+
+| Giai đoạn | Bước | Mô tả |
+|-----------|------|-------|
+| **Discover** | `/voice.join` | Browser A gửi yêu cầu tham gia kênh thoại. Server ghi userId vào Redis Set (`voice:channel:{roomId}:{channelId}`), kiểm tra giới hạn 6 user, rồi trả lại danh sách `VOICE_PEERS` — ai đang có mặt |
+| **Signaling** | `/voice.signal` (offer → answer → ICE) | Browser A tạo SDP offer và gửi qua WebSocket. Server chỉ **relay** (chuyển tiếp) đến đúng `/user/queue/voice` của Browser B. Browser B trả SDP answer và ICE candidates theo chiều ngược lại. **Server không xử lý nội dung media** |
+| **P2P Stream** | Kết nối trực tiếp | Sau khi trao đổi SDP/ICE thành công, hai trình duyệt kết nối trực tiếp qua WebRTC. Audio/Video stream đi thẳng giữa A ↔ B mà **không đi qua server** — giảm tối đa băng thông và độ trễ |
 
 **Các điểm quan trọng:**
 - Voice state (ai đang trong kênh nào, mute/deafen) được lưu trên Redis Set với giới hạn **6 user/channel**
@@ -269,6 +348,11 @@ graph LR
     TTL -->|"Server crash → key tự hết hạn"| CLEAN["Redis auto-cleanup"]
     SC -->|"Refresh TTL cho session sống"| TTL
 ```
+
+**Giải thích sơ đồ 3 lớp bảo vệ:**
+- **Lớp 1 (Heartbeat)**: STOMP gửi tín hiệu heartbeat mỗi 10 giây giữa client và server. Nếu server không nhận được heartbeat từ client trong khoảng thời gian quy định, nó tự động kích hoạt sự kiện DISCONNECT → gọi `unregisterConnection()` để dọn dẹp session.
+- **Lớp 2 (Redis TTL)**: Mỗi key kết nối (`conn:user:{id}`) có TTL 5 phút. Trong trường hợp **server crash đột ngột** (không kịp gọi unregister), key Redis sẽ tự hết hạn sau 5 phút → giải phóng tài nguyên mà không cần can thiệp.
+- **Lớp 3 (Scheduled Task)**: Task chạy mỗi 60 giây duyệt qua tất cả kết nối cục bộ **đang sống** và refresh TTL Redis của chúng về lại 5 phút. Nhờ đó, session hoạt động bình thường sẽ không bao giờ bị TTL xóa nhầm.
 
 | Lớp | Cơ chế | Bảo vệ trường hợp |
 |-----|--------|-------------------|
