@@ -49,6 +49,12 @@ interface ChatState {
   addReaction: (channelId: string, messageId: string, emoji: string) => Promise<void>;
   updateReactions: (channelId: string, messageId: string, reactions: any[]) => void;
 
+  pinnedMessages: Record<string, Message[]>;
+  pinMessage: (channelId: string, messageId: string) => Promise<void>;
+  unpinMessage: (channelId: string, messageId: string) => Promise<void>;
+  fetchPinnedMessages: (roomId: string, channelId: string) => Promise<void>;
+  setPinnedState: (channelId: string, messageId: string, isPinned: boolean) => void;
+
   /* API: Fetch history */
   isLoading: boolean;
   error: string | null;
@@ -62,7 +68,20 @@ interface ChatState {
     mentions?: string;
   }) => Promise<Message[]>;
 
-  /* WebSocket: receive message from /topic/room.{roomId} */
+  searchResults: Record<string, Message[]>;
+  searchFilters: Record<string, {
+    q?: string;
+    from?: string;
+    channel?: string;
+    has?: string;
+    mentions?: string;
+  } | null>;
+  showSearchPanel: Record<string, boolean>;
+  isSearching: Record<string, boolean>;
+  searchSortOrder: Record<string, "NEWEST" | "OLDEST" | "RELEVANT">;
+  setSearchSortOrder: (channelId: string, order: "NEWEST" | "OLDEST" | "RELEVANT") => void;
+  setShowSearchPanel: (channelId: string, show: boolean) => void;
+  clearSearchResults: (channelId: string) => void;
   receiveMessage: (channelId: string, message: Message) => void;
 }
 
@@ -76,11 +95,37 @@ const EMPTY_MESSAGES: Message[] = [];
 
 export const useChatStore = create<ChatState>((set, get) => ({
   channelMessages: {},
+  pinnedMessages: {},
   unreadCounts: {},
   typingUsers: {},
   replyingTo: null,
   isLoading: false,
   error: null,
+
+  searchResults: {},
+  searchFilters: {},
+  showSearchPanel: {},
+  isSearching: {},
+  searchSortOrder: {},
+  setSearchSortOrder: (channelId, order) => set((state) => ({
+    searchSortOrder: { ...state.searchSortOrder, [channelId]: order }
+  })),
+  setShowSearchPanel: (channelId, show) => set((state) => ({
+    showSearchPanel: { ...state.showSearchPanel, [channelId]: show }
+  })),
+  clearSearchResults: (channelId) => set((state) => {
+    const nextResults = { ...state.searchResults };
+    const nextFilters = { ...state.searchFilters };
+    const nextShow = { ...state.showSearchPanel };
+    delete nextResults[channelId];
+    delete nextFilters[channelId];
+    delete nextShow[channelId];
+    return {
+      searchResults: nextResults,
+      searchFilters: nextFilters,
+      showSearchPanel: nextShow
+    };
+  }),
 
   getChannelMessages: (channelId) => get().channelMessages[channelId] ?? EMPTY_MESSAGES,
 
@@ -206,20 +251,78 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   searchMessages: async (roomId, channelId, filters) => {
+    set((state) => ({
+      isSearching: { ...state.isSearching, [channelId]: true },
+      showSearchPanel: { ...state.showSearchPanel, [channelId]: true },
+      searchFilters: { ...state.searchFilters, [channelId]: filters },
+      searchResults: { ...state.searchResults, [channelId]: [] }
+    }));
     try {
       const { api } = await import("@/lib/api"); // import dynamically to avoid circular dependencies
       const params = new URLSearchParams();
       if (filters.q) params.set("q", filters.q);
       if (filters.from) params.set("from", filters.from);
       if (filters.has) params.set("has", filters.has);
-      if (filters.mentions) params.set("mentions", filters.mentions);
+
+      let mentionsVal = filters.mentions;
+      if (mentionsVal) {
+        if (mentionsVal.toLowerCase() === "everyone") {
+          mentionsVal = "everyone";
+        } else {
+          // Multi-level lookup:
+          // 1. Check roomMembers
+          const { useRoomStore } = await import("./roomStore");
+          const roomMembers = useRoomStore.getState().members[roomId] || [];
+          const matchMem = roomMembers.find(m => m.username.toLowerCase() === mentionsVal!.toLowerCase());
+          if (matchMem) {
+            mentionsVal = matchMem.userId;
+          } else {
+            // 2. Check current logged-in user
+            const { useAuthStore } = await import("./authStore");
+            const currentUser = useAuthStore.getState().user;
+            if (currentUser && currentUser.username.toLowerCase() === mentionsVal.toLowerCase()) {
+              mentionsVal = currentUser.id;
+            } else {
+              // 3. Check friends
+              const { useFriendStore } = await import("./friendStore");
+              const friends = useFriendStore.getState().friends || [];
+              const matchFriend = friends.find(f => f.user.username.toLowerCase() === mentionsVal!.toLowerCase());
+              if (matchFriend) {
+                mentionsVal = matchFriend.user.id;
+              } else {
+                // Not resolved
+                mentionsVal = undefined;
+              }
+            }
+          }
+        }
+
+        // Short-circuit: if a mentions filter was provided but could not resolve to a user or token,
+        // no messages can possibly match. Short-circuit to avoid querying DB.
+        if (!mentionsVal) {
+          console.warn("[searchMessages] Unresolved user query filter:", filters.mentions);
+          set((state) => ({
+            searchResults: { ...state.searchResults, [channelId]: [] },
+            isSearching: { ...state.isSearching, [channelId]: false }
+          }));
+          return [];
+        }
+      }
+      if (mentionsVal) params.set("mentions", mentionsVal);
 
       const res = await api.get<{ message: string; data: Message[] }>(
         `/messages/rooms/${roomId}/channels/${channelId}/search?${params}`
       );
-      return res.data.data;
+      set((state) => ({
+        searchResults: { ...state.searchResults, [channelId]: res.data.data || [] },
+        isSearching: { ...state.isSearching, [channelId]: false }
+      }));
+      return res.data.data || [];
     } catch (error) {
       console.error("Failed to search messages in chatStore:", error);
+      set((state) => ({
+        isSearching: { ...state.isSearching, [channelId]: false }
+      }));
       return [];
     }
   },
@@ -466,6 +569,132 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ? { ...m, reactions: reactions.map((r: any) => ({ ...r, count: r.userIds.length })) }
               : m
           ),
+        },
+      };
+    });
+  },
+
+  fetchPinnedMessages: async (roomId: string, channelId: string) => {
+    try {
+      const res = await api.get(`/messages/rooms/${roomId}/channels/${channelId}/pinned`);
+      if (res.data) {
+        // Wrap res.data inside ApiResponse data unwrapper helper: res.data itself might be ApiResponse
+        const messages = (res.data as any).data || res.data;
+        set((state) => ({
+          pinnedMessages: {
+            ...state.pinnedMessages,
+            [channelId]: messages,
+          },
+        }));
+      }
+    } catch (error) {
+      console.error("Failed to fetch pinned messages:", error);
+    }
+  },
+
+  pinMessage: async (channelId: string, messageId: string) => {
+    let previousMessages: Message[] = [];
+    set((state) => {
+      const msgs = state.channelMessages[channelId] || [];
+      previousMessages = msgs;
+      return {
+        channelMessages: {
+          ...state.channelMessages,
+          [channelId]: msgs.map((m) =>
+            m.id === messageId || m.messageId === messageId
+              ? { ...m, isPinned: true }
+              : m
+          ),
+        },
+      };
+    });
+
+    try {
+      const senderName = useAuthStore.getState().user?.username || "User";
+      await api.put(`/messages/${messageId}/pin`, null, {
+        params: { senderName }
+      });
+      const roomId = useChatStore.getState().channelMessages[channelId]?.find(
+        (m) => m.id === messageId || m.messageId === messageId
+      )?.roomId;
+      if (roomId) {
+        await useChatStore.getState().fetchPinnedMessages(roomId, channelId);
+      }
+    } catch (error) {
+      console.error("Failed to pin message:", error);
+      set((state) => ({
+        channelMessages: {
+          ...state.channelMessages,
+          [channelId]: previousMessages,
+        },
+      }));
+      throw error;
+    }
+  },
+
+  unpinMessage: async (channelId: string, messageId: string) => {
+    let previousMessages: Message[] = [];
+    set((state) => {
+      const msgs = state.channelMessages[channelId] || [];
+      previousMessages = msgs;
+      return {
+        channelMessages: {
+          ...state.channelMessages,
+          [channelId]: msgs.map((m) =>
+            m.id === messageId || m.messageId === messageId
+              ? { ...m, isPinned: false }
+              : m
+          ),
+        },
+      };
+    });
+
+    try {
+      await api.put(`/messages/${messageId}/unpin`);
+      const roomId = useChatStore.getState().channelMessages[channelId]?.find(
+        (m) => m.id === messageId || m.messageId === messageId
+      )?.roomId;
+      if (roomId) {
+        await useChatStore.getState().fetchPinnedMessages(roomId, channelId);
+      }
+    } catch (error) {
+      console.error("Failed to unpin message:", error);
+      set((state) => ({
+        channelMessages: {
+          ...state.channelMessages,
+          [channelId]: previousMessages,
+        },
+      }));
+      throw error;
+    }
+  },
+
+  setPinnedState: (channelId: string, messageId: string, isPinned: boolean) => {
+    set((state) => {
+      const msgs = state.channelMessages[channelId] || [];
+      const updatedFeed = msgs.map((m) =>
+        m.id === messageId || m.messageId === messageId ? { ...m, isPinned } : m
+      );
+
+      const pinned = state.pinnedMessages[channelId] || [];
+      let updatedPinned = [...pinned];
+      if (isPinned) {
+        const msg = msgs.find((m) => m.id === messageId || m.messageId === messageId);
+        if (msg && !pinned.some((m) => m.id === messageId || m.messageId === messageId)) {
+          updatedPinned = [{ ...msg, isPinned: true }, ...pinned].slice(0, 50);
+        }
+      } else {
+        updatedPinned = pinned.filter((m) => m.id !== messageId && m.messageId !== messageId);
+      }
+
+      return {
+        channelMessages: {
+          ...state.channelMessages,
+          [channelId]: updatedFeed,
+        },
+        pinnedMessages: {
+          ...state.pinnedMessages,
+          [channelId]: updatedPinned,
         },
       };
     });

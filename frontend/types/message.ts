@@ -8,16 +8,18 @@ export interface Message {
   senderAvatar: string | null;
   type: "TEXT" | "IMAGE" | "FILE" | "SYSTEM";
   content: string;
-  fileUrl: string | null;
+  fileKey: string | null;
   fileName: string | null;
   fileSize: number | null;
-  fileKey?: string | null; // Added for Pre-signed URLs
   reactions: Reaction[];
   isEdited: boolean;
   isDeleted: boolean;
+  isPinned?: boolean;
+  isForwarded?: boolean;
   editedAt: string | null;
   createdAt: string;
   replyTo: ReplyReference | null;
+  mentions?: string[];
 }
 
 export interface Reaction {
@@ -37,8 +39,9 @@ export interface ChatMessage {
   channelId: string;
   content: string;
   type: "TEXT" | "IMAGE" | "FILE";
-  fileUrl?: string;
-  fileKey?: string; // Added for Pre-signed URLs
+  fileKey?: string;
+  isForwarded?: boolean;
+  mentions?: string[];
 }
 
 export interface TypingEvent {

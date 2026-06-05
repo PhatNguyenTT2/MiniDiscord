@@ -35,15 +35,23 @@ public class Message {
     private String content;
 
     // File attachment (optional)
-    private String fileUrl;
+    private String fileKey;
     private String fileName;
     private Long fileSize;
+
+    @Indexed
+    @Builder.Default
+    private List<String> mentions = new ArrayList<>();
 
     // Edit/Delete tracking
     @Builder.Default
     private boolean isEdited = false;
     @Builder.Default
     private boolean isDeleted = false;
+    @Builder.Default
+    private boolean isPinned = false;
+    @Builder.Default
+    private boolean isForwarded = false;
     private Instant deletedAt; // TTL anchor
     @Builder.Default
     private List<String> deletedForUsers = new ArrayList<>();

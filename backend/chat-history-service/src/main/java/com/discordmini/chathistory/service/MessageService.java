@@ -3,11 +3,13 @@ package com.discordmini.chathistory.service;
 import com.discordmini.chathistory.client.MembershipClient;
 import com.discordmini.chathistory.exception.ForbiddenException;
 import com.discordmini.chathistory.exception.ResourceNotFoundException;
+import com.discordmini.chathistory.exception.BadRequestException;
 import com.discordmini.chathistory.model.document.Message;
 import com.discordmini.chathistory.model.dto.MessageResponse;
 import com.discordmini.chathistory.repository.MessageRepository;
 import com.discordmini.chathistory.repository.ReadReceiptRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -17,15 +19,18 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 
+import java.util.Optional;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.data.mongodb.core.query.TextCriteria;
 import java.util.regex.Pattern;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class MessageService {
@@ -43,20 +48,24 @@ public class MessageService {
 
         int clampedLimit = Math.min(Math.max(limit, 1), MAX_LIMIT);
 
+        // Resolve cursors cleanly to support both MongoDB ObjectIds and UUID messageIds
+        String resolvedAfter = resolveCursorId(after);
+        String resolvedBefore = resolveCursorId(before);
+
         List<Message> messages;
-        if (after != null && !after.isBlank()) {
+        if (resolvedAfter != null) {
             // Forward cursor pagination: load chronological messages after the cursor
             PageRequest ascPageable = PageRequest.of(0, clampedLimit, Sort.by(Sort.Direction.ASC, "_id"));
             messages = messageRepository.findByRoomIdAndChannelIdFilteredUserAfterCursor(
-                    roomId, channelId, userId, after, ascPageable);
+                    roomId, channelId, userId, resolvedAfter, ascPageable);
             // Already ASC, just map and return
             return messages.stream().map(MessageResponse::from).collect(Collectors.toList());
         }
 
         PageRequest descPageable = PageRequest.of(0, clampedLimit, Sort.by(Sort.Direction.DESC, "_id"));
-        if (before != null && !before.isBlank()) {
+        if (resolvedBefore != null) {
             messages = messageRepository.findByRoomIdAndChannelIdFilteredUserBeforeCursor(
-                    roomId, channelId, userId, before, descPageable);
+                    roomId, channelId, userId, resolvedBefore, descPageable);
         } else {
             messages = messageRepository.findByRoomIdAndChannelIdFilteredUser(
                     roomId, channelId, userId, descPageable);
@@ -74,6 +83,9 @@ public class MessageService {
     public List<MessageResponse> advancedSearch(
             String userId, String roomId, String channelId,
             String q, String from, String has, String mentions, int limit) {
+        log.info(
+                "[advancedSearch] userId: {}, roomId: {}, channelId: {}, q: {}, from: {}, has: {}, mentions: {}, limit: {}",
+                userId, roomId, channelId, q, from, has, mentions, limit);
         membershipClient.verifyMembership(userId, roomId);
 
         int clampedLimit = Math.min(Math.max(limit, 1), MAX_LIMIT);
@@ -83,9 +95,21 @@ public class MessageService {
                 .and("channelId").is(channelId)
                 .and("isDeleted").is(false);
 
-        // Filter: 'from' represents senderId (index-backed by idx_sender_time)
+        // Filter: 'from' represents senderName (username typed in search box)
         if (from != null && !from.trim().isEmpty()) {
-            criteria.and("senderId").is(from);
+            criteria.and("senderName").regex("^" + Pattern.quote(from.trim()) + "$", "i");
+        }
+
+        Query query = new Query(criteria)
+                .with(Sort.by(Sort.Direction.DESC, "_id")) // descending order by Object ID (cursor)
+                .limit(clampedLimit);
+
+        // Filter: 'mentions' represents matches pattern @username in content string
+        if (mentions != null && !mentions.trim().isEmpty()) {
+            String mentionStr = mentions.trim();
+            query.addCriteria(new Criteria().orOperator(
+                    Criteria.where("mentions").is(mentionStr),
+                    Criteria.where("content").regex("<@" + Pattern.quote(mentionStr) + ">")));
         }
 
         // Filter: 'has' represents message content types (IMAGE, VIDEO, etc.)
@@ -94,37 +118,33 @@ public class MessageService {
             switch (typeStr) {
                 case "image":
                 case "hình ảnh":
-                    criteria.and("type").is("IMAGE");
+                    query.addCriteria(new Criteria().orOperator(
+                            Criteria.where("type").is("IMAGE"),
+                            Criteria.where("fileName").regex("\\.(jpeg|jpg|gif|png|webp|svg)($|\\?)", "i")));
                     break;
                 case "video":
-                    criteria.and("type").is("VIDEO");
+                    query.addCriteria(new Criteria().orOperator(
+                            Criteria.where("type").is("VIDEO"),
+                            Criteria.where("fileName").regex("\\.(mp4|webm|mov)($|\\?)", "i")));
                     break;
                 case "link":
-                    // Regex find links: backed partially by compound cursor index scanning
-                    criteria.and("content").regex("https?://", "i");
+                    query.addCriteria(Criteria.where("content").regex("https?://", "i"));
                     break;
                 case "file":
                 case "tệp":
-                    criteria.and("type").is("FILE");
+                    query.addCriteria(Criteria.where("fileKey").exists(true).ne(null).ne(""));
                     break;
                 case "audio":
                 case "âm thanh":
-                    criteria.and("type").is("AUDIO");
+                    query.addCriteria(new Criteria().orOperator(
+                            Criteria.where("type").is("AUDIO"),
+                            Criteria.where("fileName").regex("\\.(mp3|wav|ogg)($|\\?)", "i")));
                     break;
                 case "sticker":
-                    criteria.and("type").is("STICKER");
+                    query.addCriteria(Criteria.where("type").is("STICKER"));
                     break;
             }
         }
-
-        // Filter: 'mentions' represents matches pattern @username in content string
-        if (mentions != null && !mentions.trim().isEmpty()) {
-            criteria.and("content").regex("@" + Pattern.quote(mentions.trim()), "i");
-        }
-
-        Query query = new Query(criteria)
-                .with(Sort.by(Sort.Direction.DESC, "_id")) // descending order by Object ID (cursor)
-                .limit(clampedLimit);
 
         // Filter: 'q' represents text criteria matching using indexed idx_content_text
         // index
@@ -256,8 +276,163 @@ public class MessageService {
         return MessageResponse.from(updated);
     }
 
+    public MessageResponse pinMessage(String userId, String messageId) {
+        return pinMessage(userId, messageId, "User");
+    }
+
+    public MessageResponse pinMessage(String userId, String messageId, String senderName) {
+        Message msg = messageRepository.findByMessageId(messageId)
+                .orElseThrow(() -> new ResourceNotFoundException("Message not found: " + messageId));
+
+        membershipClient.verifyPinPrivilege(userId, msg.getRoomId());
+
+        if (msg.isPinned()) {
+            return MessageResponse.from(msg);
+        }
+
+        long pinCount = mongoTemplate.count(
+                Query.query(Criteria.where("roomId").is(msg.getRoomId())
+                        .and("channelId").is(msg.getChannelId())
+                        .and("isPinned").is(true)
+                        .and("isDeleted").is(false)),
+                Message.class);
+
+        if (pinCount >= 50) {
+            throw new BadRequestException("Channel has reached the maximum of 50 pinned messages.");
+        }
+
+        mongoTemplate.updateFirst(
+                Query.query(Criteria.where("messageId").is(messageId)),
+                new Update().set("isPinned", true),
+                Message.class);
+
+        Message updated = messageRepository.findByMessageId(messageId).orElseThrow();
+
+        // Save a system message to chat history
+        Message systemMsg = Message.builder()
+                .messageId(UUID.randomUUID().toString())
+                .roomId(updated.getRoomId())
+                .channelId(updated.getChannelId())
+                .senderId(userId)
+                .senderName(senderName)
+                .type("SYSTEM")
+                .content("pinned_message")
+                .createdAt(Instant.now())
+                .build();
+        messageRepository.save(systemMsg);
+
+        // Broadcast pin event
+        Map<String, Object> event = new HashMap<>();
+        event.put("eventType", "MESSAGE_PINNED");
+        event.put("channelId", updated.getChannelId());
+        event.put("roomId", updated.getRoomId());
+        event.put("messageId", messageId);
+        event.put("isPinned", true);
+        rabbitTemplate.convertAndSend("chat.exchange", "message.system", event);
+
+        // Broadcast system message event so it appears in chat real-time
+        Map<String, Object> systemMsgEvent = new HashMap<>();
+        systemMsgEvent.put("eventType", "SYSTEM_MESSAGE_NEW");
+        systemMsgEvent.put("messageId", systemMsg.getMessageId());
+        systemMsgEvent.put("roomId", systemMsg.getRoomId());
+        systemMsgEvent.put("channelId", systemMsg.getChannelId());
+        systemMsgEvent.put("senderId", systemMsg.getSenderId());
+        systemMsgEvent.put("senderName", systemMsg.getSenderName());
+        systemMsgEvent.put("type", "SYSTEM");
+        systemMsgEvent.put("content", systemMsg.getContent());
+        systemMsgEvent.put("createdAt", systemMsg.getCreatedAt().toString());
+        rabbitTemplate.convertAndSend("chat.exchange", "message.system", systemMsgEvent);
+
+        return MessageResponse.from(updated);
+    }
+
+    public MessageResponse unpinMessage(String userId, String messageId) {
+        Message msg = messageRepository.findByMessageId(messageId)
+                .orElseThrow(() -> new ResourceNotFoundException("Message not found: " + messageId));
+
+        membershipClient.verifyPinPrivilege(userId, msg.getRoomId());
+
+        if (!msg.isPinned()) {
+            return MessageResponse.from(msg);
+        }
+
+        mongoTemplate.updateFirst(
+                Query.query(Criteria.where("messageId").is(messageId)),
+                new Update().set("isPinned", false),
+                Message.class);
+
+        Message updated = messageRepository.findByMessageId(messageId).orElseThrow();
+
+        // Broadcast unpin event
+        Map<String, Object> event = new HashMap<>();
+        event.put("eventType", "MESSAGE_PINNED");
+        event.put("channelId", updated.getChannelId());
+        event.put("roomId", updated.getRoomId());
+        event.put("messageId", messageId);
+        event.put("isPinned", false);
+        rabbitTemplate.convertAndSend("chat.exchange", "message.system", event);
+
+        return MessageResponse.from(updated);
+    }
+
+    public List<MessageResponse> getPinnedMessages(String userId, String roomId, String channelId) {
+        membershipClient.verifyMembership(userId, roomId);
+
+        Query query = new Query(Criteria.where("roomId").is(roomId)
+                .and("channelId").is(channelId)
+                .and("isPinned").is(true)
+                .and("isDeleted").is(false))
+                .with(Sort.by(Sort.Direction.DESC, "_id"))
+                .limit(50);
+
+        return mongoTemplate.find(query, Message.class)
+                .stream().map(MessageResponse::from)
+                .collect(Collectors.toList());
+    }
+
     public void clearAllHistory() {
         messageRepository.deleteAll();
         readReceiptRepository.deleteAll();
+    }
+
+    private String resolveCursorId(String cursor) {
+        if (cursor == null || cursor.isBlank()) {
+            return null;
+        }
+
+        String clean = cursor.trim();
+        if (clean.startsWith("msg-")) {
+            clean = clean.substring(4);
+        } else if (clean.startsWith("optimistic-")) {
+            clean = clean.substring(11);
+        }
+
+        // Check if cursor matches a 24-character hexadecimal ObjectId
+        if (isValidObjectId(clean)) {
+            return clean;
+        }
+
+        // If not a valid ObjectId (e.g. UUID), lookup the message mapping to resolve
+        // its DB ObjectId
+        Optional<Message> msgOpt = messageRepository.findByMessageId(clean);
+        if (msgOpt.isPresent()) {
+            return msgOpt.get().getId();
+        }
+
+        log.warn("[resolveCursorId] Failed to resolve message cursor ID: {}", cursor);
+        return null;
+    }
+
+    private boolean isValidObjectId(String s) {
+        if (s == null || s.length() != 24) {
+            return false;
+        }
+        for (int i = 0; i < 24; i++) {
+            char c = s.charAt(i);
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+                return false;
+            }
+        }
+        return true;
     }
 }

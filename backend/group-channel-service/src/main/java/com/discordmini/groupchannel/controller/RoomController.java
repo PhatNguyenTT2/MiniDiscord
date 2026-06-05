@@ -81,6 +81,14 @@ public class RoomController {
         return ResponseEntity.ok(ApiResponse.ok("Member verified", null));
     }
 
+    @GetMapping("/{roomId}/members/{userId}/pin-privilege")
+    public ResponseEntity<ApiResponse<Void>> checkPinPrivilege(
+            @PathVariable UUID roomId,
+            @PathVariable UUID userId) {
+        membershipService.checkPinPrivilege(roomId, userId);
+        return ResponseEntity.ok(ApiResponse.ok("Pin privilege verified", null));
+    }
+
     @GetMapping("/root")
     public ResponseEntity<ApiResponse<RoomResponse>> getRootGroup() {
         Room root = roomService.getOrCreateRootGroup();

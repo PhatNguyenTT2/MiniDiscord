@@ -10,7 +10,6 @@ type PresignResponse = {
 };
 
 type FileResponse = {
-  fileUrl: string; // The URL to view the file
   fileName: string;
   fileSize: number;
   contentType: string;
@@ -20,14 +19,14 @@ type FileResponse = {
 interface FileState {
   isUploading: boolean;
   uploadProgress: number;
-  uploadFile: (file: File) => Promise<FileResponse>;
+  uploadFile: (file: File, purpose?: string) => Promise<FileResponse>;
 }
 
 export const useFileStore = create<FileState>((set) => ({
   isUploading: false,
   uploadProgress: 0,
 
-  uploadFile: async (file) => {
+  uploadFile: async (file, purpose) => {
     try {
       set({ isUploading: true, uploadProgress: 0 });
 
@@ -39,6 +38,7 @@ export const useFileStore = create<FileState>((set) => ({
           fileName: file.name,
           contentType: file.type || "application/octet-stream",
           fileSize: file.size,
+          purpose,
         }
       );
 
@@ -76,7 +76,6 @@ export const useFileStore = create<FileState>((set) => ({
 
       // Return the file data including the view URL
       return {
-        fileUrl: presignData.viewUrl,
         fileName: file.name,
         fileSize: file.size,
         contentType: file.type,

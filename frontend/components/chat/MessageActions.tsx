@@ -41,6 +41,9 @@ interface MessageActionsProps {
   messageContent?: string;
   isOwnMessage?: boolean;
   onMarkUnread?: () => void;
+  isPinned?: boolean;
+  onPin?: () => void;
+  onForward?: () => void;
 }
 
 export function MessageActions({
@@ -52,7 +55,10 @@ export function MessageActions({
   canDelete,
   messageContent = "",
   isOwnMessage = false,
-  onMarkUnread
+  onMarkUnread,
+  isPinned = false,
+  onPin,
+  onForward,
 }: MessageActionsProps) {
   const { t } = useTranslation();
   const moreButtonRef = useRef<HTMLButtonElement>(null);
@@ -81,7 +87,7 @@ export function MessageActions({
       <ActionButton label={t("chat.reply")} onClick={onReply}>
         <Reply className="h-4 w-4" />
       </ActionButton>
-      <ActionButton label={t("chat.forward")}>
+      <ActionButton label={t("chat.forward")} onClick={onForward}>
         <Forward className="h-4 w-4" />
       </ActionButton>
       {canEdit && (
@@ -118,10 +124,13 @@ export function MessageActions({
         onClose={() => setIsDropdownOpen(false)}
         messageContent={messageContent}
         isOwnMessage={isOwnMessage}
+        isPinned={isPinned}
         onEdit={canEdit ? onEdit : undefined}
         onReply={onReply}
         onMarkUnread={onMarkUnread}
         onDelete={canDelete ? onDelete : undefined}
+        onPin={onPin}
+        onForward={onForward}
       />
     </div>
   );

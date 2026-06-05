@@ -283,21 +283,14 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
     }
 
     // Start local ringing playback loop
-    soundEngine?.play("call_ringing");
-    if (ringingSoundInterval) clearInterval(ringingSoundInterval);
-    ringingSoundInterval = setInterval(() => {
-      soundEngine?.play("call_ringing");
-    }, 4000);
+    soundEngine?.playLoop("call_ringing");
   },
 
   acceptCall: async () => {
     const incoming = get().incomingCall;
     if (!incoming) return;
 
-    if (ringingSoundInterval) {
-      clearInterval(ringingSoundInterval);
-      ringingSoundInterval = null;
-    }
+    soundEngine?.stopLoop("call_ringing");
 
     try {
       console.log(`[VoiceStore] Accepting call in room ${incoming.roomId}`);
@@ -357,10 +350,7 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
     const incoming = get().incomingCall;
     if (!incoming) return;
 
-    if (ringingSoundInterval) {
-      clearInterval(ringingSoundInterval);
-      ringingSoundInterval = null;
-    }
+    soundEngine?.stopLoop("call_ringing");
 
     const token = useAuthStore.getState().token;
     if (token) {
@@ -380,10 +370,7 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
 
     console.log(`[VoiceStore] Ending active call in room ${activeRoomId}`);
 
-    if (ringingSoundInterval) {
-      clearInterval(ringingSoundInterval);
-      ringingSoundInterval = null;
-    }
+    soundEngine?.stopLoop("call_ringing");
 
     const token = useAuthStore.getState().token;
     if (token) {
@@ -516,16 +503,9 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
 
     if (action === "RING") {
       set({ incomingCall: event });
-      soundEngine?.play("call_ringing");
-      if (ringingSoundInterval) clearInterval(ringingSoundInterval);
-      ringingSoundInterval = setInterval(() => {
-        soundEngine?.play("call_ringing");
-      }, 4000);
+      soundEngine?.playLoop("call_ringing");
     } else if (action === "ACCEPT") {
-      if (ringingSoundInterval) {
-        clearInterval(ringingSoundInterval);
-        ringingSoundInterval = null;
-      }
+      soundEngine?.stopLoop("call_ringing");
       set({ activeCallRoomId: roomId, incomingCall: null });
       // Initiate WebRTC peer logic
       webrtcManager.initLocalStream().then(() => {
@@ -555,17 +535,11 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
       });
       soundEngine?.play("voice_join");
     } else if (action === "DECLINE" || action === "MISSED") {
-      if (ringingSoundInterval) {
-        clearInterval(ringingSoundInterval);
-        ringingSoundInterval = null;
-      }
+      soundEngine?.stopLoop("call_ringing");
       set({ incomingCall: null, activeCallRoomId: null });
       soundEngine?.play("voice_leave");
     } else if (action === "END") {
-      if (ringingSoundInterval) {
-        clearInterval(ringingSoundInterval);
-        ringingSoundInterval = null;
-      }
+      soundEngine?.stopLoop("call_ringing");
       webrtcManager.disconnectAll();
       set({ activeCallRoomId: null, incomingCall: null, remoteStreams: {} });
       soundEngine?.play("voice_disconnect");

@@ -12,10 +12,13 @@ interface ContextMenuDropdownProps {
   onClose: () => void;
   messageContent: string;
   isOwnMessage: boolean;
+  isPinned?: boolean;
   onEdit?: () => void;
   onReply?: () => void;
   onMarkUnread?: () => void;
   onDelete?: () => void;
+  onPin?: () => void;
+  onForward?: () => void;
 }
 
 export function ContextMenuDropdown({
@@ -24,10 +27,13 @@ export function ContextMenuDropdown({
   onClose,
   messageContent,
   isOwnMessage,
+  isPinned = false,
   onEdit,
   onReply,
   onMarkUnread,
   onDelete,
+  onPin,
+  onForward,
 }: ContextMenuDropdownProps) {
   const { t } = useTranslation();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -135,13 +141,13 @@ export function ContextMenuDropdown({
           <Reply className="h-4 w-4 opacity-70 group-hover:opacity-100" />
         </button>
 
-        <div
-          className="flex items-center justify-between rounded-[2px] px-2 py-1.5 text-sm font-medium text-muted-foreground cursor-not-allowed opacity-50"
-          title={t("chat.comingSoon")}
+        <button
+          onClick={() => handleAction(onForward)}
+          className="flex items-center justify-between rounded-[2px] px-2 py-1.5 text-sm font-medium text-[#dbdee1] hover:bg-[#5865f2] hover:text-white transition-colors group cursor-pointer"
         >
           {t("chat.forward")}
-          <Forward className="h-4 w-4" />
-        </div>
+          <Forward className="h-4 w-4 opacity-70 group-hover:opacity-100" />
+        </button>
 
         <button
           onClick={handleCopy}
@@ -151,13 +157,13 @@ export function ContextMenuDropdown({
           <Copy className="h-4 w-4 opacity-70 group-hover:opacity-100" />
         </button>
 
-        <div
-          className="flex items-center justify-between rounded-[2px] px-2 py-1.5 text-sm font-medium text-muted-foreground cursor-not-allowed opacity-50"
-          title={t("chat.comingSoon")}
+        <button
+          onClick={() => handleAction(onPin)}
+          className="flex items-center justify-between rounded-[2px] px-2 py-1.5 text-sm font-medium text-[#dbdee1] hover:bg-[#5865f2] hover:text-white transition-colors group cursor-pointer"
         >
-          {t("chat.pinMessage")}
-          <Pin className="h-4 w-4" />
-        </div>
+          {isPinned ? t("chat.unpinMessage") : t("chat.pinMessage")}
+          <Pin className={cn("h-4 w-4 opacity-70 group-hover:opacity-100", isPinned && "fill-current text-[#f5c211]")} />
+        </button>
 
         <button
           onClick={() => handleAction(onMarkUnread)}

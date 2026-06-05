@@ -13,10 +13,12 @@ interface VoiceChannelViewProps {
   channelName: string;
 }
 
+const EMPTY_PARTICIPANTS: any[] = [];
+
 export function VoiceChannelView({ channelId, roomId, channelName }: VoiceChannelViewProps) {
   const { t } = useTranslation();
 
-  const participants = useVoiceStore((s) => s.channelParticipants[channelId] || []);
+  const participants = useVoiceStore((s) => s.channelParticipants[channelId] || EMPTY_PARTICIPANTS);
   const currentChannel = useVoiceStore((s) => s.currentChannel);
   const joinVoiceChannel = useVoiceStore((s) => s.joinVoiceChannel);
 

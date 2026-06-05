@@ -25,14 +25,20 @@ public class MessageResponse {
     private String senderAvatar;
     private String type;
     private String content;
-    private String fileUrl;
+    private String fileKey;
     private String fileName;
     private Long fileSize;
+    @com.fasterxml.jackson.annotation.JsonProperty("isEdited")
     private boolean isEdited;
+    @com.fasterxml.jackson.annotation.JsonProperty("isPinned")
+    private boolean isPinned;
+    @com.fasterxml.jackson.annotation.JsonProperty("isForwarded")
+    private boolean isForwarded;
     private Instant createdAt;
     private Instant updatedAt;
     private Message.ReplyTo replyTo;
     private List<ReactionResponse> reactions;
+    private List<String> mentions;
 
     @Data
     @Builder
@@ -55,13 +61,16 @@ public class MessageResponse {
                 .senderAvatar(message.getSenderAvatar())
                 .type(message.getType())
                 .content(message.getContent())
-                .fileUrl(message.getFileUrl())
+                .fileKey(message.getFileKey())
                 .fileName(message.getFileName())
                 .fileSize(message.getFileSize())
                 .isEdited(message.isEdited())
+                .isPinned(message.isPinned())
+                .isForwarded(message.isForwarded())
                 .createdAt(message.getCreatedAt())
                 .updatedAt(message.getUpdatedAt())
                 .replyTo(message.getReplyTo())
+                .mentions(message.getMentions())
                 .reactions(message.getReactions() != null ? message.getReactions().stream()
                         .map(r -> ReactionResponse.builder()
                                 .emoji(r.getEmoji())

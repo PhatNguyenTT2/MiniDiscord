@@ -41,10 +41,12 @@ public class MessageEventListener {
                 .senderAvatar(event.getSenderAvatar())
                 .type(event.getType())
                 .content(event.getContent())
-                .fileUrl(event.getFileUrl())
+                .fileKey(event.getFileKey())
                 .fileName(event.getFileName())
                 .fileSize(event.getFileSize())
+                .isForwarded(event.isForwarded())
                 .replyTo(replyTo)
+                .mentions(event.getMentions())
                 .createdAt(event.getCreatedAt() != null ? event.getCreatedAt() : Instant.now())
                 .build();
 

@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { SearchDropdown, type ActiveFilter } from "./SearchDropdown";
+import { PinnedListModal } from "./PinnedListModal";
 import {
   Hash,
   Pin,
   Users,
   Search,
   Inbox,
+  X,
 } from "lucide-react";
 import { Separator } from "@/components/ui/Separator";
 import { useUIStore } from "@/stores/uiStore";
@@ -63,6 +65,23 @@ export function ChatHeader({
   const toggleMemberList = useUIStore((s) => s.toggleMemberList);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [searchValue, setSearchValue] = useState("");
+  const [showPinnedModal, setShowPinnedModal] = useState(false);
+
+  useEffect(() => {
+    function handleOpenPinnedList() {
+      setShowPinnedModal(true);
+    }
+    window.addEventListener("open-pinned-list", handleOpenPinnedList);
+    return () => window.removeEventListener("open-pinned-list", handleOpenPinnedList);
+  }, []);
+
+  useEffect(() => {
+    function handleClearSearch() {
+      setSearchValue("");
+    }
+    window.addEventListener("clear-search-value", handleClearSearch);
+    return () => window.removeEventListener("clear-search-value", handleClearSearch);
+  }, []);
 
   const membersMap = useRoomStore((s) => s.members);
   const channelsMap = useRoomStore((s) => s.channels);
@@ -72,58 +91,125 @@ export function ChatHeader({
 
   const searchMessagesAction = useChatStore((s) => s.searchMessages);
 
-  // Active filter state detection
-  const getActiveFilter = (value: string): ActiveFilter => {
-    if (!value.trim()) return "filters";
-    if (value.startsWith("từ:") || value.startsWith("from:")) return "from-user";
-    if (value.startsWith("trong:") || value.startsWith("in:")) return "in-channel";
-    if (value.startsWith("có:") || value.startsWith("has:")) return "has-data";
-    if (value.startsWith("đề cập:") || value.startsWith("mentions:")) return "mentions";
-    return "general";
+  // Token-based multi-filter active state detection
+  const getActiveFilterAndQuery = (value: string): { activeFilter: ActiveFilter; filterQuery: string } => {
+    if (!value.trim()) {
+      return { activeFilter: "filters", filterQuery: "" };
+    }
+
+    const tokens = value.split(/\s+/);
+    const lastToken = tokens[tokens.length - 1];
+
+    if (!lastToken) {
+      return { activeFilter: "filters", filterQuery: "" };
+    }
+
+    if (lastToken.startsWith("từ:") || lastToken.startsWith("from:")) {
+      return { activeFilter: "from-user", filterQuery: lastToken.slice(lastToken.indexOf(":") + 1) };
+    }
+    if (lastToken.startsWith("trong:") || lastToken.startsWith("in:")) {
+      return { activeFilter: "in-channel", filterQuery: lastToken.slice(lastToken.indexOf(":") + 1) };
+    }
+    if (lastToken.startsWith("có:") || lastToken.startsWith("has:")) {
+      return { activeFilter: "has-data", filterQuery: lastToken.slice(lastToken.indexOf(":") + 1) };
+    }
+    if (lastToken.startsWith("đề cập:") || lastToken.startsWith("mentions:")) {
+      return { activeFilter: "mentions", filterQuery: lastToken.slice(lastToken.indexOf(":") + 1) };
+    }
+
+    return { activeFilter: "general", filterQuery: lastToken };
   };
 
-  const getFilterQuery = (value: string) => {
-    const colonIdx = value.indexOf(":");
-    return colonIdx >= 0 ? value.slice(colonIdx + 1).trim() : value.trim();
-  };
+  const [showDropdown, setShowDropdown] = useState(false);
+  const { activeFilter, filterQuery } = getActiveFilterAndQuery(searchValue);
 
-  const activeFilter = getActiveFilter(searchValue);
-  const filterQuery = getFilterQuery(searchValue);
+  const submitSearch = async (val: string) => {
+    if (!roomId || !channelId) return;
+    const parsedFilters = parseSearchFilters(val);
+    await searchMessagesAction(roomId, channelId, parsedFilters);
+  };
 
   const handleSelectFilter = (prefix: string) => {
-    setSearchValue(prefix + " ");
+    setSearchValue((prev) => {
+      const trimmed = prev.trim();
+      const updated = trimmed ? `${trimmed} ${prefix}` : `${prefix}`;
+      // Keep dropdown open for completing the selected filter
+      setShowDropdown(true);
+      return updated;
+    });
   };
 
   const handleSelectUser = (userId: string, username: string) => {
-    if (searchValue.startsWith("đề cập:") || searchValue.startsWith("mentions:")) {
-      const prefix = searchValue.startsWith("m") ? "mentions:" : "đề cập:";
-      setSearchValue(`${prefix}${username} `);
+    const prev = searchValue;
+    let updated = prev;
+    const tokens = prev.split(/\s+/);
+    if (tokens.length > 0) {
+      const lastToken = tokens[tokens.length - 1];
+      const colonIdx = lastToken.indexOf(":");
+      if (colonIdx >= 0) {
+        const prefix = lastToken.slice(0, colonIdx);
+        tokens[tokens.length - 1] = `${prefix}:${username}`;
+        updated = tokens.join(" ") + " ";
+      } else {
+        updated = prev + ` ${username} `;
+      }
     } else {
-      const prefix = searchValue.startsWith("f") ? "from:" : "từ:";
-      setSearchValue(`${prefix}${username} `);
+      updated = prev + ` ${username} `;
     }
+    setSearchValue(updated);
+    setShowDropdown(false);
+    submitSearch(updated);
   };
 
   const handleSelectChannel = (chanId: string, chanName: string) => {
-    const prefix = searchValue.startsWith("i") ? "in:" : "trong:";
-    setSearchValue(`${prefix}${chanName} `);
+    const prev = searchValue;
+    let updated = prev;
+    const tokens = prev.split(/\s+/);
+    if (tokens.length > 0) {
+      const lastToken = tokens[tokens.length - 1];
+      const colonIdx = lastToken.indexOf(":");
+      if (colonIdx >= 0) {
+        const prefix = lastToken.slice(0, colonIdx);
+        tokens[tokens.length - 1] = `${prefix}:${chanName}`;
+        updated = tokens.join(" ") + " ";
+      } else {
+        updated = prev + ` ${chanName} `;
+      }
+    } else {
+      updated = prev + ` ${chanName} `;
+    }
+    setSearchValue(updated);
+    setShowDropdown(false);
+    submitSearch(updated);
   };
 
   const handleSelectDataType = (dataType: string) => {
-    const prefix = searchValue.startsWith("h") ? "has:" : "có:";
-    setSearchValue(`${prefix}${dataType} `);
+    const prev = searchValue;
+    let updated = prev;
+    const tokens = prev.split(/\s+/);
+    if (tokens.length > 0) {
+      const lastToken = tokens[tokens.length - 1];
+      const colonIdx = lastToken.indexOf(":");
+      if (colonIdx >= 0) {
+        const prefix = lastToken.slice(0, colonIdx);
+        tokens[tokens.length - 1] = `${prefix}:${dataType}`;
+        updated = tokens.join(" ") + " ";
+      } else {
+        updated = prev + ` ${dataType} `;
+      }
+    } else {
+      updated = prev + ` ${dataType} `;
+    }
+    setSearchValue(updated);
+    setShowDropdown(false);
+    submitSearch(updated);
   };
 
   const handleSearchSubmit = async () => {
     if (!roomId || !channelId) return;
     setIsSearchFocused(false);
-
-    const parsedFilters = parseSearchFilters(searchValue);
-    console.log("[ChatHeader] Unified query parsed filters: ", parsedFilters);
-
-    // Call store search action
-    const results = await searchMessagesAction(roomId, channelId, parsedFilters);
-    console.log("[ChatHeader] Results found: ", results);
+    setShowDropdown(false);
+    await submitSearch(searchValue);
   };
 
   return (
@@ -141,10 +227,25 @@ export function ChatHeader({
         )}
       </div>
 
-      <div className="flex items-center gap-1">
-        <HeaderIcon label={t("chat.pin")}>
-          <Pin className="h-5 w-5" />
+      <div className="flex items-center gap-1 relative">
+        <HeaderIcon
+          label={t("chat.pin")}
+          isActive={showPinnedModal}
+          onClick={() => setShowPinnedModal(!showPinnedModal)}
+        >
+          <Pin className={cn("h-5 w-5", showPinnedModal && "fill-current text-[#f5c211]")} />
         </HeaderIcon>
+        <PinnedListModal
+          isOpen={showPinnedModal}
+          onClose={() => setShowPinnedModal(false)}
+          roomId={roomId}
+          channelId={channelId}
+          onJumpToMessage={(messageId) => {
+            const event = new CustomEvent("jump-to-message", { detail: { messageId } });
+            window.dispatchEvent(event);
+            setShowPinnedModal(false);
+          }}
+        />
         <HeaderIcon
           label={t("chat.memberList")}
           isActive={showMemberList}
@@ -157,7 +258,11 @@ export function ChatHeader({
             type="text"
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
-            onFocus={() => setIsSearchFocused(true)}
+            onFocus={() => {
+              setIsSearchFocused(true);
+              setShowDropdown(true);
+            }}
+            onClick={() => setShowDropdown(true)}
             onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
@@ -165,12 +270,24 @@ export function ChatHeader({
               }
             }}
             placeholder={t("chat.search")}
-            className="h-7 w-36 rounded-md bg-background-tertiary px-2 text-[13px] text-foreground placeholder:text-muted-foreground focus:w-56 transition-all duration-200 outline-none"
+            className="h-7 w-36 rounded-md bg-background-tertiary pr-6 pl-2 text-[13px] text-foreground placeholder:text-muted-foreground focus:w-56 transition-all duration-200 outline-none"
           />
-          <Search className="absolute right-1.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          {searchValue ? (
+            <button
+              onClick={() => {
+                setSearchValue("");
+                useChatStore.getState().clearSearchResults(channelId);
+              }}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-muted-foreground hover:text-white transition cursor-pointer"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          ) : (
+            <Search className="absolute right-1.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          )}
           <SearchDropdown
             type="channel"
-            isOpen={isSearchFocused}
+            isOpen={isSearchFocused && showDropdown}
             activeFilter={activeFilter}
             filterQuery={filterQuery}
             members={serverMembers}

@@ -38,6 +38,16 @@ public class MembershipService {
         }
     }
 
+    public void checkPinPrivilege(UUID roomId, UUID userId) {
+        Room room = roomRepository.findById(roomId)
+                .orElseThrow(() -> new RoomNotFoundException("Room not found"));
+        if (room.getType() == com.discordmini.groupchannel.model.enums.RoomType.DM) {
+            checkMembership(roomId, userId);
+        } else {
+            validateAdminOrOwner(roomId, userId);
+        }
+    }
+
     public void validateOwner(UUID roomId, UUID userId) {
         RoomParticipant participant = participantRepository.findByUserIdAndRoomId(userId, roomId)
                 .orElseThrow(() -> new BaseException("Not a member of this room", HttpStatus.FORBIDDEN, "FORBIDDEN"));

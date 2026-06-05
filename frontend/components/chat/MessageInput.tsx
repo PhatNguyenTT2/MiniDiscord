@@ -1,13 +1,15 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { FileUp, ImageIcon, Video, AlertTriangle, Smile, Plus } from "lucide-react";
+import { FileUp, ImageIcon, Video, AlertTriangle, Smile, Plus, X, Reply } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { EmojiPicker } from "@/components/ui/EmojiPicker";
 import { useFileStore } from "@/stores/fileStore";
+import { useChatStore } from "@/stores/chatStore";
 import { cn } from "@/lib/utils";
+import type { MemberDetailResponse } from "@/types/room";
+import { MentionPicker } from "./MentionPicker";
 
 export type AttachmentData = {
-  fileUrl: string;
   fileName: string;
   fileSize: number;
   fileKey: string;
@@ -17,14 +19,27 @@ interface MessageInputProps {
   channelId: string;
   channelName: string;
   isDm?: boolean;
-  onSend?: (content: string, attachment: AttachmentData | null) => void;
+  onSend?: (content: string, attachment: AttachmentData | null, mentions?: string[]) => void;
   onTyping?: () => void;
   typingUsers?: { userId: string; username: string }[];
+  members?: MemberDetailResponse[];
 }
 
 const EMPTY_TYPING: { userId: string; username: string }[] = [];
 
-export function MessageInput({ channelId, channelName, isDm, onSend, onTyping, typingUsers = EMPTY_TYPING }: MessageInputProps) {
+function escapeRegExp(str: string) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function MessageInput({
+  channelId,
+  channelName,
+  isDm,
+  onSend,
+  onTyping,
+  typingUsers = EMPTY_TYPING,
+  members = []
+}: MessageInputProps) {
   const { t } = useTranslation();
   const [message, setMessage] = useState("");
   const [isAttachOpen, setIsAttachOpen] = useState(false);
@@ -33,15 +48,76 @@ export function MessageInput({ channelId, channelName, isDm, onSend, onTyping, t
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [rateLimitCooldown, setRateLimitCooldown] = useState(0);
 
+  // Mention states
+  const [showMentionPicker, setShowMentionPicker] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [mentionTriggerIndex, setMentionTriggerIndex] = useState(-1);
+
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachRef = useRef<HTMLDivElement>(null);
 
   const { isUploading, uploadProgress, uploadFile } = useFileStore();
+  const replyingTo = useChatStore((s) => s.replyingTo);
+  const clearReplyingTo = useChatStore((s) => s.clearReplyingTo);
+
+  // Auto-focus input when reply mode activates
+  useEffect(() => {
+    if (replyingTo) {
+      inputRef.current?.focus();
+    }
+  }, [replyingTo]);
 
   const handleTypingText = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setMessage(e.target.value);
+    const value = e.target.value;
+    setMessage(value);
     onTyping?.();
+
+    // Trigger pattern detection
+    const cursor = e.target.selectionStart || 0;
+    const textBeforeCursor = value.slice(0, cursor);
+    const lastTriggerIndex = textBeforeCursor.lastIndexOf("@");
+
+    if (lastTriggerIndex !== -1) {
+      const charBeforeTrigger = lastTriggerIndex > 0 ? textBeforeCursor[lastTriggerIndex - 1] : "";
+      const isWordStart = charBeforeTrigger === "" || /\s/.test(charBeforeTrigger);
+      const queryText = textBeforeCursor.slice(lastTriggerIndex + 1);
+      const isQueryValid = !/\s/.test(queryText);
+
+      if (isWordStart && isQueryValid) {
+        setShowMentionPicker(true);
+        setMentionQuery(queryText);
+        setMentionTriggerIndex(lastTriggerIndex);
+        return;
+      }
+    }
+
+    setShowMentionPicker(false);
+    setMentionQuery("");
+    setMentionTriggerIndex(-1);
+  };
+
+  const handleMentionSelect = (userId: string, username: string) => {
+    if (mentionTriggerIndex === -1) return;
+    const value = message;
+    const before = value.slice(0, mentionTriggerIndex);
+    const cursor = inputRef.current?.selectionStart || 0;
+    const after = value.slice(cursor);
+
+    const replacement = `@${username} `;
+    setMessage(before + replacement + after);
+
+    setShowMentionPicker(false);
+    setMentionQuery("");
+    setMentionTriggerIndex(-1);
+
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+        const newCursorPos = before.length + replacement.length;
+        inputRef.current.setSelectionRange(newCursorPos, newCursorPos);
+      }
+    }, 10);
   };
 
   const submitMessage = () => {
@@ -63,7 +139,30 @@ export function MessageInput({ channelId, channelName, isDm, onSend, onTyping, t
       return;
     }
 
-    onSend?.(message.trim(), attachment);
+    // Convert display @everyone / @here and @username to structured <@userId> tokens
+    let content = message.trim();
+    const mentionsList: string[] = [];
+
+    const everyonePattern = /@everyone\b/g;
+    if (everyonePattern.test(content)) {
+      content = content.replace(everyonePattern, "<@everyone>");
+      mentionsList.push("everyone");
+    }
+
+    if (members && members.length > 0) {
+      const sortedMembers = [...members].sort((a, b) => b.username.length - a.username.length);
+      sortedMembers.forEach((member) => {
+        const pattern = new RegExp(`@${escapeRegExp(member.username)}\\b`, "g");
+        if (pattern.test(content)) {
+          content = content.replace(pattern, `<@${member.userId}>`);
+          if (!mentionsList.includes(member.userId)) {
+            mentionsList.push(member.userId);
+          }
+        }
+      });
+    }
+
+    onSend?.(content, attachment, mentionsList);
     setMessage("");
     setAttachment(null);
     if (previewUrl) {
@@ -94,7 +193,6 @@ export function MessageInput({ channelId, channelName, isDm, onSend, onTyping, t
     try {
       const res = await uploadFile(file);
       setAttachment({
-        fileUrl: res.fileUrl,
         fileName: res.fileName,
         fileSize: res.fileSize,
         fileKey: res.fileKey,
@@ -167,6 +265,45 @@ export function MessageInput({ channelId, channelName, isDm, onSend, onTyping, t
           backgroundColor: "#383a40",
         }}
       >
+        {replyingTo && (
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#202225]/30 bg-[#2b2d31] rounded-t-[var(--floating-bar-radius)] animate-in slide-in-from-bottom-[6px] duration-150">
+            <div className="flex min-w-0 items-center gap-2">
+              <Reply className="h-3.5 w-3.5 shrink-0 rotate-180 text-[#b5bac1]" />
+              <span className="text-[13px] text-[#b5bac1]">
+                {t("chat.replyingTo")}{" "}
+                <strong className="font-semibold text-white">
+                  {replyingTo.senderName}
+                </strong>
+              </span>
+              <span className="max-w-[400px] truncate text-[13px] text-[#b5bac1] opacity-60">
+                — {replyingTo.content}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={clearReplyingTo}
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#111214]/30 hover:bg-[#111214]/60 text-[#b5bac1] hover:text-[#dbdee1] transition-all cursor-pointer"
+              aria-label={t("chat.cancelReply")}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
+        {showMentionPicker && (
+          <MentionPicker
+            members={members}
+            query={mentionQuery}
+            isDm={isDm}
+            onSelect={handleMentionSelect}
+            onClose={() => {
+              setShowMentionPicker(false);
+              setMentionQuery("");
+              setMentionTriggerIndex(-1);
+            }}
+          />
+        )}
+
         {rateLimitCooldown > 0 && (
           <div className="flex items-center gap-2 px-4 py-2 text-sm text-warning bg-warning/10 rounded-t-[var(--floating-bar-radius)]">
             <AlertTriangle className="h-4 w-4 shrink-0" />
@@ -178,7 +315,10 @@ export function MessageInput({ channelId, channelName, isDm, onSend, onTyping, t
         )}
 
         {(isUploading || previewUrl || attachment || uploadError) && (
-          <div className="flex flex-col gap-2 p-4 border-b border-border/50 bg-[#2b2d31] rounded-t-[var(--floating-bar-radius)]">
+          <div className={cn(
+            "flex flex-col gap-2 p-4 border-b border-border/50 bg-[#2b2d31]",
+            !replyingTo && "rounded-t-[var(--floating-bar-radius)]"
+          )}>
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold text-foreground">
                 {uploadError ? (
@@ -309,6 +449,7 @@ export function MessageInput({ channelId, channelName, isDm, onSend, onTyping, t
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
+                  if (showMentionPicker) return;
                   submitMessage();
                 }
               }}

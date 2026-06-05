@@ -91,8 +91,15 @@ export function useWebSocket() {
       console.log("[STOMP] WebSocket closed — clearing stale subscriptions");
       // Clear all subscription refs so onConnect re-subscribes cleanly
       subscriptionsRef.current.clear();
+
+      const prevStatus = useNetworkStore.getState().wsStatus;
+
       useNetworkStore.getState().setWsStatus("connecting");
       useAuthStore.getState().setOwnStatus("OFFLINE");
+
+      if (prevStatus === "connected") {
+        soundEngine?.play("voice_disconnect");
+      }
     };
 
     activateClient();
@@ -136,6 +143,11 @@ function handleRoomMessage(msg: IMessage) {
       return;
     }
 
+    if (eventType === "MESSAGE_PINNED") {
+      useChatStore.getState().setPinnedState(data.channelId, data.messageId, data.isPinned);
+      return;
+    }
+
     if (eventType === "VOICE_STATE_UPDATE") {
       console.log("[STOMP] VOICE_STATE_UPDATE:", data.data);
       useVoiceStore.getState().handleVoiceStateUpdate(data.data);
@@ -171,15 +183,18 @@ function handleRoomMessage(msg: IMessage) {
       senderAvatar: data.senderAvatar || null,
       type: data.type || "TEXT",
       content: data.content,
-      fileUrl: data.fileUrl || null,
+      fileKey: data.fileKey || null,
       fileName: data.fileName || null,
       fileSize: data.fileSize || null,
       reactions: [],
       isEdited: false,
       isDeleted: false,
+      isPinned: data.isPinned || data.pinned || false,
+      isForwarded: data.isForwarded || data.forwarded || false,
       editedAt: null,
       createdAt: data.createdAt || new Date().toISOString(),
       replyTo: data.replyTo || null,
+      mentions: data.mentions || [],
     });
 
     // Increment unread count logic — skip own messages
@@ -190,9 +205,19 @@ function handleRoomMessage(msg: IMessage) {
       const activeChannelId = useUIStore.getState().activeChannelId;
       const isFocused = typeof document !== 'undefined' && document.hasFocus();
 
+      const isMentioned = currentUserId && (
+        data.mentions?.includes(currentUserId) ||
+        data.mentions?.includes("everyone")
+      );
+
       // Increment unread if user is NOT looking at this channel, OR if the window is blurred
       if (data.channelId !== activeChannelId || !isFocused) {
         useNotificationStore.getState().incrementUnread(data.channelId);
+      }
+
+      if (isMentioned) {
+        soundEngine?.play('message_mention');
+      } else if (data.channelId !== activeChannelId || !isFocused) {
         soundEngine?.play('message_notification');
       }
     }

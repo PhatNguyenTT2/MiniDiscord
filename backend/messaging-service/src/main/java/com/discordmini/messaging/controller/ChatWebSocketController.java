@@ -10,12 +10,15 @@ import com.discordmini.messaging.service.RedisPubSubService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.MessageMapping;
-import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.stereotype.Controller;
 
 import java.security.Principal;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
+import java.util.List;
+import java.util.ArrayList;
 import org.bson.types.ObjectId;
 
 @Slf4j
@@ -60,6 +63,16 @@ public class ChatWebSocketController {
             message.setSenderName("User-" + userId.substring(0, 4));
         }
 
+        // Extract mentions using regex <@([^>]+)>
+        List<String> mentions = new ArrayList<>();
+        if (message.getContent() != null) {
+            Matcher matcher = Pattern.compile("<@([^>]+)>").matcher(message.getContent());
+            while (matcher.find()) {
+                mentions.add(matcher.group(1));
+            }
+        }
+        message.setMentions(mentions);
+
         // 4. Build Event for History Service
         MessageEvent event = MessageEvent.builder()
                 .id(objectId)
@@ -71,11 +84,14 @@ public class ChatWebSocketController {
                 .senderAvatar(message.getSenderAvatar())
                 .content(message.getContent())
                 .type(message.getType() != null ? message.getType() : "TEXT")
-                .fileUrl(message.getFileUrl())
+                .fileKey(message.getFileKey())
                 .fileName(message.getFileName())
                 .fileSize(message.getFileSize())
+                .isForwarded(message.isForwarded())
+                .isPinned(message.isPinned())
                 .replyTo(message.getReplyTo())
                 .createdAt(now)
+                .mentions(mentions)
                 .build();
 
         // 5. Non-blocking Publish

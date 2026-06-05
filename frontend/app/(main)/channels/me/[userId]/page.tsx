@@ -12,7 +12,7 @@ import { ScrollToBottomBanner } from "@/components/chat/ScrollToBottomBanner";
 import { StatusAvatar } from "@/components/ui/StatusAvatar";
 import { SearchDropdown, type ActiveFilter } from "@/components/chat/SearchDropdown";
 import { parseSearchFilters } from "@/lib/searchParser";
-import { Phone, Video, Pin, User, Reply, Server, UserPlus, FileIcon, Search } from "lucide-react";
+import { Phone, Video, Pin, User, Reply, Server, UserPlus, FileIcon, Search, X } from "lucide-react";
 import { ResizeHandle } from "@/components/ui/ResizeHandle";
 import { SlidingPanel } from "@/components/ui/SlidingPanel";
 import { useUIStore } from "@/stores/uiStore";
@@ -24,6 +24,8 @@ import { getStompClient } from "@/lib/websocket";
 import { type Message } from "@/types";
 import { useVoiceStore } from "@/stores/voiceStore";
 import { DmCallView } from "@/components/voice/DmCallView";
+import { PinnedListModal } from "@/components/chat/PinnedListModal";
+import { SearchResultsPanel } from "@/components/chat/SearchResultsPanel";
 
 function getMutualServersCount(userId: string) {
   // TODO: Implement mutual servers logic with real API
@@ -64,61 +66,145 @@ export default function DmChatPage() {
   const { t } = useTranslation();
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [searchValue, setSearchValue] = useState("");
+  const [showPinnedModal, setShowPinnedModal] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  useEffect(() => {
+    function handleOpenPinnedList() {
+      setShowPinnedModal(true);
+    }
+    window.addEventListener("open-pinned-list", handleOpenPinnedList);
+    return () => window.removeEventListener("open-pinned-list", handleOpenPinnedList);
+  }, []);
+
+  useEffect(() => {
+    function handleClearSearch() {
+      setSearchValue("");
+    }
+    window.addEventListener("clear-search-value", handleClearSearch);
+    return () => window.removeEventListener("clear-search-value", handleClearSearch);
+  }, []);
 
   const searchMessagesAction = useChatStore((s) => s.searchMessages);
 
-  // Active filter state detection
-  const getActiveFilter = (value: string): ActiveFilter => {
-    if (!value.trim()) return "filters";
-    if (value.startsWith("từ:") || value.startsWith("from:")) return "from-user";
-    if (value.startsWith("trong:") || value.startsWith("in:")) return "in-channel";
-    if (value.startsWith("có:") || value.startsWith("has:")) return "has-data";
-    if (value.startsWith("đề cập:") || value.startsWith("mentions:")) return "mentions";
-    return "general";
+  // Token-based multi-filter active state detection
+  const getActiveFilterAndQuery = (value: string): { activeFilter: ActiveFilter; filterQuery: string } => {
+    if (!value.trim()) {
+      return { activeFilter: "filters", filterQuery: "" };
+    }
+
+    const tokens = value.split(/\s+/);
+    const lastToken = tokens[tokens.length - 1];
+
+    if (!lastToken) {
+      return { activeFilter: "filters", filterQuery: "" };
+    }
+
+    if (lastToken.startsWith("từ:") || lastToken.startsWith("from:")) {
+      return { activeFilter: "from-user", filterQuery: lastToken.slice(lastToken.indexOf(":") + 1) };
+    }
+    if (lastToken.startsWith("trong:") || lastToken.startsWith("in:")) {
+      return { activeFilter: "in-channel", filterQuery: lastToken.slice(lastToken.indexOf(":") + 1) };
+    }
+    if (lastToken.startsWith("có:") || lastToken.startsWith("has:")) {
+      return { activeFilter: "has-data", filterQuery: lastToken.slice(lastToken.indexOf(":") + 1) };
+    }
+    if (lastToken.startsWith("đề cập:") || lastToken.startsWith("mentions:")) {
+      return { activeFilter: "mentions", filterQuery: lastToken.slice(lastToken.indexOf(":") + 1) };
+    }
+
+    return { activeFilter: "general", filterQuery: lastToken };
   };
 
-  const getFilterQuery = (value: string) => {
-    const colonIdx = value.indexOf(":");
-    return colonIdx >= 0 ? value.slice(colonIdx + 1).trim() : value.trim();
-  };
+  const { activeFilter, filterQuery } = getActiveFilterAndQuery(searchValue);
 
-  const activeFilter = getActiveFilter(searchValue);
-  const filterQuery = getFilterQuery(searchValue);
+  const submitSearch = async (val: string) => {
+    if (!roomId || !channelId) return;
+    const parsedFilters = parseSearchFilters(val);
+    await searchMessagesAction(roomId, channelId, parsedFilters);
+  };
 
   const handleSelectFilter = (prefix: string) => {
-    setSearchValue(prefix + " ");
+    setSearchValue((prev) => {
+      const trimmed = prev.trim();
+      const updated = trimmed ? `${trimmed} ${prefix}` : `${prefix}`;
+      // Keep dropdown open for completing the selected filter
+      setShowDropdown(true);
+      return updated;
+    });
   };
 
   const handleSelectUser = (userId: string, username: string) => {
-    if (searchValue.startsWith("đề cập:") || searchValue.startsWith("mentions:")) {
-      const prefix = searchValue.startsWith("m") ? "mentions:" : "đề cập:";
-      setSearchValue(`${prefix}${username} `);
+    const prev = searchValue;
+    let updated = prev;
+    const tokens = prev.split(/\s+/);
+    if (tokens.length > 0) {
+      const lastToken = tokens[tokens.length - 1];
+      const colonIdx = lastToken.indexOf(":");
+      if (colonIdx >= 0) {
+        const prefix = lastToken.slice(0, colonIdx);
+        tokens[tokens.length - 1] = `${prefix}:${username}`;
+        updated = tokens.join(" ") + " ";
+      } else {
+        updated = prev + ` ${username} `;
+      }
     } else {
-      const prefix = searchValue.startsWith("f") ? "from:" : "từ:";
-      setSearchValue(`${prefix}${username} `);
+      updated = prev + ` ${username} `;
     }
+    setSearchValue(updated);
+    setShowDropdown(false);
+    submitSearch(updated);
   };
 
   const handleSelectChannel = (chanId: string, chanName: string) => {
-    const prefix = searchValue.startsWith("i") ? "in:" : "trong:";
-    setSearchValue(`${prefix}${chanName} `);
+    const prev = searchValue;
+    let updated = prev;
+    const tokens = prev.split(/\s+/);
+    if (tokens.length > 0) {
+      const lastToken = tokens[tokens.length - 1];
+      const colonIdx = lastToken.indexOf(":");
+      if (colonIdx >= 0) {
+        const prefix = lastToken.slice(0, colonIdx);
+        tokens[tokens.length - 1] = `${prefix}:${chanName}`;
+        updated = tokens.join(" ") + " ";
+      } else {
+        updated = prev + ` ${chanName} `;
+      }
+    } else {
+      updated = prev + ` ${chanName} `;
+    }
+    setSearchValue(updated);
+    setShowDropdown(false);
+    submitSearch(updated);
   };
 
   const handleSelectDataType = (dataType: string) => {
-    const prefix = searchValue.startsWith("h") ? "has:" : "có:";
-    setSearchValue(`${prefix}${dataType} `);
+    const prev = searchValue;
+    let updated = prev;
+    const tokens = prev.split(/\s+/);
+    if (tokens.length > 0) {
+      const lastToken = tokens[tokens.length - 1];
+      const colonIdx = lastToken.indexOf(":");
+      if (colonIdx >= 0) {
+        const prefix = lastToken.slice(0, colonIdx);
+        tokens[tokens.length - 1] = `${prefix}:${dataType}`;
+        updated = tokens.join(" ") + " ";
+      } else {
+        updated = prev + ` ${dataType} `;
+      }
+    } else {
+      updated = prev + ` ${dataType} `;
+    }
+    setSearchValue(updated);
+    setShowDropdown(false);
+    submitSearch(updated);
   };
 
   const handleSearchSubmit = async () => {
     if (!roomId || !channelId) return;
     setIsSearchFocused(false);
-
-    const parsedFilters = parseSearchFilters(searchValue);
-    console.log("[DM Page] Unified query parsed filters: ", parsedFilters);
-
-    // Call store search action
-    const results = await searchMessagesAction(roomId, channelId, parsedFilters);
-    console.log("[DM Page] Results found: ", results);
+    setShowDropdown(false);
+    await submitSearch(searchValue);
   };
   const showDmUserPanel = useUIStore((s) => s.showDmUserPanel);
   const toggleDmUserPanel = useUIStore((s) => s.toggleDmUserPanel);
@@ -134,10 +220,19 @@ export default function DmChatPage() {
   const currentUser = useAuthStore((s) => s.user);
 
   // Get Room Mapping
-  const { getDmRoomForUser, members: allMembers, findOrCreateDmRoom, isLoading: isLoadingRoom } = useRoomStore();
+  const { getDmRoomForUser, members: allMembers, findOrCreateDmRoom, isLoading: isLoadingRoom, fetchMembers } = useRoomStore();
   const dmRoom = getDmRoomForUser(userId);
   const roomId = dmRoom?.roomId || "";
   const channelId = dmRoom?.channelId || "";
+  const showSearchPanel = useChatStore((s) => s.showSearchPanel[channelId] || false);
+
+  // Hydrate room members whenever the DM room is loaded or changed.
+  // This ensures members list is cached for search filter mapper and autocomplete list.
+  useEffect(() => {
+    if (roomId) {
+      fetchMembers(roomId);
+    }
+  }, [roomId, fetchMembers]);
 
   // Resolve friend name from multiple sources
   const friend = friends.find((f) => f.user.id === userId);
@@ -212,7 +307,7 @@ export default function DmChatPage() {
   }, []);
 
   const handleSend = useCallback(
-    async (content: string, attachment?: { fileUrl: string; fileName: string; fileSize: number } | null) => {
+    async (content: string, attachment?: { fileKey: string; fileName: string; fileSize: number } | null, mentions?: string[]) => {
       let activeRoomId = roomId;
       let activeChannelId = channelId;
 
@@ -247,7 +342,7 @@ export default function DmChatPage() {
                     senderAvatar: data.senderAvatar || null,
                     type: data.type || "TEXT",
                     content: data.content,
-                    fileUrl: data.fileUrl || null,
+                    fileKey: data.fileKey || null,
                     fileName: data.fileName || null,
                     fileSize: data.fileSize || null,
                     reactions: [],
@@ -256,6 +351,7 @@ export default function DmChatPage() {
                     editedAt: null,
                     createdAt: data.createdAt || new Date().toISOString(),
                     replyTo: data.replyTo || null,
+                    mentions: data.mentions || [],
                   });
                 } catch (e) {
                   console.error("Failed to parse lazy room message", e);
@@ -291,7 +387,7 @@ export default function DmChatPage() {
         senderAvatar: currentUser?.avatarUrl || null,
         type: attachment ? "FILE" : "TEXT",
         content,
-        fileUrl: attachment?.fileUrl || null,
+        fileKey: attachment?.fileKey || null,
         fileName: attachment?.fileName || null,
         fileSize: attachment?.fileSize || null,
         reactions: [],
@@ -306,6 +402,7 @@ export default function DmChatPage() {
             senderName: replyingTo.senderName,
           }
           : null,
+        mentions,
       };
       addOptimisticMessage(activeChannelId, optimisticMsg);
 
@@ -316,7 +413,7 @@ export default function DmChatPage() {
         type: attachment ? "FILE" : "TEXT",
         senderName: currentUser?.username,
         senderAvatar: currentUser?.avatarUrl,
-        fileUrl: attachment?.fileUrl,
+        fileKey: attachment?.fileKey,
         fileName: attachment?.fileName,
         fileSize: attachment?.fileSize,
         replyTo: replyingTo
@@ -326,6 +423,7 @@ export default function DmChatPage() {
             senderName: replyingTo.senderName,
           }
           : null,
+        mentions,
       };
 
       client.publish({
@@ -408,9 +506,31 @@ export default function DmChatPage() {
               <button className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
                 <Video className="h-5 w-5" />
               </button>
-              <button className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                <Pin className="h-5 w-5" />
-              </button>
+              <div className="relative">
+                <button
+                  onClick={() => setShowPinnedModal(!showPinnedModal)}
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-md transition-colors cursor-pointer",
+                    showPinnedModal
+                      ? "text-foreground bg-secondary"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  title={t("chat.pin")}
+                >
+                  <Pin className={cn("h-5 w-5", showPinnedModal && "fill-current text-[#f5c211]")} />
+                </button>
+                <PinnedListModal
+                  isOpen={showPinnedModal}
+                  onClose={() => setShowPinnedModal(false)}
+                  roomId={roomId}
+                  channelId={channelId}
+                  onJumpToMessage={(messageId) => {
+                    const event = new CustomEvent("jump-to-message", { detail: { messageId } });
+                    window.dispatchEvent(event);
+                    setShowPinnedModal(false);
+                  }}
+                />
+              </div>
               <button
                 onClick={toggleDmUserPanel}
                 className={cn(
@@ -431,7 +551,11 @@ export default function DmChatPage() {
                 type="text"
                 value={searchValue}
                 onChange={(e) => setSearchValue(e.target.value)}
-                onFocus={() => setIsSearchFocused(true)}
+                onFocus={() => {
+                  setIsSearchFocused(true);
+                  setShowDropdown(true);
+                }}
+                onClick={() => setShowDropdown(true)}
                 onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
@@ -439,12 +563,24 @@ export default function DmChatPage() {
                   }
                 }}
                 placeholder={t("chat.search")}
-                className="h-7 w-36 rounded-md bg-background-tertiary px-2 text-[13px] text-foreground placeholder:text-muted-foreground focus:w-56 transition-all duration-200 outline-none"
+                className="h-7 w-36 rounded-md bg-background-tertiary pr-6 pl-2 text-[13px] text-foreground placeholder:text-muted-foreground focus:w-56 transition-all duration-200 outline-none"
               />
-              <Search className="absolute right-1.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              {searchValue ? (
+                <button
+                  onClick={() => {
+                    setSearchValue("");
+                    useChatStore.getState().clearSearchResults(channelId);
+                  }}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-muted-foreground hover:text-white transition cursor-pointer"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              ) : (
+                <Search className="absolute right-1.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              )}
               <SearchDropdown
                 type="dm"
-                isOpen={isSearchFocused}
+                isOpen={isSearchFocused && showDropdown}
                 activeFilter={activeFilter}
                 filterQuery={filterQuery}
                 members={roomId ? allMembers[roomId] || [] : []}
@@ -618,15 +754,23 @@ export default function DmChatPage() {
                   isDm
                   onSend={handleSend}
                   onTyping={handleTyping}
+                  members={roomId ? (allMembers[roomId] || []) : []}
                 />
               )}
             </div>
           </div> {/* End of Chat container */}
 
           {/* DmUserPanel container (CSS Toggle instead of conditional render / SlidingPanel to avoid API spam) */}
-          <div className={cn("shrink-0 bg-[#2b2d31] overflow-hidden transition-all duration-200 ease-in-out", showDmUserPanel ? "w-[340px]" : "w-0")}>
+          <div className={cn("shrink-0 bg-[#2b2d31] overflow-hidden transition-all duration-200 ease-in-out", showDmUserPanel && !showSearchPanel ? "w-[340px]" : "w-0")}>
             <div className="w-[340px] h-full">
               <DmUserPanel userId={userId} />
+            </div>
+          </div>
+
+          {/* Search Results Panel for DM */}
+          <div className={cn("shrink-0 bg-[#2b2d31] border-l border-[#1e1f22] overflow-hidden transition-all duration-200 ease-in-out", showSearchPanel ? "w-[400px]" : "w-0")}>
+            <div className="w-[400px] h-full">
+              <SearchResultsPanel channelId={channelId} />
             </div>
           </div>
 

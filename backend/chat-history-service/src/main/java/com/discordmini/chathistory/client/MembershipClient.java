@@ -37,4 +37,24 @@ public class MembershipClient {
             log.warn("Membership check unavailable, fail-open: {}", e.getMessage());
         }
     }
+
+    public void verifyPinPrivilege(String userId, String roomId) {
+        try {
+            restClient.get()
+                    .uri("/api/rooms/{roomId}/members/{userId}/pin-privilege", roomId, userId)
+                    .retrieve()
+                    .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
+                        int code = res.getStatusCode().value();
+                        if (code == 403 || code == 404) {
+                            throw new ForbiddenException("Requires admin or owner privileges to pin messages");
+                        }
+                        log.warn("Unexpected {} from pin privilege check: room={}, user={}", code, roomId, userId);
+                    })
+                    .toBodilessEntity();
+        } catch (ForbiddenException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("Pin privilege check unavailable, fail-open: {}", e.getMessage());
+        }
+    }
 }

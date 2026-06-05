@@ -25,6 +25,8 @@ interface ChannelItemProps {
   canEdit: boolean;
 }
 
+const EMPTY_PARTICIPANTS: any[] = [];
+
 function ChannelItem({
   roomId,
   channel,
@@ -37,7 +39,7 @@ function ChannelItem({
   const count = getUnreadCount(channel.id);
   const hasUnread = count > 0 && !isActive;
 
-  const participants = useVoiceStore((s) => s.channelParticipants[channel.id] || []);
+  const participants = useVoiceStore((s) => s.channelParticipants[channel.id] || EMPTY_PARTICIPANTS);
   const Icon = channel.type === "TEXT" ? Hash : Volume2;
 
   return (

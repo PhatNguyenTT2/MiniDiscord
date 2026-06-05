@@ -122,6 +122,32 @@ public class MessageController {
         return ResponseEntity.ok(ApiResponse.ok("Marked as unread", result));
     }
 
+    @PutMapping("/{messageId}/pin")
+    public ResponseEntity<ApiResponse<MessageResponse>> pinMessage(
+            @RequestHeader("X-User-Id") String userId,
+            @PathVariable String messageId,
+            @RequestParam(required = false, defaultValue = "User") String senderName) {
+        MessageResponse response = messageService.pinMessage(userId, messageId, senderName);
+        return ResponseEntity.ok(ApiResponse.ok("Message pinned", response));
+    }
+
+    @PutMapping("/{messageId}/unpin")
+    public ResponseEntity<ApiResponse<MessageResponse>> unpinMessage(
+            @RequestHeader("X-User-Id") String userId,
+            @PathVariable String messageId) {
+        MessageResponse response = messageService.unpinMessage(userId, messageId);
+        return ResponseEntity.ok(ApiResponse.ok("Message unpinned", response));
+    }
+
+    @GetMapping("/rooms/{roomId}/channels/{channelId}/pinned")
+    public ResponseEntity<ApiResponse<List<MessageResponse>>> getPinnedMessages(
+            @RequestHeader("X-User-Id") String userId,
+            @PathVariable String roomId,
+            @PathVariable String channelId) {
+        List<MessageResponse> list = messageService.getPinnedMessages(userId, roomId, channelId);
+        return ResponseEntity.ok(ApiResponse.ok(list));
+    }
+
     @PostMapping("/danger/clear-db")
     public ResponseEntity<ApiResponse<Void>> clearAllHistory() {
         messageService.clearAllHistory();

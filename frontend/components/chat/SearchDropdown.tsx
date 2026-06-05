@@ -250,7 +250,7 @@ export function SearchDropdown({
     return (
       <div className="absolute right-0 top-full mt-2 w-[340px] max-h-[360px] overflow-y-auto bg-[#111214] rounded-md shadow-2xl border border-[#1f2023] p-3 z-[100] custom-scrollbar text-[#dbdee1]">
         <div className="text-[11px] font-bold text-[#949ba4] tracking-wider uppercase mb-1.5 px-2">
-          {t("searchFromUserHeader")}
+          {t("chat.searchFromUserHeader")}
         </div>
         <div className="flex flex-col gap-0.5">
           {filteredMembers.length > 0 ? (
@@ -270,7 +270,7 @@ export function SearchDropdown({
     return (
       <div className="absolute right-0 top-full mt-2 w-[340px] max-h-[360px] overflow-y-auto bg-[#111214] rounded-md shadow-2xl border border-[#1f2023] p-3 z-[100] custom-scrollbar text-[#dbdee1]">
         <div className="text-[11px] font-bold text-[#949ba4] tracking-wider uppercase mb-1.5 px-2">
-          {t("searchInChannelHeader")}
+          {t("chat.searchInChannelHeader")}
         </div>
         <div className="flex flex-col gap-0.5">
           {type === "channel" ? (
@@ -294,18 +294,18 @@ export function SearchDropdown({
   // 4. Focused filter menus ("has-data")
   if (activeFilter === "has-data") {
     const dataTypes = [
-      { key: "image", local: t("searchHasImage"), icon: Image },
-      { key: "video", local: t("searchHasVideo"), icon: Video },
-      { key: "link", local: t("searchHasLink"), icon: LinkIcon },
-      { key: "file", local: t("searchHasFile"), icon: FileIcon },
-      { key: "audio", local: t("searchHasAudio"), icon: Music },
-      { key: "sticker", local: t("searchHasSticker"), icon: Smile },
+      { key: "image", local: t("chat.searchHasImage"), icon: Image },
+      { key: "video", local: t("chat.searchHasVideo"), icon: Video },
+      { key: "link", local: t("chat.searchHasLink"), icon: LinkIcon },
+      { key: "file", local: t("chat.searchHasFile"), icon: FileIcon },
+      { key: "audio", local: t("chat.searchHasAudio"), icon: Music },
+      { key: "sticker", local: t("chat.searchHasSticker"), icon: Smile },
     ];
 
     return (
       <div className="absolute right-0 top-full mt-2 w-[340px] bg-[#111214] rounded-md shadow-2xl border border-[#1f2023] p-3 z-[100] text-[#dbdee1]">
         <div className="text-[11px] font-bold text-[#949ba4] tracking-wider uppercase mb-1.5 px-2">
-          {t("searchHasDataHeader")}
+          {t("chat.searchHasDataHeader")}
         </div>
         <div className="flex flex-col gap-0.5">
           {dataTypes.map((dt) => {
@@ -337,7 +337,7 @@ export function SearchDropdown({
     return (
       <div className="absolute right-0 top-full mt-2 w-[340px] max-h-[360px] overflow-y-auto bg-[#111214] rounded-md shadow-2xl border border-[#1f2023] p-3 z-[100] custom-scrollbar text-[#dbdee1]">
         <div className="text-[11px] font-bold text-[#949ba4] tracking-wider uppercase mb-1.5 px-2">
-          {t("searchMentionsHeader")}
+          {t("chat.searchMentionsHeader")}
         </div>
         <div className="flex flex-col gap-0.5">
           {filteredMembers.length > 0 ? (
@@ -368,7 +368,7 @@ export function SearchDropdown({
       >
         <Search className="h-[18px] w-[18px] text-[#949ba4] shrink-0" />
         <span className="text-[13px] font-semibold text-[#dbdee1] truncate">
-          {t("searchAction").replace("{query}", filterQuery)}
+          {t("chat.searchAction").replace("{query}", filterQuery)}
         </span>
       </button>
 
@@ -378,7 +378,7 @@ export function SearchDropdown({
           <div className="h-[1px] bg-[#1f2023] my-1" />
           <div>
             <div className="text-[11px] font-bold text-[#949ba4] tracking-wider uppercase mb-1.5 px-2">
-              {t("searchFromUserHeader")}
+              {t("chat.searchFromUserHeader")}
             </div>
             <div className="flex flex-col gap-0.5">
               {filteredMembers.slice(0, 3).map((m) => renderMemberRow(m, "from"))}
@@ -393,7 +393,7 @@ export function SearchDropdown({
           <div className="h-[1px] bg-[#1f2023] my-1" />
           <div>
             <div className="text-[11px] font-bold text-[#949ba4] tracking-wider uppercase mb-1.5 px-2">
-              {t("searchInChannelHeader")}
+              {t("chat.searchInChannelHeader")}
             </div>
             <div className="flex flex-col gap-0.5">
               {filteredChannels.slice(0, 3).map((c) => renderChannelRow(c))}
@@ -408,7 +408,7 @@ export function SearchDropdown({
           <div className="h-[1px] bg-[#1f2023] my-1" />
           <div>
             <div className="text-[11px] font-bold text-[#949ba4] tracking-wider uppercase mb-1.5 px-2">
-              {t("searchMentionsHeader")}
+              {t("chat.searchMentionsHeader")}
             </div>
             <div className="flex flex-col gap-0.5">
               {filteredMembers.slice(0, 3).map((m) => renderMemberRow(m, "mentions"))}

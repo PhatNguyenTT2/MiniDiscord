@@ -2,9 +2,11 @@
 
 import { StatusAvatar } from "@/components/ui/StatusAvatar";
 import { MessageActions } from "@/components/chat/MessageActions";
-import { Reply, FileIcon } from "lucide-react";
+import { Reply, FileIcon, Pin, CornerUpRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chatStore";
+import { ForwardModal } from "@/components/chat/ForwardModal";
+import { ImageViewerModal } from "@/components/chat/ImageViewerModal";
 import { useRoomStore } from "@/stores/roomStore";
 import { useAuthStore } from "@/stores/authStore";
 import type { Message } from "@/types";
@@ -64,15 +66,16 @@ export function MessageItem({
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
+  const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
   const editInputRef = useRef<HTMLTextAreaElement>(null);
 
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(() => {
     if (message.fileKey) {
       const cached = resolvedUrlsMap.get(message.fileKey);
       if (cached && Date.now() < cached.expiresAt) return cached.url;
-      return null;
     }
-    return message.fileUrl || null;
+    return null;
   });
 
   useEffect(() => {
@@ -88,9 +91,8 @@ export function MessageItem({
 
     const fetchUrl = async () => {
       try {
-        const fileServiceUrl = process.env.NEXT_PUBLIC_FILE_SERVICE_URL || "http://localhost:8085";
         const res = await api.get<{ data: { url: string; expiresIn: number } }>(
-          `${fileServiceUrl}/api/files/url?key=${encodeURIComponent(message.fileKey!)}`
+          `/files/url?key=${encodeURIComponent(message.fileKey!)}`
         );
         const { url, expiresIn } = res.data.data;
 
@@ -103,19 +105,69 @@ export function MessageItem({
         }
       } catch (err) {
         console.error("Failed to resolve presigned URL", err);
-        if (isMounted && message.fileUrl && !resolvedUrl) {
-          setResolvedUrl(message.fileUrl);
-        }
       }
     };
 
     fetchUrl();
     return () => { isMounted = false; };
-  }, [message.fileKey, message.fileUrl]);
+  }, [message.fileKey]);
 
   const currentUserId = useAuthStore((s) => s.user?.id);
   const members = useRoomStore((s) => s.members[message.roomId] ?? EMPTY_MEMBERS);
   const senderMember = members.find((m) => m.userId === message.senderId);
+
+  const getMemberUsername = (uid: string) => {
+    const m = members.find((member) => member.userId === uid);
+    return m ? m.username : null;
+  };
+
+  const isSelfMention = !!(
+    currentUserId &&
+    (message.mentions?.includes(currentUserId) ||
+      message.mentions?.includes("everyone"))
+  );
+
+  const renderMessageContent = (content: string) => {
+    const parts = content.split(/(<@[^>]+>)/g);
+    return parts.map((part, index) => {
+      const match = part.match(/^<@([^>]+)>$/);
+      if (match) {
+        const mentionId = match[1];
+        let username = getMemberUsername(mentionId);
+        if (!username && mentionId === "everyone") {
+          username = mentionId;
+        }
+        return (
+          <span
+            key={index}
+            className={cn(
+              "inline-flex items-center px-1.5 py-[0.5px] rounded font-medium transition-all select-all align-baseline text-[15px] cursor-pointer",
+              "bg-[#5865f2]/30 text-[#dee0fc] hover:bg-[#5865f2] hover:text-white"
+            )}
+          >
+            @{username || "Unknown User"}
+          </span>
+        );
+      }
+      return part;
+    });
+  };
+
+  const pinMessage = useChatStore((s) => s.pinMessage);
+  const unpinMessage = useChatStore((s) => s.unpinMessage);
+
+  const handlePinToggle = async () => {
+    try {
+      if (message.isPinned) {
+        await unpinMessage(channelId || message.channelId, apiId);
+      } else {
+        await pinMessage(channelId || message.channelId, apiId);
+      }
+    } catch (e: any) {
+      console.error("Failed to toggle pin message:", e);
+      alert(e.response?.data?.message || e.message || "Failed to toggle pin");
+    }
+  };
 
   const apiId = message.messageId || message.id;
 
@@ -194,14 +246,50 @@ export function MessageItem({
     );
   }
 
+  if (message.type === "SYSTEM") {
+    const isPinnedNotification = message.content === "pinned_message";
+    return (
+      <div className="group relative flex gap-4 px-4 py-1.5 transition-colors hover:bg-background-secondary/30 my-1">
+        <div className="w-10 shrink-0 flex items-center justify-center">
+          <Pin className="h-4 w-4 text-[#b5bac1]" />
+        </div>
+        <div className="flex-1 min-w-0 pr-12 text-[14.5px] leading-relaxed text-[#b5bac1]">
+          <span className="font-semibold text-white hover:underline cursor-pointer mr-1.5 inline-block">
+            {resolvedSenderName}
+          </span>
+          {isPinnedNotification ? (
+            <>
+              {t("chat.pinnedMessageNotification")}
+              <button
+                type="button"
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent("open-pinned-list"));
+                }}
+                className="font-semibold text-white hover:underline cursor-pointer select-none border-none bg-transparent p-0 outline-none hover:text-[#dbdee1] transition"
+              >
+                {t("chat.viewPinnedMessages")}
+              </button>
+            </>
+          ) : (
+            <span>{message.content}</span>
+          )}
+          <time className="text-[11px] text-muted-foreground ml-2 select-none">
+            {formatTime(message.createdAt)}
+          </time>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
-        "group relative flex gap-4 px-4 py-0 transition-colors",
+        "group relative flex gap-4 pr-4 py-0 transition-colors",
+        isSelfMention
+          ? "bg-[#f5c211]/8 hover:bg-[#f5c211]/10 border-l-2 border-[#f5c211] pl-[14px]"
+          : "pl-4 hover:bg-background-secondary/30",
         !isGrouped && "mt-3 pt-1",
-        isBeingReplied
-          ? "bg-accent/8 hover:bg-accent/12"
-          : "hover:bg-background-secondary/30",
+        isBeingReplied && (isSelfMention ? "bg-[#f5c211]/12 hover:bg-[#f5c211]/15" : "bg-accent/8 hover:bg-accent/12"),
         message.id.startsWith("optimistic-") && "opacity-50"
       )}
     >
@@ -214,23 +302,30 @@ export function MessageItem({
             size="lg"
           />
         ) : (
-          <span className="hidden group-hover:block text-[11px] text-muted-foreground leading-[22px] text-right w-full whitespace-nowrap">
-            {formatTime(message.createdAt)}
-          </span>
+          <div className="flex items-center justify-end w-full relative">
+            {message.isPinned && (
+              <Pin className="h-3.5 w-3.5 text-[#f5c211] fill-current absolute right-0 top-1 group-hover:opacity-0 transition-opacity" />
+            )}
+            <span className="hidden group-hover:block text-[11px] text-muted-foreground leading-[22px] text-right w-full whitespace-nowrap">
+              {formatTime(message.createdAt)}
+            </span>
+          </div>
         )}
       </div>
 
       <div className="flex-1 min-w-0">
         {!isGrouped && (
-          <div className="flex items-baseline gap-2">
+          <div className="flex items-baseline gap-2 flex-wrap">
             <span className="font-semibold text-foreground text-[15px] hover:underline cursor-pointer">
               {resolvedSenderName}
             </span>
             <time className="text-[12px] text-muted-foreground">
               {formatFullDate(message.createdAt)}
             </time>
-            {message.isEdited && (
-              <span className="text-[10px] text-muted-foreground">{t("chat.edited")}</span>
+            {message.isPinned && (
+              <span className="inline-flex items-center text-[#f5c211]" title={t("chat.pinnedMessage")}>
+                <Pin className="h-3.5 w-3.5 fill-current" />
+              </span>
             )}
           </div>
         )}
@@ -244,6 +339,13 @@ export function MessageItem({
             <span className={cn("truncate", isReplyDeleted && "italic")}>
               {replyContent}
             </span>
+          </div>
+        )}
+
+        {message.isForwarded && (
+          <div className="flex items-center gap-1 text-[12px] text-muted-foreground/70 italic mb-1.5 select-none pl-0">
+            <CornerUpRight className="h-3.5 w-3.5 stroke-[2.5]" />
+            <span>{t("chat.forwarded")}</span>
           </div>
         )}
 
@@ -271,38 +373,44 @@ export function MessageItem({
           </div>
         ) : (
           <p className="text-[15px] text-foreground leading-relaxed break-words whitespace-pre-line">
-            {message.content}
+            {renderMessageContent(message.content)}
+            {message.isEdited && (
+              <span className="text-[10px] text-muted-foreground ml-1 inline-block select-none whitespace-nowrap">
+                {t("chat.edited")}
+              </span>
+            )}
           </p>
         )}
 
-        {(resolvedUrl || message.fileUrl) && (
+        {(resolvedUrl || message.fileKey) && (
           <div className="mt-2">
-            {(!resolvedUrl && message.fileKey) ? (
+            {!resolvedUrl ? (
               <div className="flex items-center gap-2 text-xs text-muted-foreground bg-secondary/50 p-3 rounded max-w-[400px]">
                 <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
                 Loading attachment...
               </div>
             ) : (resolvedUrl?.match(/\.(jpeg|jpg|gif|png|webp|svg)($|\?)/i) || message.fileName?.match(/\.(jpeg|jpg|gif|png|webp|svg)$/i)) ? (
-              <a href={resolvedUrl || message.fileUrl || undefined} target="_blank" rel="noopener noreferrer">
+              <div className="relative">
                 <img
-                  src={resolvedUrl || message.fileUrl || undefined}
+                  src={resolvedUrl}
                   alt={message.fileName || "attachment"}
-                  className="max-w-full sm:max-w-[400px] max-h-[300px] object-cover rounded-md shadow-sm border border-border/50"
+                  onClick={() => setIsImageViewerOpen(true)}
+                  className="max-w-full sm:max-w-[400px] max-h-[300px] object-cover rounded-md shadow-sm border border-border/50 hover:brightness-95 hover:shadow-md transition duration-150 cursor-pointer"
                   loading="lazy"
                 />
-              </a>
+              </div>
             ) : (resolvedUrl?.match(/\.(mp4|webm|mov)($|\?)/i) || message.fileName?.match(/\.(mp4|webm|mov)$/i)) ? (
               <video
-                src={resolvedUrl || message.fileUrl || undefined}
+                src={resolvedUrl}
                 controls
                 className="max-w-full sm:max-w-[400px] max-h-[300px] rounded-md shadow-sm border border-border/50"
                 preload="metadata"
               />
             ) : (resolvedUrl?.match(/\.(mp3|wav|ogg)($|\?)/i) || message.fileName?.match(/\.(mp3|wav|ogg)$/i)) ? (
-              <audio src={resolvedUrl || message.fileUrl || undefined} controls className="mt-1 max-w-[400px]" />
+              <audio src={resolvedUrl} controls className="mt-1 max-w-[400px]" />
             ) : (
               <a
-                href={resolvedUrl || message.fileUrl || undefined}
+                href={resolvedUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 p-3 rounded bg-secondary/50 border border-border/50 max-w-[400px] hover:bg-secondary/80 transition-colors"
@@ -377,6 +485,26 @@ export function MessageItem({
           messageContent={message.content}
           isOwnMessage={isOwnMessage}
           onMarkUnread={onMarkUnread}
+          isPinned={message.isPinned}
+          onPin={handlePinToggle}
+          onForward={() => setIsForwardModalOpen(true)}
+        />
+      )}
+
+      {isForwardModalOpen && (
+        <ForwardModal
+          isOpen={isForwardModalOpen}
+          onClose={() => setIsForwardModalOpen(false)}
+          message={message}
+        />
+      )}
+
+      {isImageViewerOpen && resolvedUrl && (
+        <ImageViewerModal
+          isOpen={isImageViewerOpen}
+          onClose={() => setIsImageViewerOpen(false)}
+          imageUrl={resolvedUrl}
+          fileName={message.fileName || "image.png"}
         />
       )}
 

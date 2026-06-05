@@ -113,6 +113,17 @@ export const MessageList = memo(forwardRef<MessageListHandle, MessageListProps>(
       setIsDismissed(false);
       isAtBottomRef.current = false;
       setIsUnreadReady(false);
+
+      if (typeof window !== "undefined" && channelId) {
+        try {
+          const recents = JSON.parse(localStorage.getItem("recent_channels") || "[]");
+          const filtered = recents.filter((id: string) => id !== channelId);
+          filtered.unshift(channelId);
+          localStorage.setItem("recent_channels", JSON.stringify(filtered.slice(0, 20)));
+        } catch (e) {
+          console.error("Failed to update recent channels", e);
+        }
+      }
       setIsPositioned(false);
       manuallyMarkedUnreadRef.current = false;
       hasInitialScrolledRef.current = null;
@@ -257,6 +268,48 @@ export const MessageList = memo(forwardRef<MessageListHandle, MessageListProps>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [channelId]);
 
+    // Listen to jump-to-message scroll events
+    useEffect(() => {
+      const handleJump = async (e: Event) => {
+        const detail = (e as CustomEvent).detail || {};
+        const id = detail.id || detail.messageId;
+        const messageId = detail.messageId || detail.id;
+
+        if (!id) return;
+
+        let el = document.getElementById(`msg-${id}`) ||
+          document.getElementById(`msg-${messageId}`) ||
+          (messageId ? document.querySelector(`[data-message-id="${messageId}"]`) : null);
+
+        const highlightElement = (targetEl: HTMLElement) => {
+          targetEl.scrollIntoView({ behavior: "smooth", block: "center" });
+          targetEl.classList.add("bg-[#5865f2]/15", "transition-colors", "duration-500");
+          setTimeout(() => {
+            targetEl.classList.remove("bg-[#5865f2]/15");
+          }, 2000);
+        };
+
+        if (el) {
+          highlightElement(el as HTMLElement);
+        } else {
+          if (roomId && channelId) {
+            await useChatStore.getState().fetchMessagesAround(roomId, channelId, id);
+            setTimeout(() => {
+              const loaded = document.getElementById(`msg-${id}`) ||
+                document.getElementById(`msg-${messageId}`) ||
+                (messageId ? document.querySelector(`[data-message-id="${messageId}"]`) : null);
+              if (loaded) {
+                highlightElement(loaded as HTMLElement);
+              }
+            }, 500);
+          }
+        }
+      };
+
+      window.addEventListener("jump-to-message", handleJump);
+      return () => window.removeEventListener("jump-to-message", handleJump);
+    }, [roomId, channelId]);
+
     // Scroll to first unread divider
     const scrollToFirstUnread = useCallback(() => {
       unreadDividerRef.current?.scrollIntoView({
@@ -399,7 +452,7 @@ export const MessageList = memo(forwardRef<MessageListHandle, MessageListProps>(
                 !isDismissed && msg.id === firstUnreadMessageId;
 
               return (
-                <div key={msg.id}>
+                <div key={msg.id} id={`msg-${msg.id}`} data-message-id={msg.messageId}>
                   {showDateSeparator && (
                     <DateSeparator date={new Date(msg.createdAt)} />
                   )}

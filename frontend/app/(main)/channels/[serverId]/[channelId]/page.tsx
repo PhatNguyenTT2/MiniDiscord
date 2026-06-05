@@ -9,6 +9,7 @@ import { ScrollToBottomBanner } from "@/components/chat/ScrollToBottomBanner";
 import { MemberList } from "@/components/sidebar/MemberList";
 import { ResizeHandle } from "@/components/ui/ResizeHandle";
 import { SlidingPanel } from "@/components/ui/SlidingPanel";
+import { SearchResultsPanel } from "@/components/chat/SearchResultsPanel";
 import { useUIStore } from "@/stores/uiStore";
 import { useChatStore } from "@/stores/chatStore";
 import { useAuthStore } from "@/stores/authStore";
@@ -20,15 +21,19 @@ import { useCallback, useRef, useState, useEffect } from "react";
 import { type Message } from "@/types";
 import { VoiceChannelView } from "@/components/voice/VoiceChannelView";
 
+const EMPTY_MEMBERS: any[] = [];
+
 export default function ChannelPage() {
   const params = useParams();
   const channelId = params?.channelId as string;
   const roomId = params?.serverId as string;
   const showMemberList = useUIStore((s) => s.showMemberList);
+  const showSearchPanel = useChatStore((s) => s.showSearchPanel[channelId] || false);
   const sidebarWidth = useUIStore((s) => s.sidebarWidth);
   const setSidebarWidth = useUIStore((s) => s.setSidebarWidth);
 
   const { channels, fetchMembers } = useRoomStore();
+  const members = useRoomStore((s) => s.members[roomId] ?? EMPTY_MEMBERS);
 
   let channelName = "general";
 
@@ -55,7 +60,7 @@ export default function ChannelPage() {
   const token = useAuthStore((s) => s.token);
 
   const handleSend = useCallback(
-    (content: string, attachment?: { fileUrl: string; fileName: string; fileSize: number } | null) => {
+    (content: string, attachment?: { fileKey: string; fileName: string; fileSize: number } | null, mentions?: string[]) => {
       if (!token) return;
       const client = getStompClient(token);
       if (!client.connected) return;
@@ -68,7 +73,7 @@ export default function ChannelPage() {
         type: attachment ? "FILE" : "TEXT",
         senderName: currentUser?.username || "User",
         senderAvatar: currentUser?.avatarUrl || null,
-        fileUrl: attachment?.fileUrl,
+        fileKey: attachment?.fileKey,
         fileName: attachment?.fileName,
         fileSize: attachment?.fileSize,
         replyTo: replyingTo
@@ -78,6 +83,7 @@ export default function ChannelPage() {
             senderName: replyingTo.senderName,
           }
           : null,
+        mentions,
       };
 
       // Optimistic message
@@ -91,7 +97,7 @@ export default function ChannelPage() {
         senderAvatar: currentUser?.avatarUrl || null,
         type: attachment ? "FILE" : "TEXT",
         content,
-        fileUrl: attachment?.fileUrl || null,
+        fileKey: attachment?.fileKey || null,
         fileName: attachment?.fileName || null,
         fileSize: attachment?.fileSize || null,
         reactions: [],
@@ -100,6 +106,7 @@ export default function ChannelPage() {
         editedAt: null,
         createdAt: new Date().toISOString(),
         replyTo: payload.replyTo,
+        mentions,
       };
 
       useChatStore.getState().addOptimisticMessage(channelId, optimisticMsg);
@@ -209,14 +216,20 @@ export default function ChannelPage() {
               channelName={channelName}
               onSend={handleSend}
               onTyping={handleTyping}
+              members={members}
             />
           </div>
         </main>
       )}
 
       {/* Column 4: Member List (toggleable with slide animation) */}
-      <SlidingPanel show={showMemberList} width={240}>
+      <SlidingPanel show={showMemberList && !showSearchPanel} width={240}>
         <MemberList />
+      </SlidingPanel>
+
+      {/* Column 4: Search Results Panel */}
+      <SlidingPanel show={showSearchPanel} width={400}>
+        <SearchResultsPanel channelId={channelId} />
       </SlidingPanel>
     </>
   );

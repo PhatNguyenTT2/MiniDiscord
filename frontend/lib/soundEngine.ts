@@ -1,7 +1,9 @@
 import { useSoundStore } from '@/stores/soundStore';
+import { api } from '@/lib/api';
 
 export type SoundName =
   | 'message_notification'
+  | 'message_mention'
   | 'voice_join'
   | 'voice_leave'
   | 'voice_disconnect'
@@ -15,6 +17,7 @@ export type SoundName =
 
 export const ALL_SOUNDS: SoundName[] = [
   'message_notification',
+  'message_mention',
   'voice_join',
   'voice_leave',
   'voice_disconnect',
@@ -26,6 +29,16 @@ export const ALL_SOUNDS: SoundName[] = [
   'user_join_voice',
   'user_leave_voice'
 ];
+
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const binaryString = window.atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
 
 class SoundEngine {
   private ctx: AudioContext | null = null;
@@ -40,6 +53,19 @@ class SoundEngine {
     return this.ctx;
   }
 
+  invalidateBuffer(name: SoundName): void {
+    this.buffers.delete(name);
+    this.loadingPromises.delete(name);
+    if (name === 'voice_join') {
+      this.buffers.delete('user_join_voice');
+      this.loadingPromises.delete('user_join_voice');
+    }
+    if (name === 'voice_leave') {
+      this.buffers.delete('user_leave_voice');
+      this.loadingPromises.delete('user_leave_voice');
+    }
+  }
+
   /** Load a single sound on-demand (deduped, cached) */
   private async loadSound(name: SoundName): Promise<AudioBuffer | null> {
     if (this.buffers.has(name)) return this.buffers.get(name)!;
@@ -52,35 +78,48 @@ class SoundEngine {
 
     const promise = (async () => {
       const ctx = this.getContext();
-      const customUrl = useSoundStore.getState().customSounds?.[name];
-      const cdnBase = process.env.NEXT_PUBLIC_SOUND_CDN_URL || '/sounds';
-      const defaultUrl = `${cdnBase}/${name}.mp3`;
 
-      // 1. Try Custom Sound first
-      if (customUrl) {
+      let configName: SoundName = name;
+      if (name === 'user_join_voice') configName = 'voice_join';
+      if (name === 'user_leave_voice') configName = 'voice_leave';
+
+      const customFileKey = useSoundStore.getState().customSounds?.[configName];
+
+      // 1. Try Custom Sound first (B2 pre-signed dynamic authorization)
+      if (customFileKey) {
         try {
-          const res = await fetch(customUrl);
-          if (res.ok) {
-            const arrayBuffer = await res.arrayBuffer();
-            const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-            this.buffers.set(name, audioBuffer);
-            return;
+          const urlRes = await api.get<{ message: string; data: { url: string; expiresIn: number } }>(
+            `/files/url?key=${encodeURIComponent(customFileKey)}`
+          );
+          const freshUrl = urlRes.data.data.url;
+          if (freshUrl) {
+            const res = await fetch(freshUrl);
+            if (res.ok) {
+              const arrayBuffer = await res.arrayBuffer();
+              const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+              this.buffers.set(name, audioBuffer);
+              return;
+            }
           }
         } catch (err) {
-          console.warn(`[SoundEngine] Custom sound broken for ${name}, flushing key and falling back to default`, err);
+          console.warn(`[SoundEngine] Custom sound failed for ${name}, falling back to default`, err);
           useSoundStore.getState().clearCustomSound(name);
         }
       }
 
-      // 2. Fallback to Default URL
+      // 2. Fallback to Default Base64 embedded audio data
       try {
-        const res = await fetch(defaultUrl);
-        if (!res.ok) return;
-        const arrayBuffer = await res.arrayBuffer();
-        const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-        this.buffers.set(name, audioBuffer);
+        const { SOUNDS_BASE64 } = await import('./soundsData');
+        const base64Data = SOUNDS_BASE64[name];
+        if (base64Data) {
+          const arrayBuffer = base64ToArrayBuffer(base64Data);
+          const audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
+          this.buffers.set(name, audioBuffer);
+        } else {
+          console.warn(`[SoundEngine] No default base64 sound data for: ${name}`);
+        }
       } catch (err) {
-        console.warn(`[SoundEngine] Failed to load default sound: ${name}`, err);
+        console.warn(`[SoundEngine] Failed to decode base64 sound: ${name}`, err);
       } finally {
         this.loadingPromises.delete(name);
       }
@@ -108,8 +147,10 @@ class SoundEngine {
 
     // 3. Category conditions
     if (name === 'message_notification' && !settings.messageSound) return;
-    if (name.startsWith('voice_') && !settings.voiceSound) return;
-    if ((name === 'user_join_voice' || name === 'user_leave_voice') && !settings.voiceSound) return;
+    if (name === 'message_mention' && !settings.messageSound) return;
+    if ((name === 'voice_join' || name === 'user_join_voice') && !settings.voiceJoinSound) return;
+    if ((name === 'voice_leave' || name === 'user_leave_voice') && !settings.voiceLeaveSound) return;
+    if (name === 'voice_disconnect' && !settings.voiceDisconnectSound) return;
     if (name === 'call_ringing' && !settings.callSound) return;
 
     // Debounce: prevent spam (100ms)
@@ -137,6 +178,52 @@ class SoundEngine {
       source.start(0);
     } catch {
       // Silent fail (usually autoplay blocked)
+    }
+  }
+
+  private activeLoopSources = new Map<SoundName, AudioBufferSourceNode>();
+
+  async playLoop(name: SoundName): Promise<void> {
+    if (typeof window === 'undefined') return;
+    const settings = useSoundStore.getState();
+    if (!settings.soundEnabled) return;
+    if (name === 'call_ringing' && !settings.callSound) return;
+
+    this.stopLoop(name);
+
+    const ctx = this.getContext();
+    const buffer = await this.loadSound(name);
+    if (!buffer) return;
+
+    try {
+      if (ctx.state === 'suspended') ctx.resume();
+
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+
+      const gainNode = ctx.createGain();
+      gainNode.gain.value = Math.max(0, Math.min(1, settings.masterVolume / 100));
+
+      source.connect(gainNode).connect(ctx.destination);
+      source.start(0);
+
+      this.activeLoopSources.set(name, source);
+    } catch {
+      // Silent fail
+    }
+  }
+
+  stopLoop(name: SoundName): void {
+    const source = this.activeLoopSources.get(name);
+    if (source) {
+      try {
+        source.stop();
+        source.disconnect();
+      } catch (e) {
+        // Already stopped or not started
+      }
+      this.activeLoopSources.delete(name);
     }
   }
 }
