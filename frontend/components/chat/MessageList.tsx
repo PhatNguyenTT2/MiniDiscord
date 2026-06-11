@@ -56,6 +56,7 @@ export const MessageList = memo(forwardRef<MessageListHandle, MessageListProps>(
   }, ref) {
     const { t } = useTranslation();
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const contentRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const unreadDividerRef = useRef<HTMLDivElement>(null);
     const bottomDetectorRef = useRef<HTMLDivElement>(null);
@@ -264,8 +265,22 @@ export const MessageList = memo(forwardRef<MessageListHandle, MessageListProps>(
       }, { threshold: 0.1 });
 
       observer.observe(el);
-      return () => observer.disconnect();
       // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [channelId]);
+
+    // Auto-scroll to bottom on inner content size changes (e.g. dynamic images/attachments lazy loads)
+    useEffect(() => {
+      const el = contentRef.current;
+      if (!el) return;
+
+      const observer = new ResizeObserver(() => {
+        if (isAtBottomRef.current && scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+        }
+      });
+
+      observer.observe(el);
+      return () => observer.disconnect();
     }, [channelId]);
 
     // Listen to jump-to-message scroll events
@@ -415,21 +430,26 @@ export const MessageList = memo(forwardRef<MessageListHandle, MessageListProps>(
         )}
 
         {/* Reserve bottom space so the floating composer never covers the final messages. */}
-        <div className="flex min-h-full flex-col justify-end">
+        <div ref={contentRef} className="flex min-h-full flex-col justify-start">
+          {/* Top spacer to push contents to bottom when content is short */}
+          <div className="flex-1 min-h-0" style={{ overflowAnchor: "none" }} />
+
           {/* Welcome header */}
-          {welcomeHeader || (
-            <div className="px-4 pt-16 pb-4">
-              <div className="flex h-[68px] w-[68px] items-center justify-center rounded-full bg-secondary mb-3">
-                <Hash className="h-10 w-10 text-foreground" />
+          <div style={{ overflowAnchor: "none" }}>
+            {welcomeHeader || (
+              <div className="px-4 pt-16 pb-4">
+                <div className="flex h-[68px] w-[68px] items-center justify-center rounded-full bg-secondary mb-3">
+                  <Hash className="h-10 w-10 text-foreground" />
+                </div>
+                <h2 className="text-[1.5rem] font-bold text-foreground leading-snug">
+                  {t("chat.welcomeTitle", { channelName })}
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground leading-relaxed max-w-[480px]">
+                  {t("chat.welcomeDesc", { channelName })}
+                </p>
               </div>
-              <h2 className="text-[1.5rem] font-bold text-foreground leading-snug">
-                {t("chat.welcomeTitle", { channelName })}
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground leading-relaxed max-w-[480px]">
-                {t("chat.welcomeDesc", { channelName })}
-              </p>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Messages with date separators and unread divider */}
           <div className="pb-2">
@@ -497,7 +517,7 @@ export const MessageList = memo(forwardRef<MessageListHandle, MessageListProps>(
 
         {/* Scroll anchor */}
         <div ref={bottomRef} />
-      </div>
+      </div >
     );
   }
 ));

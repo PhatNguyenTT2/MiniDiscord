@@ -383,7 +383,7 @@ export function MessageItem({
         )}
 
         {(resolvedUrl || message.fileKey) && (
-          <div className="mt-2">
+          <div className="mt-2" style={{ overflowAnchor: "none" }}>
             {!resolvedUrl ? (
               <div className="flex items-center gap-2 text-xs text-muted-foreground bg-secondary/50 p-3 rounded max-w-[400px]">
                 <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />

@@ -250,13 +250,17 @@ export function EditChannelModal({ isOpen, onClose, roomId, channel }: EditChann
                     {t("channelSettings.channelName")}
                   </label>
                   <div className="relative flex items-center">
-                    <span className="absolute left-3 text-[#80848e] font-semibold">#</span>
+                    {isText ? (
+                      <Hash className="absolute left-3 h-4 w-4 text-[#80848e] shrink-0" />
+                    ) : (
+                      <Volume2 className="absolute left-3 h-4 w-4 text-[#80848e] shrink-0" />
+                    )}
                     <input
                       type="text"
                       value={channelName}
                       onChange={(e) => setChannelName(e.target.value)}
-                      className="w-full rounded-md bg-[#1e1f22] pl-8 pr-3 py-2.5 text-sm text-foreground outline-none border border-transparent focus:border-brand-primary transition-colors text-white"
-                      placeholder="new-channel"
+                      className="w-full rounded-md bg-[#1e1f22] pl-9 pr-3 py-2.5 text-sm text-foreground outline-none border border-transparent focus:border-brand-primary transition-colors text-white"
+                      placeholder={t("channelSettings.newChannelPlaceholder")}
                       maxLength={100}
                     />
                   </div>
@@ -317,7 +321,7 @@ export function EditChannelModal({ isOpen, onClose, roomId, channel }: EditChann
                       onChange={(e) => setIsPrivateChannel(e.target.checked)}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-[#80848e] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                    <div className="w-11 h-6 bg-[#80848e] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#5865f2]"></div>
                   </label>
                 </div>
               </div>

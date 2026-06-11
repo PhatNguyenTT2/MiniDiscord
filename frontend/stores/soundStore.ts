@@ -10,6 +10,8 @@ export interface SoundSettings {
   voiceLeaveSound: boolean;
   voiceDisconnectSound: boolean;
   callSound: boolean;
+  muteSound: boolean;
+  unmuteSound: boolean;
   customSounds: Partial<Record<SoundName, string>>;
 }
 
@@ -21,6 +23,8 @@ interface SoundStore extends SoundSettings {
   toggleVoiceLeaveSound: (enabled?: boolean) => void;
   toggleVoiceDisconnectSound: (enabled?: boolean) => void;
   toggleCallSound: (enabled?: boolean) => void;
+  toggleMuteSound: (enabled?: boolean) => void;
+  toggleUnmuteSound: (enabled?: boolean) => void;
   setCustomSound: (name: SoundName, url: string) => void;
   clearCustomSound: (name: SoundName) => void;
   resetSound: (name: SoundName) => void;
@@ -36,6 +40,8 @@ export const useSoundStore = create<SoundStore>()(
       voiceLeaveSound: true,
       voiceDisconnectSound: true,
       callSound: true,
+      muteSound: true,
+      unmuteSound: true,
       customSounds: {},
 
       setMasterVolume: (volume) => set({ masterVolume: volume }),
@@ -45,6 +51,8 @@ export const useSoundStore = create<SoundStore>()(
       toggleVoiceLeaveSound: (enabled) => set((s) => ({ voiceLeaveSound: enabled ?? !s.voiceLeaveSound })),
       toggleVoiceDisconnectSound: (enabled) => set((s) => ({ voiceDisconnectSound: enabled ?? !s.voiceDisconnectSound })),
       toggleCallSound: (enabled) => set((s) => ({ callSound: enabled ?? !s.callSound })),
+      toggleMuteSound: (enabled) => set((s) => ({ muteSound: enabled ?? !s.muteSound })),
+      toggleUnmuteSound: (enabled) => set((s) => ({ unmuteSound: enabled ?? !s.unmuteSound })),
       setCustomSound: (name, url) => set((s) => ({
         customSounds: { ...s.customSounds, [name]: url }
       })),

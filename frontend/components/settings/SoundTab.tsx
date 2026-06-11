@@ -30,6 +30,10 @@ export function SoundTab() {
     toggleVoiceDisconnectSound,
     callSound,
     toggleCallSound,
+    muteSound,
+    toggleMuteSound,
+    unmuteSound,
+    toggleUnmuteSound,
     customSounds,
     setCustomSound,
     clearCustomSound
@@ -195,6 +199,54 @@ export function SoundTab() {
           onReset={() => {
             if (soundEngine) soundEngine.invalidateBuffer("call_ringing");
             clearCustomSound("call_ringing");
+          }}
+        />
+
+        <SoundRow
+          label={t("settings.muteSound")}
+          enabled={muteSound}
+          onToggle={() => toggleMuteSound()}
+          globalEnabled={soundEnabled}
+          previewSound="mute"
+          onPreview={handlePreview}
+          customFileKey={customSounds["mute"]}
+          onUpload={(key) => {
+            if (soundEngine) {
+              soundEngine.invalidateBuffer("mute");
+              soundEngine.invalidateBuffer("deafen");
+            }
+            setCustomSound("mute", key);
+          }}
+          onReset={() => {
+            if (soundEngine) {
+              soundEngine.invalidateBuffer("mute");
+              soundEngine.invalidateBuffer("deafen");
+            }
+            clearCustomSound("mute");
+          }}
+        />
+
+        <SoundRow
+          label={t("settings.unmuteSound")}
+          enabled={unmuteSound}
+          onToggle={() => toggleUnmuteSound()}
+          globalEnabled={soundEnabled}
+          previewSound="unmute"
+          onPreview={handlePreview}
+          customFileKey={customSounds["unmute"]}
+          onUpload={(key) => {
+            if (soundEngine) {
+              soundEngine.invalidateBuffer("unmute");
+              soundEngine.invalidateBuffer("undeafen");
+            }
+            setCustomSound("unmute", key);
+          }}
+          onReset={() => {
+            if (soundEngine) {
+              soundEngine.invalidateBuffer("unmute");
+              soundEngine.invalidateBuffer("undeafen");
+            }
+            clearCustomSound("unmute");
           }}
         />
 

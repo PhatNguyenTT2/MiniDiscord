@@ -115,7 +115,7 @@ function SecurityContent() {
               label={t("settings.username")}
               value={user.username.toLowerCase()}
             />
-            <InfoRow label="Email" value={user.email} />
+            <InfoRow label={t("settings.email")} value={user.email} />
           </div>
         </div>
       </div>
@@ -388,120 +388,107 @@ export function SettingsOverlay({ onClose }: { onClose: () => void }) {
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      {/* Settings container — centered, smaller than viewport */}
-      <div className="relative z-10 flex w-[calc(100vw-80px)] max-w-[960px] h-[calc(100vh-80px)] max-h-[680px] rounded-lg overflow-hidden shadow-2xl border border-border/50 animate-in fade-in zoom-in-95 duration-200">
-        {/* ─── Left sidebar ─── */}
-        <div className="flex w-[218px] shrink-0 flex-col bg-background-secondary">
-          {/* User header */}
-          <div className="flex items-center gap-2.5 px-3 pt-4 pb-3">
-            <StatusAvatar
-              src={user.avatarUrl}
-              fallback={user.username}
-              status={user.status}
-              size="md"
-            />
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-foreground leading-tight">
-                {user.username}
-              </p>
-              <button className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-accent transition-colors cursor-pointer">
-                <span>{t("settings.editProfile")}</span>
-                <Pencil className="h-2.5 w-2.5" />
-              </button>
+    <div className="fixed inset-0 z-[9990] flex bg-[#313338] text-[#dbdee1] animate-in fade-in duration-200">
+      {/* ─── Left sidebar Column Wrapper ─── */}
+      <div className="flex-[1_0_240px] bg-[#2b2d31] flex justify-end border-r border-[#1f2023]/20 select-none">
+        <div className="w-[240px] flex flex-col justify-between p-6 pr-4 shrink-0">
+          <div>
+            {/* User header */}
+            <div className="flex items-center gap-2.5 px-3 pt-8 pb-3">
+              <StatusAvatar
+                src={user.avatarUrl}
+                fallback={user.username}
+                status={user.status}
+                size="md"
+              />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-foreground leading-tight">
+                  {user.username}
+                </p>
+                <button className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-accent transition-colors cursor-pointer">
+                  <span>{t("settings.editProfile")}</span>
+                  <Pencil className="h-2.5 w-2.5" />
+                </button>
+              </div>
             </div>
-          </div>
 
-          {/* Search */}
-          <div className="px-2.5 pb-2">
-            <div className="flex h-7 items-center rounded bg-background-tertiary px-2">
-              <span className="text-[11px] text-muted-foreground">
-                {t("settings.search")}
-              </span>
+            {/* Search */}
+            <div className="px-2.5 pb-4">
+              <div className="flex h-7 items-center rounded bg-[#1e1f22] px-2">
+                <span className="text-[11px] text-[#80848e]">
+                  {t("settings.search")}
+                </span>
+              </div>
             </div>
-          </div>
 
-          {/* Section title */}
-          <p className="mb-1 px-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-            {t("settings.userSettings")}
-          </p>
+            {/* Section title */}
+            <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-wider text-[#949ba4]">
+              {t("settings.userSettings")}
+            </p>
 
-          {/* Tabs */}
-          <ScrollArea className="flex-1 px-2">
-            <nav className="space-y-0.5">
-              {TABS.map((tab) => {
-                const Icon = tab.icon;
-                return (
-                  <button
-                    key={tab.key}
-                    onClick={() => setActiveTab(tab.key)}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded px-2 py-[5px] text-[13px] transition-colors cursor-pointer",
-                      activeTab === tab.key
-                        ? "bg-secondary text-foreground font-medium"
-                        : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
-                    )}
-                  >
-                    <Icon className="h-4 w-4 shrink-0 opacity-80" />
-                    <span>{tab.label}</span>
-                  </button>
-                );
-              })}
-            </nav>
+            {/* Tabs */}
+            <ScrollArea className="h-[calc(100vh-220px)] pr-2">
+              <nav className="space-y-0.5">
+                {TABS.map((tab) => {
+                  const Icon = tab.icon;
+                  return (
+                    <button
+                      key={tab.key}
+                      onClick={() => setActiveTab(tab.key)}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-sm transition-colors cursor-pointer font-medium",
+                        activeTab === tab.key
+                          ? "bg-[#35373c] text-white"
+                          : "text-[#949ba4] hover:bg-[#35373c]/40 hover:text-[#dbdee1]"
+                      )}
+                    >
+                      <Icon className="h-4 w-4 shrink-0 opacity-80" />
+                      <span>{tab.label}</span>
+                    </button>
+                  );
+                })}
+              </nav>
 
-            {/* Separator + Logout */}
-            <div className="my-2 border-t border-border" />
-            <button
-              onClick={handleLogout}
-              className="flex w-full items-center gap-2 rounded px-2 py-[5px] text-[13px] text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
-            >
-              <LogOut className="h-4 w-4 shrink-0" />
-              <span>{t("settings.logOut")}</span>
-            </button>
-          </ScrollArea>
-        </div>
-
-        {/* ─── Right content ─── */}
-        <div className="flex flex-1 flex-col min-w-0 bg-background">
-          {/* Top bar: title + close */}
-          <div className="flex items-center justify-between px-6 pt-4 pb-2">
-            <h1 className="text-sm font-bold text-foreground uppercase tracking-wide">
-              {activeTab === "account"
-                ? t("settings.myAccount")
-                : activeTab === "sound"
-                  ? t("settings.sound")
-                  : t("settings.languageTime")}
-            </h1>
-
-            <div className="flex items-center gap-1">
+              {/* Separator + Logout */}
+              <div className="my-2 border-t border-[#35373c]/60" />
               <button
-                onClick={onClose}
-                className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-muted-foreground/40 text-muted-foreground transition-colors hover:border-foreground hover:text-foreground cursor-pointer"
-                aria-label="Close"
+                onClick={handleLogout}
+                className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
               >
-                <X className="h-4 w-4" />
+                <LogOut className="h-4 w-4 shrink-0" />
+                <span>{t("settings.logOut")}</span>
               </button>
-              <span className="text-[10px] font-semibold text-muted-foreground">
-                ESC
-              </span>
-            </div>
+            </ScrollArea>
           </div>
-
-          {/* Content */}
-          <ScrollArea className="flex-1 px-6 pb-6">
-            <div className="max-w-[580px] mx-auto">
-              {activeTab === "account" && <AccountTab />}
-              {activeTab === "language" && <LanguageTab />}
-              {activeTab === "sound" && <SoundTab />}
-            </div>
-          </ScrollArea>
         </div>
+      </div>
+
+      {/* ─── Right content Column Wrapper ─── */}
+      <div className="flex-[1.8_1_0%] bg-[#313338] flex justify-start relative min-w-0">
+        {/* ESC close bubble */}
+        <div className="absolute right-[40px] top-[40px] md:right-[60px] z-[9995]">
+          <div className="flex flex-col items-center">
+            <button
+              onClick={onClose}
+              className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-[#b5bac1] hover:border-white text-[#b5bac1] hover:text-white transition-all cursor-pointer rotate-0 hover:rotate-90"
+              aria-label="Close settings"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <span className="text-[12px] font-semibold text-[#b5bac1] mt-2 select-none uppercase">
+              ESC
+            </span>
+          </div>
+        </div>
+
+        {/* Content */}
+        <ScrollArea className="flex-1 px-[40px] md:px-[60px] lg:px-[80px] py-[60px]">
+          <div className="max-w-[680px] w-full">
+            {activeTab === "account" && <AccountTab />}
+            {activeTab === "language" && <LanguageTab />}
+            {activeTab === "sound" && <SoundTab />}
+          </div>
+        </ScrollArea>
       </div>
     </div>
   );

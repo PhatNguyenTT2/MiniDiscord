@@ -20,10 +20,14 @@ import { useParams } from "next/navigation";
 import { useCallback, useRef, useState, useEffect } from "react";
 import { type Message } from "@/types";
 import { VoiceChannelView } from "@/components/voice/VoiceChannelView";
+import { Lock } from "lucide-react";
+import { InviteModal } from "@/components/server/InviteModal";
+import { useTranslation } from "@/lib/i18n";
 
 const EMPTY_MEMBERS: any[] = [];
 
 export default function ChannelPage() {
+  const { t } = useTranslation();
   const params = useParams();
   const channelId = params?.channelId as string;
   const roomId = params?.serverId as string;
@@ -32,8 +36,10 @@ export default function ChannelPage() {
   const sidebarWidth = useUIStore((s) => s.sidebarWidth);
   const setSidebarWidth = useUIStore((s) => s.setSidebarWidth);
 
-  const { channels, fetchMembers } = useRoomStore();
+  const { rooms, channels, fetchMembers } = useRoomStore();
   const members = useRoomStore((s) => s.members[roomId] ?? EMPTY_MEMBERS);
+
+  const [isInviteOpen, setIsInviteOpen] = useState(false);
 
   let channelName = "general";
 
@@ -203,6 +209,25 @@ export default function ChannelPage() {
             roomId={roomId}
             onMarkAsReadBackend={markChannelAsRead}
             onScrollStateChange={handleScrollStateChange}
+            welcomeHeader={currentChannelObj?.isPrivate ? (
+              <div className="px-4 pt-16 pb-4 select-none">
+                <div className="flex h-[68px] w-[68px] items-center justify-center rounded-full bg-secondary mb-3">
+                  <Lock className="h-10 w-10 text-white" />
+                </div>
+                <h2 className="text-[1.5rem] font-bold text-foreground leading-snug">
+                  {t("channelSettings.privateWelcomeTitle", { name: channelName })}
+                </h2>
+                <p className="mt-1 text-sm text-[#949ba4] leading-relaxed max-w-[480px]">
+                  {t("channelSettings.privateWelcomeDesc", { name: channelName })}
+                </p>
+                <button
+                  onClick={() => setIsInviteOpen(true)}
+                  className="mt-4 px-4 py-2 bg-[#5865f2] hover:bg-[#4752c4] text-white rounded text-sm font-semibold transition-colors cursor-pointer"
+                >
+                  {t("channelSettings.privateWelcomeInvite")}
+                </button>
+              </div>
+            ) : undefined}
           />
 
           {/* Input wrapper — relative context for floating banner */}
@@ -231,6 +256,17 @@ export default function ChannelPage() {
       <SlidingPanel show={showSearchPanel} width={400}>
         <SearchResultsPanel channelId={channelId} />
       </SlidingPanel>
+
+      {/* Invite Modal for channel welcome panel action trigger */}
+      {isInviteOpen && roomId && (
+        <InviteModal
+          isOpen={isInviteOpen}
+          onClose={() => setIsInviteOpen(false)}
+          roomId={roomId}
+          roomName={rooms.find((r) => r.id === roomId)?.name || "Server"}
+          channelName={channelName}
+        />
+      )}
     </>
   );
 }

@@ -82,6 +82,8 @@ class SoundEngine {
       let configName: SoundName = name;
       if (name === 'user_join_voice') configName = 'voice_join';
       if (name === 'user_leave_voice') configName = 'voice_leave';
+      if (name === 'deafen') configName = 'mute';
+      if (name === 'undeafen') configName = 'unmute';
 
       const customFileKey = useSoundStore.getState().customSounds?.[configName];
 
@@ -152,6 +154,8 @@ class SoundEngine {
     if ((name === 'voice_leave' || name === 'user_leave_voice') && !settings.voiceLeaveSound) return;
     if (name === 'voice_disconnect' && !settings.voiceDisconnectSound) return;
     if (name === 'call_ringing' && !settings.callSound) return;
+    if ((name === 'mute' || name === 'deafen') && !settings.muteSound) return;
+    if ((name === 'unmute' || name === 'undeafen') && !settings.unmuteSound) return;
 
     // Debounce: prevent spam (100ms)
     const now = Date.now();
