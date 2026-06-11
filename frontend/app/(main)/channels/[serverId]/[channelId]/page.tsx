@@ -69,10 +69,14 @@ export default function ChannelPage() {
     (content: string, attachment?: { fileKey: string; fileName: string; fileSize: number } | null, mentions?: string[]) => {
       if (!token) return;
       const client = getStompClient(token);
-      if (!client.connected) return;
 
       const currentUser = useAuthStore.getState().user;
+      const nonce = crypto.randomUUID();
+
       const payload = {
+        id: nonce,
+        messageId: nonce,
+        nonce,
         roomId,
         channelId,
         content,
@@ -94,8 +98,9 @@ export default function ChannelPage() {
 
       // Optimistic message
       const optimisticMsg: Message = {
-        id: `optimistic-${Date.now()}`,
-        messageId: `optimistic-${Date.now()}`, // fallback to avoid errors
+        id: nonce,
+        messageId: nonce,
+        nonce,
         roomId,
         channelId,
         senderId: currentUser?.id || "",
@@ -113,9 +118,15 @@ export default function ChannelPage() {
         createdAt: new Date().toISOString(),
         replyTo: payload.replyTo,
         mentions,
+        status: client.connected ? "SENDING" : "FAILED",
       };
 
       useChatStore.getState().addOptimisticMessage(channelId, optimisticMsg);
+
+      if (!client.connected) {
+        console.warn("[chat] Cannot send: STOMP not connected. Message marked FAILED.");
+        return;
+      }
 
       client.publish({
         destination: "/app/chat.send",

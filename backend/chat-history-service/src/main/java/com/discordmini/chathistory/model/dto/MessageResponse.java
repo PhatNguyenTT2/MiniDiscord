@@ -18,6 +18,7 @@ public class MessageResponse {
 
     private String id; // ObjectId — cursor for pagination
     private String messageId; // UUID
+    private String nonce;
     private String roomId;
     private String channelId;
     private String senderId;
@@ -54,6 +55,7 @@ public class MessageResponse {
         return MessageResponse.builder()
                 .id(message.getId())
                 .messageId(message.getMessageId())
+                .nonce(message.getNonce())
                 .roomId(message.getRoomId())
                 .channelId(message.getChannelId())
                 .senderId(message.getSenderId())

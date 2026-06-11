@@ -1,5 +1,9 @@
+export type MessageStatus = "SENDING" | "SENT" | "FAILED";
+
 export interface Message {
   id: string; // ObjectId from DB or temporary UUID
+  status?: MessageStatus;
+  nonce?: string;
   messageId?: string; // Always UUID from WebSocket
   roomId: string;
   channelId: string;

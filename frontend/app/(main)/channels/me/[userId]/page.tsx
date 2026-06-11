@@ -372,14 +372,14 @@ export default function DmChatPage() {
         return;
       }
       const client = getStompClient(token);
-      if (!client.connected) {
-        console.error("[DM] Cannot send: STOMP not connected");
-        return;
-      }
 
-      // Optimistic insert — show message immediately with faded style
+      const nonce = crypto.randomUUID();
+
+      // Optimistic insert — show message immediately
       const optimisticMsg: Message = {
-        id: `optimistic-${Date.now()}`,
+        id: nonce,
+        messageId: nonce,
+        nonce,
         roomId: activeRoomId,
         channelId: activeChannelId,
         senderId: currentUser?.id || "",
@@ -403,10 +403,19 @@ export default function DmChatPage() {
           }
           : null,
         mentions,
+        status: client.connected ? "SENDING" : "FAILED",
       };
       addOptimisticMessage(activeChannelId, optimisticMsg);
 
+      if (!client.connected) {
+        console.error("[DM] Cannot send: STOMP not connected");
+        return;
+      }
+
       const payload = {
+        id: nonce,
+        messageId: nonce,
+        nonce,
         roomId: activeRoomId,
         channelId: activeChannelId,
         content,

@@ -77,6 +77,7 @@ public class ChatWebSocketController {
         MessageEvent event = MessageEvent.builder()
                 .id(objectId)
                 .messageId(message.getMessageId())
+                .nonce(message.getNonce())
                 .roomId(message.getRoomId())
                 .channelId(message.getChannelId())
                 .senderId(userId)

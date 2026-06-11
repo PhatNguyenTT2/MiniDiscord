@@ -17,6 +17,7 @@ public class MessageEvent implements Serializable {
 
     private String id;
     private String messageId;
+    private String nonce;
     private String roomId;
     private String channelId;
     private String senderId;

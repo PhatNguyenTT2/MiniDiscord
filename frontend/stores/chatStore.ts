@@ -40,6 +40,12 @@ interface ChatState {
   updateMessage: (channelId: string, messageId: string, content: string, editedAt: string) => void;
   removeMessage: (channelId: string, messageId: string) => void;
 
+  // New actions for Optimistic UI and Reconnect Sync
+  markAllSendingAsFailed: (channelId?: string) => void;
+  retryMessage: (channelId: string, messageId: string) => Message | null;
+  removeFailedMessage: (channelId: string, messageId: string) => void;
+  syncMessagesOnReconnect: (roomId: string, channelId: string) => Promise<void>;
+
   typingUsers: Record<string, { userId: string; username: string; expiresAt: number }[]>;
   setTyping: (channelId: string, userId: string, username: string) => void;
   clearTyping: (channelId: string, userId: string) => void;
@@ -47,7 +53,7 @@ interface ChatState {
   setReplyingTo: (target: ReplyTarget | null) => void;
   clearReplyingTo: () => void;
   addReaction: (channelId: string, messageId: string, emoji: string) => Promise<void>;
-  updateReactions: (channelId: string, messageId: string, reactions: any[]) => void;
+  updateReactions: (channelId: string, messageId: string, reactions: { emoji: string; userIds: string[] }[]) => void;
 
   pinnedMessages: Record<string, Message[]>;
   pinMessage: (channelId: string, messageId: string) => Promise<void>;
@@ -179,7 +185,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       set({ isLoading: true, error: null });
       const { api } = await import("@/lib/api"); // dynamic import to avoid circular dependency
-      const params: Record<string, any> = { limit };
+      const params: Record<string, string | number> = { limit };
       if (before) params.before = before;
 
       const res = await api.get<{ message: string; data: Message[] }>(
@@ -208,8 +214,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           isLoading: false,
         };
       });
-    } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+    } catch (error) {
+      const err = error as { message?: string };
+      set({ error: err.message || "Failed to fetch messages", isLoading: false });
     }
   },
 
@@ -245,8 +252,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
         isLoading: false
       });
-    } catch (error: any) {
-      set({ error: error.message, isLoading: false });
+    } catch (error) {
+      const err = error as { message?: string };
+      set({ error: err.message || "Failed to fetch messages", isLoading: false });
     }
   },
 
@@ -335,25 +343,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   addOptimisticMessage: (channelId, message) => {
+    const msgWithStatus = { status: "SENDING" as const, ...message };
     set((state) => {
       const existing = state.channelMessages[channelId] || [];
       return {
         channelMessages: {
           ...state.channelMessages,
-          [channelId]: [...existing, message],
+          [channelId]: [...existing, msgWithStatus],
         },
       };
     });
 
-    // Auto-remove optimistic message if server hasn't broadcasted real message in 10s
+    if (msgWithStatus.status === "FAILED") return;
+
+    // Mark as FAILED if no ACK within 10s (instead of deleting)
     setTimeout(() => {
       set((state) => {
         const msgs = state.channelMessages[channelId] || [];
-        if (msgs.some((m) => m.id === message.id)) {
+        const idx = msgs.findIndex((m) => m.id === message.id && m.status === "SENDING");
+        if (idx >= 0) {
+          const updated = [...msgs];
+          updated[idx] = { ...updated[idx], status: "FAILED" as const };
           return {
             channelMessages: {
               ...state.channelMessages,
-              [channelId]: msgs.filter((m) => m.id !== message.id),
+              [channelId]: updated,
             },
           };
         }
@@ -500,7 +514,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (msg.id !== messageId && msg.messageId !== messageId) return msg;
 
         const existingIdx = msg.reactions.findIndex((r) => r.emoji === emoji);
-        let newReactions = [...msg.reactions];
+        const newReactions = [...msg.reactions];
 
         if (existingIdx >= 0) {
           const existing = newReactions[existingIdx];
@@ -566,7 +580,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ...state.channelMessages,
           [channelId]: msgs.map((m) =>
             m.id === messageId || m.messageId === messageId
-              ? { ...m, reactions: reactions.map((r: any) => ({ ...r, count: r.userIds.length })) }
+              ? { ...m, reactions: reactions.map((r: { emoji: string; userIds: string[] }) => ({ ...r, count: r.userIds.length })) }
               : m
           ),
         },
@@ -579,7 +593,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const res = await api.get(`/messages/rooms/${roomId}/channels/${channelId}/pinned`);
       if (res.data) {
         // Wrap res.data inside ApiResponse data unwrapper helper: res.data itself might be ApiResponse
-        const messages = (res.data as any).data || res.data;
+        const messages = (res.data as Record<string, unknown>).data || res.data;
         set((state) => ({
           pinnedMessages: {
             ...state.pinnedMessages,
@@ -714,18 +728,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return state;
       }
 
-      // Replace matching optimistic message (id starts with "optimistic-")
-      // Match by senderId + content + close timestamp
-      const optimisticIdx = existing.findIndex(
-        (m) =>
-          m.id.startsWith("optimistic-") &&
-          m.senderId === message.senderId &&
-          m.content === message.content
-      );
+      // Replace matching optimistic message
+      const optimisticIdx = message.nonce
+        ? existing.findIndex((m) => m.nonce === message.nonce && (m.status === "SENDING" || m.status === "FAILED"))
+        : -1;
 
       if (optimisticIdx >= 0) {
         const updated = [...existing];
-        updated[optimisticIdx] = message;
+        updated[optimisticIdx] = { ...message, status: undefined };
         return {
           channelMessages: {
             ...state.channelMessages,
@@ -741,5 +751,135 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
       };
     });
+  },
+
+  markAllSendingAsFailed: (channelId?: string) => {
+    set((state) => {
+      const updatedMessages = { ...state.channelMessages };
+
+      const updateChannel = (cid: string) => {
+        const msgs = updatedMessages[cid] || [];
+        if (msgs.some((m) => m.status === "SENDING")) {
+          updatedMessages[cid] = msgs.map((m) =>
+            m.status === "SENDING" ? { ...m, status: "FAILED" as const } : m
+          );
+        }
+      };
+
+      if (channelId) {
+        updateChannel(channelId);
+      } else {
+        Object.keys(updatedMessages).forEach(updateChannel);
+      }
+
+      return { channelMessages: updatedMessages };
+    });
+  },
+
+  retryMessage: (channelId, messageId) => {
+    let messageToRetry: Message | null = null;
+
+    set((state) => {
+      const msgs = state.channelMessages[channelId] || [];
+      const idx = msgs.findIndex((m) => m.id === messageId);
+      if (idx >= 0) {
+        const updated = [...msgs];
+        // Change status back to SENDING
+        const retriedMsg = { ...updated[idx], status: "SENDING" as const };
+        updated[idx] = retriedMsg;
+        messageToRetry = retriedMsg;
+
+        // Re-arm timeout guard
+        setTimeout(() => {
+          set((s) => {
+            const currentMsgs = s.channelMessages[channelId] || [];
+            const freshIdx = currentMsgs.findIndex((m: Message) => m.id === messageId && m.status === "SENDING");
+            if (freshIdx >= 0) {
+              const freshUpdated = [...currentMsgs];
+              freshUpdated[freshIdx] = { ...freshUpdated[freshIdx], status: "FAILED" as const };
+              return {
+                channelMessages: {
+                  ...s.channelMessages,
+                  [channelId]: freshUpdated,
+                },
+              };
+            }
+            return s;
+          });
+        }, 10000);
+
+        return {
+          channelMessages: {
+            ...state.channelMessages,
+            [channelId]: updated,
+          },
+        };
+      }
+      return state;
+    });
+
+    return messageToRetry;
+  },
+
+  removeFailedMessage: (channelId, messageId) => {
+    set((state) => ({
+      channelMessages: {
+        ...state.channelMessages,
+        [channelId]: (state.channelMessages[channelId] || []).filter((m) => m.id !== messageId),
+      },
+    }));
+  },
+
+  syncMessagesOnReconnect: async (roomId: string, channelId: string) => {
+    try {
+      // Lazy load api to prevent circular dependencies
+      const { api } = await import("@/lib/api");
+      const res = await api.get<{ message: string; data: Message[] }>(
+        `/messages/rooms/${roomId}/channels/${channelId}`,
+        { params: { limit: 50 } }
+      );
+      const fetched = res.data.data;
+
+      set((state) => {
+        const existing = state.channelMessages[channelId] || [];
+        const tempExisting = [...existing];
+
+        // Match and remove any optimistic / failed / sending messages that are now confirmed in DB
+        fetched.forEach((dbMsg) => {
+          const matchIdx = tempExisting.findIndex(
+            (m) =>
+              m.status !== undefined &&
+              ((m.nonce && dbMsg.nonce && m.nonce === dbMsg.nonce) ||
+                (m.senderId === dbMsg.senderId && m.content === dbMsg.content))
+          );
+          if (matchIdx >= 0) {
+            tempExisting.splice(matchIdx, 1);
+          }
+        });
+
+        // Split preserved items (pending or failed messages) and completed history
+        const localStatusMsgs = tempExisting.filter((m) => m.status !== undefined);
+        const completedExisting = tempExisting.filter((m) => m.status === undefined);
+
+        // Deduplicate and merge completed messages
+        const mergedMap = new Map<string, Message>();
+        completedExisting.forEach((m) => mergedMap.set(m.id, m));
+        fetched.forEach((m) => mergedMap.set(m.id, m));
+
+        const mergedCompletedList = Array.from(mergedMap.values()).sort(
+          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+
+        // Keep local pending/failed messages at the very end
+        return {
+          channelMessages: {
+            ...state.channelMessages,
+            [channelId]: [...mergedCompletedList, ...localStatusMsgs],
+          },
+        };
+      });
+    } catch (err) {
+      console.error("[chatStore] Failed sync on reconnect:", err);
+    }
   },
 }));

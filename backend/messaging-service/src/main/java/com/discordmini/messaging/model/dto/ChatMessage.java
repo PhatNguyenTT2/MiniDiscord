@@ -12,6 +12,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ChatMessage {
+    private String nonce;
     private List<String> mentions;
     private String id; // Pre-generated ObjectId
     private String messageId; // Optional, server can generate

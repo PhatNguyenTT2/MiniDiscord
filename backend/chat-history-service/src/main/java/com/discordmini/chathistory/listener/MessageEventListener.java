@@ -18,9 +18,42 @@ import java.time.Instant;
 public class MessageEventListener {
 
     private final MongoTemplate mongoTemplate;
+    private final org.springframework.amqp.rabbit.core.RabbitTemplate rabbitTemplate;
 
     @RabbitListener(queues = "chat-history.message.queue")
     public void onMessageEvent(MessageEvent event) {
+        if (event.getNonce() != null && !event.getNonce().trim().isEmpty()) {
+            org.springframework.data.mongodb.core.query.Query query =
+                new org.springframework.data.mongodb.core.query.Query(
+                    org.springframework.data.mongodb.core.query.Criteria.where("nonce").is(event.getNonce())
+                );
+            Message existing = mongoTemplate.findOne(query, Message.class);
+            if (existing != null) {
+                log.info("Idempotency hit for nonce: {}. Re-broadcasting existing message: {}",
+                    event.getNonce(), existing.getMessageId());
+
+                java.util.Map<String, Object> sysEvent = new java.util.HashMap<>();
+                sysEvent.put("eventType", "MESSAGE_NEW");
+                sysEvent.put("id", existing.getId());
+                sysEvent.put("messageId", existing.getMessageId());
+                sysEvent.put("nonce", existing.getNonce());
+                sysEvent.put("roomId", existing.getRoomId());
+                sysEvent.put("channelId", existing.getChannelId());
+                sysEvent.put("senderId", existing.getSenderId());
+                sysEvent.put("senderName", existing.getSenderName());
+                sysEvent.put("senderAvatar", existing.getSenderAvatar());
+                sysEvent.put("content", existing.getContent());
+                sysEvent.put("type", existing.getType() != null ? existing.getType() : "TEXT");
+                sysEvent.put("fileKey", existing.getFileKey());
+                sysEvent.put("fileName", existing.getFileName());
+                sysEvent.put("fileSize", existing.getFileSize());
+                sysEvent.put("createdAt", existing.getCreatedAt().toString());
+
+                rabbitTemplate.convertAndSend("chat.exchange", "message.system", sysEvent);
+                return;
+            }
+        }
+
         Message.ReplyTo replyTo = null;
         ReplyInfo eventReply = event.getReplyTo();
         if (eventReply != null) {
@@ -34,6 +67,7 @@ public class MessageEventListener {
         Message message = Message.builder()
                 .id(event.getId())
                 .messageId(event.getMessageId())
+                .nonce(event.getNonce())
                 .roomId(event.getRoomId())
                 .channelId(event.getChannelId())
                 .senderId(event.getSenderId())

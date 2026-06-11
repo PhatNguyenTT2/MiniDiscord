@@ -14,6 +14,7 @@ import { CreateChannelModal } from "@/components/server/CreateChannelModal";
 import { EditChannelModal } from "@/components/server/EditChannelModal";
 import { InviteModal } from "@/components/server/InviteModal";
 import { ServerSettingsModal } from "@/components/server/ServerSettingsModal";
+import { NotificationSettingsModal } from "@/components/server/NotificationSettingsModal";
 import type { Channel } from "@/types";
 
 
@@ -28,7 +29,7 @@ interface ChannelItemProps {
   canEdit: boolean;
 }
 
-const EMPTY_PARTICIPANTS: any[] = [];
+const EMPTY_PARTICIPANTS: unknown[] = [];
 
 function ChannelItem({
   roomId,
@@ -223,6 +224,7 @@ export function ChannelList() {
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [inviteChannelName, setInviteChannelName] = useState("");
   const [isServerSettingsOpen, setIsServerSettingsOpen] = useState(false);
+  const [isNotificationSettingsOpen, setIsNotificationSettingsOpen] = useState(false);
 
   // Derive active channel and room from URL params
   const activeChannelId = (params?.channelId as string) || null;
@@ -321,6 +323,7 @@ export function ChannelList() {
               <button
                 onClick={() => {
                   setIsDropdownOpen(false);
+                  setIsNotificationSettingsOpen(true);
                 }}
                 className="w-full flex items-center justify-between rounded px-2 py-1.5 text-[#dbdee1] hover:bg-[#5865f2] hover:text-white transition-colors cursor-pointer text-left font-medium"
               >
@@ -401,6 +404,15 @@ export function ChannelList() {
           isOpen={isServerSettingsOpen}
           onClose={() => setIsServerSettingsOpen(false)}
           roomId={displayRoomId}
+        />
+      )}
+
+      {isNotificationSettingsOpen && displayRoomId && (
+        <NotificationSettingsModal
+          isOpen={isNotificationSettingsOpen}
+          onClose={() => setIsNotificationSettingsOpen(false)}
+          roomId={displayRoomId}
+          roomName={room?.name || "Server"}
         />
       )}
     </div>

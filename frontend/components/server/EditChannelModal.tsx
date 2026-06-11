@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { X, Hash, Volume2, Lock, Trash2 } from "lucide-react";
+import { X, Hash, Volume2, Lock, Trash2, ChevronRight } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useRoomStore } from "@/stores/roomStore";
@@ -104,7 +104,8 @@ export function EditChannelModal({ isOpen, onClose, roomId, channel }: EditChann
       });
 
       onClose();
-    } catch (err: any) {
+    } catch (error: unknown) {
+      const err = error as { message?: string };
       console.error("[EditChannelModal] Save failed:", err);
       setErrorMessage(err.message || "Failed to update channel");
     } finally {
@@ -134,7 +135,8 @@ export function EditChannelModal({ isOpen, onClose, roomId, channel }: EditChann
       await deleteChannel(roomId, channel.id);
       setShowDeleteConfirm(false);
       onClose();
-    } catch (err: any) {
+    } catch (error: unknown) {
+      const err = error as { message?: string };
       console.error("[EditChannelModal] Delete failed:", err);
       setErrorMessage(err.message || "Failed to delete channel");
     } finally {
@@ -149,71 +151,81 @@ export function EditChannelModal({ isOpen, onClose, roomId, channel }: EditChann
 
   return createPortal(
     <div className="fixed inset-0 z-[9990] flex bg-[#313338] text-[#dbdee1] animate-in fade-in duration-200">
-      {/* 2-Column Main Layout */}
-      <div className="flex h-full w-full max-w-[1920px] mx-auto overflow-hidden">
-        {/* Left Navigation Sidebar (1/3rd width or 280px minimum) */}
-        <div className="w-[280px] bg-[#2b2d31] flex flex-col justify-between p-6 pr-2 shrink-0 border-r border-[#1f2023]/20 select-none">
-          <div className="space-y-4 pt-10">
-            {/* Category header */}
-            <div className="px-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-[#949ba4] block truncate">
-                #{channel.name} {channelTypeLabel}
-              </span>
-            </div>
-
-            {/* Links list */}
-            <nav className="space-y-0.5">
-              <button
-                onClick={() => setActiveTab("overview")}
-                className={cn(
-                  "w-full flex items-center px-2.5 py-1.5 rounded text-sm text-left transition-colors font-medium cursor-pointer",
-                  activeTab === "overview"
-                    ? "bg-[#35373c] text-white"
-                    : "text-[#949ba4] hover:bg-[#35373c]/40 hover:text-[#dbdee1]"
-                )}
-              >
-                {t("channelSettings.overview")}
-              </button>
-
-              <button
-                onClick={() => setActiveTab("permissions")}
-                className={cn(
-                  "w-full flex items-center px-2.5 py-1.5 rounded text-sm text-left transition-colors font-medium cursor-pointer",
-                  activeTab === "permissions"
-                    ? "bg-[#35373c] text-white"
-                    : "text-[#949ba4] hover:bg-[#35373c]/40 hover:text-[#dbdee1]"
-                )}
-              >
-                {t("channelSettings.permissions")}
-              </button>
-            </nav>
-
-            <div className="border-t border-[#35373c]/60 my-2 mx-2" />
-
-            {/* Destructive Action option */}
-            {serverChannels.length > 1 ? (
-              <button
-                onClick={() => setShowDeleteConfirm(true)}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-sm text-left font-medium text-[#f23f43] hover:bg-[#f23f43]/10 transition-colors cursor-pointer"
-              >
-                <Trash2 className="h-4 w-4" />
-                {t("channelSettings.deleteChannel")}
-              </button>
-            ) : (
-              <div
-                title={t("channelSettings.cannotDeleteLast")}
-                className="px-2.5 py-1.5 text-xs text-[#949ba4] opacity-50 cursor-not-allowed"
-              >
-                {t("channelSettings.cannotDeleteLast")}
+      {/* 2-Column Main Layout (Centered) */}
+      <div className="flex h-full w-full justify-center overflow-hidden">
+        {/* Left Navigation Sidebar Column Wrapper */}
+        <div className="flex-[0.8_0_260px] bg-[#2b2d31] flex justify-end border-r border-[#1f2023]/20 select-none">
+          <div className="w-[260px] flex flex-col justify-between p-6 pr-4 shrink-0 pt-10">
+            <div className="space-y-4">
+              {/* Category header */}
+              <div className="px-2 pb-1">
+                <span className="text-[12px] font-bold uppercase tracking-wider text-[#949ba4] flex items-center gap-1.5 select-none">
+                  {isText ? (
+                    <Hash className="h-3.5 w-3.5 text-[#949ba4] shrink-0" />
+                  ) : (
+                    <Volume2 className="h-3.5 w-3.5 text-[#949ba4] shrink-0" />
+                  )}
+                  <span className="truncate">{channel.name}</span>
+                  <span className="text-[#949ba4]/50 ml-0.5 font-bold text-[10px]">
+                    {channelTypeLabel}
+                  </span>
+                </span>
               </div>
-            )}
+
+              {/* Links list */}
+              <nav className="space-y-0.5">
+                <button
+                  onClick={() => setActiveTab("overview")}
+                  className={cn(
+                    "w-full flex items-center px-2.5 py-1.5 rounded text-sm text-left transition-colors font-medium cursor-pointer",
+                    activeTab === "overview"
+                      ? "bg-[#35373c] text-white"
+                      : "text-[#949ba4] hover:bg-[#35373c]/40 hover:text-[#dbdee1]"
+                  )}
+                >
+                  {t("channelSettings.overview")}
+                </button>
+
+                <button
+                  onClick={() => setActiveTab("permissions")}
+                  className={cn(
+                    "w-full flex items-center px-2.5 py-1.5 rounded text-sm text-left transition-colors font-medium cursor-pointer",
+                    activeTab === "permissions"
+                      ? "bg-[#35373c] text-white"
+                      : "text-[#949ba4] hover:bg-[#35373c]/40 hover:text-[#dbdee1]"
+                  )}
+                >
+                  {t("channelSettings.permissions")}
+                </button>
+              </nav>
+
+              <div className="border-t border-[#35373c]/60 my-2 mx-2" />
+
+              {/* Destructive Action option */}
+              {serverChannels.length > 1 ? (
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-sm text-left font-medium text-[#f23f43] hover:bg-[#f23f43]/10 transition-colors cursor-pointer"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {t("channelSettings.deleteChannel")}
+                </button>
+              ) : (
+                <div
+                  title={t("channelSettings.cannotDeleteLast")}
+                  className="px-2.5 py-1.5 text-xs text-[#949ba4] opacity-50 cursor-not-allowed"
+                >
+                  {t("channelSettings.cannotDeleteLast")}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Right Tab Content Workspace */}
-        <div className="flex-1 flex flex-col bg-[#313338] relative min-w-0">
+        {/* Right Tab Content Workspace Column Wrapper */}
+        <div className="flex-[1.8_1_800px] bg-[#313338] flex justify-start relative min-w-0">
           {/* Main scroll workspace */}
-          <div className="flex-1 overflow-y-auto px-[40px] md:px-[60px] lg:px-[100px] py-[60px]">
+          <div className="flex-1 overflow-y-auto px-[40px] md:px-[60px] lg:px-[80px] py-[60px]">
             {/* ESC close bubble */}
             <div className="absolute right-[40px] top-[40px] md:right-[60px] z-[9995]">
               <div className="flex flex-col items-center">
@@ -239,7 +251,7 @@ export function EditChannelModal({ isOpen, onClose, roomId, channel }: EditChann
 
             {/* Switch Active Screen */}
             {activeTab === "overview" && (
-              <div className="max-w-[660px] space-y-6 animate-in fade-in duration-300">
+              <div className="max-w-[800px] w-full space-y-6 animate-in fade-in duration-300">
                 <h2 className="text-xl font-bold text-white mb-6">
                   {t("channelSettings.overview")}
                 </h2>
@@ -287,7 +299,7 @@ export function EditChannelModal({ isOpen, onClose, roomId, channel }: EditChann
             )}
 
             {activeTab === "permissions" && (
-              <div className="max-w-[660px] space-y-6 animate-in fade-in duration-300">
+              <div className="max-w-[800px] w-full space-y-5 animate-in fade-in duration-300">
                 <div>
                   <h2 className="text-xl font-bold text-white mb-2">
                     {t("channelSettings.permissionsTitle")}
@@ -296,6 +308,25 @@ export function EditChannelModal({ isOpen, onClose, roomId, channel }: EditChann
                     {t("channelSettings.permissionsDesc")}
                   </p>
                 </div>
+
+                {/* Unsynced advisory banner (only active if private is true) */}
+                {isPrivateChannel && (
+                  <div className="flex items-center justify-between rounded bg-[#2b2d31] p-3 border border-[#f0b232]/40 shadow-sm gap-2">
+                    <div className="flex items-center gap-3 text-sm text-[#dbdee1] min-w-0">
+                      <span className="text-base text-[#f0b232] shrink-0 select-none">💡</span>
+                      <span className="truncate">
+                        {t("channelSettings.notSyncedWithCategory").replace("{categoryName}", "")}
+                        <strong className="text-white ml-1 font-semibold">{t("channelSettings.textChannel")}</strong>
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="rounded bg-[#4e5058] hover:bg-[#6d6f78] text-white text-[12px] font-semibold px-3 py-1.5 transition-colors cursor-pointer shrink-0"
+                    >
+                      {t("channelSettings.syncNow")}
+                    </button>
+                  </div>
+                )}
 
                 <div className="border-t border-[#35373c]/60 my-2" />
 
@@ -324,6 +355,84 @@ export function EditChannelModal({ isOpen, onClose, roomId, channel }: EditChann
                     <div className="w-11 h-6 bg-[#80848e] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#5865f2]"></div>
                   </label>
                 </div>
+
+                {/* Private members access control (only if private is true) */}
+                {isPrivateChannel && (
+                  <div className="rounded-md bg-[#2b2d31] p-4 border border-[#1f2023]/25 space-y-4 shadow animate-in slide-in-from-top-1 duration-200">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs font-bold uppercase tracking-wider text-white">
+                        {t("channelSettings.whoCanAccess")}
+                      </span>
+                      <button
+                        type="button"
+                        className="rounded bg-[#5865f2] hover:bg-[#4752c4] text-white text-[12px] font-semibold px-3 py-1.5 transition-colors cursor-pointer select-none"
+                      >
+                        {t("channelSettings.addMembersOrRoles")}
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      {/* Roles List Section */}
+                      <div>
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-[#949ba4]">
+                          {t("channelSettings.roles")}
+                        </span>
+                        <div className="mt-2 flex items-center gap-3 py-1 text-sm text-[#949ba4]">
+                          <Lock className="h-4 w-4 shrink-0 text-[#949ba4]/60" />
+                          <span className="font-medium text-xs select-none">
+                            {t("channelSettings.noRoles")}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-[#35373c]/40 pt-1" />
+
+                      {/* Members List Section */}
+                      <div>
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-[#949ba4]">
+                          {t("channelSettings.members")}
+                        </span>
+                        <div className="mt-2 flex items-center justify-between py-1 bg-[#1e1f22]/35 rounded px-2.5 border border-[#1e1f22]/5">
+                          <div className="flex items-center gap-3">
+                            <div className="h-6 w-6 rounded-full bg-[#5865f2]/20 flex items-center justify-center text-[10px] font-bold text-[#5865f2] shrink-0 uppercase select-none">
+                              CD
+                            </div>
+                            <div className="flex items-baseline gap-1 select-none">
+                              <span className="font-semibold text-sm text-white">co doc vuong</span>
+                              <span className="text-xs text-[#949ba4]">pat69696</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs text-[#949ba4] select-none font-medium">
+                              {t("channelSettings.serverOwner")}
+                            </span>
+                            <button
+                              type="button"
+                              className="text-[#b5bac1] hover:text-white transition-colors cursor-pointer"
+                              aria-label="Remove access"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Advanced Row section link (only if private is true) */}
+                {isPrivateChannel && (
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      className="flex items-center text-sm font-semibold text-white/90 hover:text-white transition-colors gap-1.5 cursor-pointer uppercase tracking-wider text-[11px]"
+                    >
+                      {t("channelSettings.advancedPermissions")}
+                      <ChevronRight className="h-4 w-4 text-[#949ba4]" />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

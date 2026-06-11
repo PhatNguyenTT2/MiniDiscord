@@ -25,6 +25,9 @@ public class Message {
     @Indexed(unique = true)
     private String messageId; // UUID from event — Idempotent Consumer key
 
+    @Indexed
+    private String nonce;
+
     private String roomId;
     private String channelId;
     private String senderId;

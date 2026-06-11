@@ -2,10 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { X, ShieldAlert, Users, Trash2, Search, Calendar, Badge, Shield } from "lucide-react";
+import { X, ShieldAlert, Users, Trash2, Search, Shield, SlidersHorizontal, ChevronRight, Pencil, MoreHorizontal } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { useRoomStore } from "@/stores/roomStore";
-import { useAuthStore } from "@/stores/authStore";
 import { ScrollArea } from "../ui/ScrollArea";
 import { cn } from "@/lib/utils";
 
@@ -15,30 +14,44 @@ interface ServerSettingsModalProps {
   roomId: string;
 }
 
-type TabType =
-  | "members"
-  | "roles"
-  | "invites"
-  | "access"
-  | "integrations"
-  | "directory"
-  | "safety"
-  | "audit"
-  | "bans"
-  | "automod";
+type TabType = "members" | "roles" | "invites";
 
 export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsModalProps) {
   const { t } = useTranslation();
   const { rooms, members, fetchMembers } = useRoomStore();
-  const currentUser = useAuthStore((s) => s.user);
 
   const [activeTab, setActiveTab] = useState<TabType>("members");
   const [searchQuery, setSearchQuery] = useState("");
 
+  const [activeInvites, setActiveInvites] = useState([
+    {
+      id: "1",
+      inviterName: "co doc vuong",
+      channelName: "chung",
+      code: "chJgUK3Y",
+      uses: 0,
+      duration: "06:23:57:42",
+      role: ""
+    }
+  ]);
+  const [showInviteCreator, setShowInviteCreator] = useState(false);
+  const [invitedFriends, setInvitedFriends] = useState<string[]>([]);
+  const [searchFriendQuery, setSearchFriendQuery] = useState("");
+  const [copiedStatus, setCopiedStatus] = useState(false);
+
+  const MOCK_FRIENDS = [
+    { id: "1", username: "kkk", tag: "tulatu#573" },
+    { id: "2", username: "Nguyen Tue", tag: "tue_lord11349" },
+    { id: "3", username: "muadongseoul.", tag: "terv1302" },
+    { id: "4", username: "dola500", tag: "ganganngang" },
+    { id: "5", username: "rotduide", tag: "rotduide" },
+    { id: "6", username: "Shiroko", tag: "beluhacker" },
+    { id: "7", username: "Big Mike", tag: "sdmikecfc" },
+  ];
+
   const currentRoom = rooms.find((r) => r.id === roomId);
   const roomMembers = members[roomId] || [];
 
-  // Fetch members when modal is opened
   useEffect(() => {
     if (isOpen && roomId) {
       fetchMembers(roomId);
@@ -49,11 +62,17 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
   useEffect(() => {
     if (!isOpen) return;
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        if (showInviteCreator) {
+          setShowInviteCreator(false);
+        } else {
+          onClose();
+        }
+      }
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, showInviteCreator, onClose]);
 
   // Lock scroll
   useEffect(() => {
@@ -73,6 +92,9 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
     m.username.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const adminCount = roomMembers.filter((m) => m.role === "ADMIN" || m.role === "OWNER").length;
+  const normalMemberCount = roomMembers.filter((m) => m.role === "MEMBER").length;
+
   const getRoleBadgeColor = (role: string) => {
     if (role === "OWNER") return "bg-[#ffaa00]/20 text-[#ffaa00] border-[#ffaa00]/30";
     if (role === "ADMIN") return "bg-[#5865f2]/20 text-[#5865f2] border-[#5865f2]/30";
@@ -89,291 +111,645 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
     }
   };
 
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText("https://discord.gg/chJgUK3Y");
+    setCopiedStatus(true);
+    setTimeout(() => setCopiedStatus(false), 2000);
+  };
+
+  const filteredMockFriends = MOCK_FRIENDS.filter((f) =>
+    f.username.toLowerCase().includes(searchFriendQuery.toLowerCase()) ||
+    f.tag.toLowerCase().includes(searchFriendQuery.toLowerCase())
+  );
+
   return createPortal(
     <div className="fixed inset-0 z-[9990] flex bg-[#313338] text-[#dbdee1] animate-in fade-in duration-200">
       {/* ─── Left sidebar Column Wrapper ─── */}
-      <div className="flex-[1_0_240px] bg-[#2b2d31] flex justify-end border-r border-[#1f2023]/20 select-none">
-        <div className="w-[240px] flex flex-col justify-between p-6 pr-4 shrink-0">
-          <div className="space-y-4 pt-8 shrink-0">
-            {/* Header / Server settings */}
-            <div className="px-2 pb-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-[#949ba4] block truncate">
-                {currentRoom?.name || t("serverSettingsModal.title")}
-              </span>
+      <div className="flex-[0.8_0_260px] bg-[#2b2d31] flex justify-end border-r border-[#1f2023]/20 select-none">
+        <div className="w-[260px] flex flex-col justify-between p-6 pr-4 shrink-0">
+          <div className="space-y-4 pt-8 shrink-0 flex flex-col h-full justify-between pb-8">
+            <div>
+              {/* Header / Server settings */}
+              <div className="px-2 pb-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#949ba4] block truncate">
+                  {currentRoom?.name || t("serverSettingsModal.title")}
+                </span>
+              </div>
+
+              {/* Sections */}
+              <ScrollArea className="h-[calc(100vh-220px)] pr-2">
+                <div className="space-y-4">
+                  {/* section 1: Mọi Người */}
+                  <div className="space-y-1">
+                    <span className="px-2.5 text-[10px] font-bold uppercase text-[#949ba4] tracking-wider">
+                      {t("serverSettingsModal.people")}
+                    </span>
+                    <nav className="space-y-0.5 pt-1">
+                      <button
+                        onClick={() => setActiveTab("members")}
+                        className={cn(
+                          "w-full flex items-center px-2.5 py-1.5 rounded text-sm text-left font-medium transition-colors cursor-pointer",
+                          activeTab === "members"
+                            ? "bg-[#35373c] text-white"
+                            : "text-[#949ba4] hover:bg-[#35373c]/40 hover:text-[#dbdee1]"
+                        )}
+                      >
+                        {t("serverSettingsModal.members")}
+                      </button>
+                      <button
+                        onClick={() => setActiveTab("roles")}
+                        className={cn(
+                          "w-full flex items-center px-2.5 py-1.5 rounded text-sm text-left font-medium transition-colors cursor-pointer",
+                          activeTab === "roles"
+                            ? "bg-[#35373c] text-white"
+                            : "text-[#949ba4] hover:bg-[#35373c]/40 hover:text-[#dbdee1]"
+                        )}
+                      >
+                        {t("serverSettingsModal.roles")}
+                      </button>
+                      <button
+                        onClick={() => setActiveTab("invites")}
+                        className={cn(
+                          "w-full flex items-center px-2.5 py-1.5 rounded text-sm text-left font-medium transition-colors cursor-pointer",
+                          activeTab === "invites"
+                            ? "bg-[#35373c] text-white"
+                            : "text-[#949ba4] hover:bg-[#35373c]/40 hover:text-[#dbdee1]"
+                        )}
+                      >
+                        {t("serverSettingsModal.invites")}
+                      </button>
+                    </nav>
+                  </div>
+                </div>
+              </ScrollArea>
             </div>
 
-            {/* Sections */}
-            <ScrollArea className="h-[calc(100vh-160px)] pr-2">
-              <div className="space-y-4">
-                {/* section 1: Mọi Người */}
-                <div className="space-y-1">
-                  <span className="px-2.5 text-[10px] font-bold uppercase text-[#949ba4] tracking-wider">
-                    {t("serverSettingsModal.people")}
-                  </span>
-                  <nav className="space-y-0.5 pt-1">
-                    <button
-                      onClick={() => setActiveTab("members")}
-                      className={cn(
-                        "w-full flex items-center px-2.5 py-1.5 rounded text-sm text-left font-medium transition-colors cursor-pointer",
-                        activeTab === "members"
-                          ? "bg-[#35373c] text-white"
-                          : "text-[#949ba4] hover:bg-[#35373c]/40 hover:text-[#dbdee1]"
-                      )}
-                    >
-                      {t("serverSettingsModal.members")}
-                    </button>
-                    {(["roles", "invites", "access"] as const).map((tKey) => (
-                      <button
-                        key={tKey}
-                        onClick={() => setActiveTab(tKey)}
-                        className={cn(
-                          "w-full flex items-center px-2.5 py-1.5 rounded text-sm text-left font-medium transition-colors cursor-pointer",
-                          activeTab === tKey
-                            ? "bg-[#35373c] text-white"
-                            : "text-[#949ba4]/60 hover:bg-[#35373c]/20 hover:text-[#dbdee1]"
-                        )}
-                      >
-                        {tKey === "roles" ? t("serverSettingsModal.roles") : tKey === "invites" ? t("serverSettingsModal.invites") : t("serverSettingsModal.access")}
-                      </button>
-                    ))}
-                  </nav>
-                </div>
-
-                {/* section 2: Ứng dụng */}
-                <div className="space-y-1">
-                  <span className="px-2.5 text-[10px] font-bold uppercase text-[#949ba4] tracking-wider">
-                    {t("serverSettingsModal.apps")}
-                  </span>
-                  <nav className="space-y-0.5 pt-1">
-                    {(["integrations", "directory"] as const).map((tKey) => (
-                      <button
-                        key={tKey}
-                        onClick={() => setActiveTab(tKey)}
-                        className={cn(
-                          "w-full flex items-center px-2.5 py-1.5 rounded text-sm text-left font-medium transition-colors cursor-pointer",
-                          activeTab === tKey
-                            ? "bg-[#35373c] text-white"
-                            : "text-[#949ba4]/60 hover:bg-[#35373c]/20 hover:text-[#dbdee1]"
-                        )}
-                      >
-                        {tKey === "integrations" ? t("serverSettingsModal.integrations") : t("serverSettingsModal.appDirectory")}
-                      </button>
-                    ))}
-                  </nav>
-                </div>
-
-                {/* section 3: Điều chỉnh */}
-                <div className="space-y-1">
-                  <span className="px-2.5 text-[10px] font-bold uppercase text-[#949ba4] tracking-wider">
-                    {t("serverSettingsModal.moderation")}
-                  </span>
-                  <nav className="space-y-0.5 pt-1">
-                    {(["safety", "audit", "bans", "automod"] as const).map((tKey) => (
-                      <button
-                        key={tKey}
-                        onClick={() => setActiveTab(tKey)}
-                        className={cn(
-                          "w-full flex items-center px-2.5 py-1.5 rounded text-sm text-left font-medium transition-colors cursor-pointer",
-                          activeTab === tKey
-                            ? "bg-[#35373c] text-white"
-                            : "text-[#949ba4]/60 hover:bg-[#35373c]/20 hover:text-[#dbdee1]"
-                        )}
-                      >
-                        {tKey === "safety"
-                          ? t("serverSettingsModal.safety")
-                          : tKey === "audit"
-                            ? t("serverSettingsModal.audit")
-                            : tKey === "bans"
-                              ? t("serverSettingsModal.bans")
-                              : t("serverSettingsModal.automod")}
-                      </button>
-                    ))}
-                  </nav>
-                </div>
-              </div>
-            </ScrollArea>
-
-            {/* Separator / Footer */}
-            <div className="border-t border-[#35373c]/60 pt-2 shrink-0">
+            {/* Separator / Footer (Non-highlighted normal list style at end of left sidebar menu) */}
+            <div className="border-t border-[#35373c]/60 pt-2.5 shrink-0">
               <button
                 onClick={() => alert(t("serverSettingsModal.deleteWarning"))}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-sm text-left font-medium text-[#f23f43] hover:bg-[#f23f43]/10 transition-colors cursor-pointer"
+                className="w-full flex items-center px-2.5 py-1.5 rounded text-sm text-left font-medium text-[#f23f43]/80 hover:bg-[#f23f43]/10 hover:text-[#f23f43] transition-colors cursor-pointer"
               >
-                <Trash2 className="h-4 w-4" />
                 {t("serverSettingsModal.deleteServer")}
               </button>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* ─── Right content Column Wrapper ─── */}
-        <div className="flex-[1.8_1_0%] bg-[#313338] flex justify-start relative min-w-0">
-          {/* ESC close bubble */}
-          <div className="absolute right-[40px] top-[40px] md:right-[60px] z-[9995]">
-            <div className="flex flex-col items-center">
-              <button
-                onClick={onClose}
-                className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-[#b5bac1] hover:border-white text-[#b5bac1] hover:text-white transition-all cursor-pointer rotate-0 hover:rotate-90"
-                aria-label="Close settings"
-              >
-                <X className="h-5 w-5" />
-              </button>
-              <span className="text-[12px] font-semibold text-[#b5bac1] mt-2 select-none uppercase">
-                ESC
-              </span>
-            </div>
+      {/* ─── Right content Column Wrapper (Centered layout context) ─── */}
+      <div className="flex-[1.8_1_800px] bg-[#313338] flex justify-start relative min-w-0">
+        {/* ESC close bubble */}
+        <div className="absolute right-[40px] top-[40px] md:right-[60px] z-[9995]">
+          <div className="flex flex-col items-center">
+            <button
+              onClick={onClose}
+              className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-[#b5bac1] hover:border-white text-[#b5bac1] hover:text-white transition-all cursor-pointer rotate-0 hover:rotate-90"
+              aria-label="Close settings"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <span className="text-[12px] font-semibold text-[#b5bac1] mt-2 select-none uppercase">
+              ESC
+            </span>
           </div>
+        </div>
 
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto px-[40px] md:px-[60px] lg:px-[80px] py-[60px]">
-            <div className="max-w-[680px] w-full">
-              {/* Render Tab Content */}
-              {activeTab === "members" ? (
-                <div className="space-y-6 animate-in fade-in duration-300">
-                  {/* Header */}
-                  <div>
-                    <h2 className="text-xl font-bold text-white mb-2">{t("serverSettingsModal.membersTitle")}</h2>
-                    <p className="text-sm text-[#949ba4] max-w-[680px] leading-relaxed">
-                      {t("serverSettingsModal.membersDesc")}
-                    </p>
+        {/* Content scroller */}
+        <div className="flex-1 overflow-y-auto px-[40px] md:px-[60px] lg:px-[80px] py-[60px]">
+          <div className="max-w-[800px] w-full">
+            {/* Render Tab Content */}
+            {activeTab === "members" ? (
+              <div className="space-y-6 animate-in fade-in duration-300">
+                {/* Header */}
+                <div>
+                  <h2 className="text-xl font-bold text-white mb-2">{t("serverSettingsModal.membersTitle")}</h2>
+                  <p className="text-sm text-[#949ba4] max-w-[800px] leading-relaxed">
+                    {t("serverSettingsModal.membersDesc")}
+                  </p>
+                </div>
+
+                {/* Channel member list info switch toggle (Image 2 style) */}
+                <div className="rounded-md bg-[#2b2d31] p-4 flex items-center justify-between gap-4 border border-[#1f2023]/25 shadow-sm">
+                  <div className="flex flex-col min-w-0 pr-2">
+                    <span className="font-semibold text-white text-sm">
+                      {t("serverSettingsModal.showMembersToggle")}
+                    </span>
+                    <span className="text-xs text-[#949ba4] leading-relaxed mt-1">
+                      {t("serverSettingsModal.showMembersToggleDesc")}
+                    </span>
                   </div>
 
-                  <div className="border-t border-[#35373c]/60 my-2" />
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      defaultChecked
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-[#80848e] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#5865f2]"></div>
+                  </label>
+                </div>
 
-                  {/* Sub-header actions */}
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-xs font-semibold text-[#b5bac1] uppercase tracking-wide">
-                      {t("serverSettingsModal.memberCount", { count: filteredMembers.length })}
-                    </span>
+                <div className="border-t border-[#35373c]/60 my-2" />
 
+                {/* Sub-header actions */}
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-sm font-bold text-white uppercase tracking-wide">
+                    {t("serverSettingsModal.recentMembers")}
+                  </span>
+
+                  {/* Filter row container */}
+                  <div className="flex items-center gap-2">
                     {/* Searchbox */}
                     <div className="relative flex items-center w-[240px]">
                       <input
                         type="text"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder={t("serverSettingsModal.searchPlaceholder")}
+                        placeholder={t("serverSettingsModal.searchByUsernameOrId")}
                         className="w-full rounded bg-[#1e1f22] pl-3 pr-8 py-1.5 text-xs text-white placeholder-[#80848e] outline-none"
                       />
                       <Search className="absolute right-2.5 h-3.5 w-3.5 text-[#80848e] shrink-0 pointer-events-none" />
                     </div>
-                  </div>
 
-                  {/* Member Directory Grid Table */}
-                  <div className="overflow-x-auto rounded-md bg-[#2b2d31]/40 border border-[#1f2023]/20">
-                    <table className="w-full border-collapse text-left text-xs text-[#dbdee1]">
-                      <thead>
-                        <tr className="bg-[#2b2d31]/60 text-[#b5bac1] font-bold uppercase tracking-wider border-b border-[#2b2d31]">
-                          <th className="px-4 py-3 select-none">{t("serverSettingsModal.tableHeaderName")}</th>
-                          <th className="px-4 py-3 select-none">{t("serverSettingsModal.tableHeaderJoined")}</th>
-                          <th className="px-4 py-3 select-none">{t("serverSettingsModal.tableHeaderAge")}</th>
-                          <th className="px-4 py-3 select-none">{t("serverSettingsModal.tableHeaderMethod")}</th>
-                          <th className="px-4 py-3 select-none">{t("serverSettingsModal.tableHeaderRoles")}</th>
-                          <th className="px-4 py-3 select-none">{t("serverSettingsModal.tableHeaderStatus")}</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[#2b2d31]/40">
-                        {filteredMembers.length > 0 ? (
-                          filteredMembers.map((m) => {
-                            const isOnline = m.status === "ONLINE" || m.status === "IDLE" || m.status === "DND";
-                            return (
-                              <tr key={m.userId} className="hover:bg-[#2b2d31]/25 transition-colors">
-                                {/* Name profile */}
-                                <td className="px-4 py-3.5 whitespace-nowrap">
-                                  <div className="flex items-center gap-2.5">
-                                    {m.avatarUrl ? (
-                                      <img
-                                        src={m.avatarUrl}
-                                        alt={m.username}
-                                        className="h-8 w-8 rounded-full object-cover shrink-0"
-                                      />
-                                    ) : (
-                                      <div className="h-8 w-8 rounded-full bg-[#5865f2]/20 flex items-center justify-center shrink-0">
-                                        <span className="text-[11px] font-bold text-[#5865f2] uppercase">
-                                          {m.username.substring(0, 2)}
-                                        </span>
-                                      </div>
-                                    )}
-                                    <div className="flex flex-col min-w-0">
-                                      <span className="font-semibold text-white text-[13px] truncate">
-                                        {m.username}
+                    {/* Sort Button */}
+                    <button className="flex items-center gap-1.5 px-3 py-1.5 bg-[#35373c] text-white hover:bg-[#4e5058] rounded text-xs font-semibold overflow-hidden transition cursor-pointer shrink-0">
+                      <SlidersHorizontal className="h-3.5 w-3.5 opacity-80" />
+                      {t("serverSettingsModal.sort")}
+                    </button>
+
+                    {/* Prune Button */}
+                    <button className="px-3 py-1.5 text-[#dbdee1] hover:underline rounded text-xs font-semibold transition cursor-pointer shrink-0">
+                      {t("serverSettingsModal.prune")}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Member Directory Grid Table */}
+                <div className="overflow-x-auto rounded-md bg-[#2b2d31]/40 border border-[#1f2023]/20">
+                  <table className="w-full border-collapse text-left text-xs text-[#dbdee1]">
+                    <thead>
+                      <tr className="bg-[#2b2d31]/60 text-[#b5bac1] font-bold uppercase tracking-wider border-b border-[#2b2d31]">
+                        <th className="px-4 py-3 select-none">{t("serverSettingsModal.tableHeaderName")}</th>
+                        <th className="px-4 py-3 select-none">
+                          <div className="flex items-center gap-1">
+                            {t("serverSettingsModal.tableHeaderJoined")}
+                            <SlidersHorizontal className="h-3 w-3 text-[#b5bac1]/60 shrink-0" />
+                          </div>
+                        </th>
+                        <th className="px-4 py-3 select-none">
+                          <div className="flex items-center gap-1">
+                            {t("serverSettingsModal.tableHeaderAge")}
+                            <SlidersHorizontal className="h-3 w-3 text-[#b5bac1]/60 shrink-0" />
+                          </div>
+                        </th>
+                        <th className="px-4 py-3 select-none">
+                          <div className="flex items-center gap-1">
+                            {t("serverSettingsModal.tableHeaderMethod")}
+                            <SlidersHorizontal className="h-3 w-3 text-[#b5bac1]/60 shrink-0" />
+                          </div>
+                        </th>
+                        <th className="px-4 py-3 select-none">
+                          <div className="flex items-center gap-1">
+                            {t("serverSettingsModal.tableHeaderRoles")}
+                            <SlidersHorizontal className="h-3 w-3 text-[#b5bac1]/60 shrink-0" />
+                          </div>
+                        </th>
+                        <th className="px-4 py-3 select-none">
+                          <div className="flex items-center gap-1">
+                            {t("serverSettingsModal.tableHeaderStatus")}
+                            <SlidersHorizontal className="h-3 w-3 text-[#b5bac1]/60 shrink-0" />
+                          </div>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#2b2d31]/40">
+                      {filteredMembers.length > 0 ? (
+                        filteredMembers.map((m) => {
+                          const isOnline = m.status === "ONLINE" || m.status === "IDLE" || m.status === "DND";
+                          return (
+                            <tr key={m.userId} className="hover:bg-[#2b2d31]/25 transition-colors">
+                              {/* Name profile */}
+                              <td className="px-4 py-3.5 whitespace-nowrap">
+                                <div className="flex items-center gap-2.5">
+                                  {m.avatarUrl ? (
+                                    <img
+                                      src={m.avatarUrl}
+                                      alt={m.username}
+                                      className="h-8 w-8 rounded-full object-cover shrink-0"
+                                    />
+                                  ) : (
+                                    <div className="h-8 w-8 rounded-full bg-[#5865f2]/20 flex items-center justify-center shrink-0">
+                                      <span className="text-[11px] font-bold text-[#5865f2] uppercase">
+                                        {m.username.substring(0, 2)}
                                       </span>
                                     </div>
+                                  )}
+                                  <div className="flex flex-col min-w-0">
+                                    <span className="font-semibold text-white text-[13px] truncate">
+                                      {m.username}
+                                    </span>
                                   </div>
-                                </td>
+                                </div>
+                              </td>
 
-                                {/* Joined date */}
-                                <td className="px-4 py-3.5 text-[#b5bac1] whitespace-nowrap">
-                                  {formatDate(m.joinedAt)}
-                                </td>
+                              {/* Joined date */}
+                              <td className="px-4 py-3.5 text-[#b5bac1] whitespace-nowrap">
+                                {formatDate(m.joinedAt)}
+                              </td>
 
-                                {/* Discord Age */}
-                                <td className="px-4 py-3.5 text-[#949ba4] whitespace-nowrap">
-                                  {t("serverSettingsModal.yearsAgo")}
-                                </td>
+                              {/* Discord Age */}
+                              <td className="px-4 py-3.5 text-[#949ba4] whitespace-nowrap">
+                                {t("serverSettingsModal.yearsAgo")}
+                              </td>
 
-                                {/* Invite Method */}
-                                <td className="px-4 py-3.5 text-[#949ba4] whitespace-nowrap">
-                                  <span className="px-1.5 py-0.5 rounded bg-[#1e1f22] text-[10px] font-medium border border-[#3f4147]/10">
-                                    {t("serverSettingsModal.defaultMethod")}
+                              {/* Invite Method */}
+                              <td className="px-4 py-3.5 text-[#949ba4] whitespace-nowrap">
+                                <span className="px-1.5 py-0.5 rounded bg-[#1e1f22] text-[10px] font-medium border border-[#3f4147]/10">
+                                  {t("serverSettingsModal.defaultMethod")}
+                                </span>
+                              </td>
+
+                              {/* Role Pill Badges */}
+                              <td className="px-4 py-3.5 whitespace-nowrap">
+                                <div className="flex flex-wrap gap-1.5">
+                                  <span className={cn(
+                                    "px-2 py-0.5 text-[10px] font-bold border rounded-full flex items-center gap-1 select-none",
+                                    getRoleBadgeColor(m.role)
+                                  )}>
+                                    {m.role === "OWNER" || m.role === "ADMIN" ? (
+                                      <Shield className="h-3 w-3 shrink-0" />
+                                    ) : null}
+                                    {m.role}
                                   </span>
-                                </td>
+                                </div>
+                              </td>
 
-                                {/* Role Pill Badges */}
-                                <td className="px-4 py-3.5 whitespace-nowrap">
-                                  <div className="flex flex-wrap gap-1.5">
-                                    <span className={cn(
-                                      "px-2 py-0.5 text-[10px] font-bold border rounded-full flex items-center gap-1 select-none",
-                                      getRoleBadgeColor(m.role)
-                                    )}>
-                                      {m.role === "OWNER" || m.role === "ADMIN" ? (
-                                        <Shield className="h-3 w-3 shrink-0" />
-                                      ) : null}
-                                      {m.role}
-                                    </span>
-                                  </div>
-                                </td>
-
-                                {/* Signals / Presence status */}
-                                <td className="px-4 py-3.5 whitespace-nowrap">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className={cn(
-                                      "h-2 w-2 rounded-full shrink-0",
-                                      isOnline ? "bg-[#23a55a]" : "bg-[#80848e]"
-                                    )} />
-                                    <span className="text-[11px] text-[#949ba4]">
-                                      {isOnline ? t("serverSettingsModal.statusOnline") : t("serverSettingsModal.statusOffline")}
-                                    </span>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })
-                        ) : (
-                          <tr>
-                            <td colSpan={6} className="py-8 text-center text-xs text-[#949ba4]">
-                              {t("serverSettingsModal.noMembersFound")}
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                              {/* Signals / Presence status */}
+                              <td className="px-4 py-3.5 whitespace-nowrap">
+                                <div className="flex items-center gap-1.5">
+                                  <span className={cn(
+                                    "h-2 w-2 rounded-full shrink-0",
+                                    isOnline ? "bg-[#23a55a]" : "bg-[#80848e]"
+                                  )} />
+                                  <span className="text-[11px] text-[#949ba4]">
+                                    {isOnline ? t("serverSettingsModal.statusOnline") : t("serverSettingsModal.statusOffline")}
+                                  </span>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan={6} className="py-8 text-center text-xs text-[#949ba4]">
+                            {t("serverSettingsModal.noMembersFound")}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
-              ) : (
-                // Fallback placeholder layouts for un-implemented items
-                <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 animate-in fade-in duration-300">
-                  <ShieldAlert className="h-16 w-16 text-[#b5bac1]/40" />
-                  <h3 className="text-lg font-bold text-white">{t("serverSettingsModal.underDev")}</h3>
-                  <p className="text-sm text-[#949ba4] max-w-[420px]">
-                    {t("serverSettingsModal.underDevDesc")}
+              </div>
+            ) : activeTab === "roles" ? (
+              /* Roles Tab Implementation (Image 4 style & requirements) */
+              <div className="space-y-6 animate-in fade-in duration-300">
+                {/* Header */}
+                <div>
+                  <h2 className="text-xl font-bold text-white mb-2">{t("serverSettingsModal.rolesTitle")}</h2>
+                  <p className="text-sm text-[#949ba4] max-w-[800px] leading-relaxed">
+                    {t("serverSettingsModal.rolesDesc")}
                   </p>
                 </div>
-              )}
-            </div>
+
+                {/* default permissions card */}
+                <div className="rounded-md bg-[#2b2d31] p-4 flex items-center justify-between cursor-pointer hover:bg-[#35373c] transition-colors border border-[#1f2023]/25 shadow-sm group">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-[#80848e]/20 flex items-center justify-center text-[#b5bac1] shrink-0">
+                      <Users className="h-5 w-5" />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="font-semibold text-white text-sm">
+                        {t("serverSettingsModal.defaultPermissions")}
+                      </span>
+                      <span className="text-xs text-[#949ba4] mt-0.5">
+                        {t("serverSettingsModal.everyoneSubtitle")}
+                      </span>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-5 w-5 text-[#949ba4] group-hover:text-white transition-colors" />
+                </div>
+
+                {/* Actions Row */}
+                <div className="flex items-center justify-between gap-4 mt-6">
+                  {/* Search box */}
+                  <div className="relative flex items-center w-full max-w-[340px]">
+                    <input
+                      type="text"
+                      placeholder={t("serverSettingsModal.searchRolesPlaceholder")}
+                      className="w-full rounded bg-[#1e1f22] pl-3 pr-8 py-1.5 text-xs text-white placeholder-[#80848e] outline-none"
+                    />
+                    <Search className="absolute right-2.5 h-3.5 w-3.5 text-[#80848e] shrink-0 pointer-events-none" />
+                  </div>
+
+                  {/* Create Role Button */}
+                  <button className="rounded bg-[#5865f2] hover:bg-[#4752c4] text-white px-4 py-1.5 text-xs font-semibold shadow transition-colors cursor-pointer shrink-0">
+                    {t("serverSettingsModal.createRole")}
+                  </button>
+                </div>
+
+                {/* Roles table/list */}
+                <div className="rounded-md bg-[#2b2d31]/40 border border-[#1f2023]/20 overflow-hidden">
+                  <div className="flex items-center justify-between bg-[#2b2d31]/60 px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-[#b5bac1] border-b border-[#2b2d31]">
+                    <div>{t("serverSettingsModal.rolesCount", { count: 2 })}</div>
+                    <div className="mr-32">{t("serverSettingsModal.membersColumn")}</div>
+                  </div>
+
+                  <div className="divide-y divide-[#2b2d31]/40">
+                    {/* Row 1: Admin */}
+                    <div className="flex items-center justify-between px-4 py-3.5 hover:bg-[#2b2d31]/25 transition-colors group">
+                      <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 rounded-full bg-[#5865f2]/15 flex items-center justify-center text-[#5865f2] shrink-0 border border-[#5865f2]/20">
+                          <Shield className="h-4.5 w-4.5" />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-white text-sm">
+                            {t("serverSettingsModal.adminRoleName")}
+                          </span>
+                          <span className="text-[11px] text-[#949ba4] mt-0.5">
+                            {t("serverSettingsModal.adminRoleDesc")}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-6">
+                        <span className="flex items-center gap-1.5 text-xs text-[#b5bac1] w-20">
+                          <Users className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                          {adminCount}
+                        </span>
+                        <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button className="h-7 w-7 rounded flex items-center justify-center text-[#b5bac1] hover:text-white hover:bg-[#35373c]/60 cursor-pointer">
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button className="h-7 w-7 rounded flex items-center justify-center text-[#b5bac1] hover:text-white hover:bg-[#35373c]/60 cursor-pointer">
+                            <MoreHorizontal className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Row 2: Member */}
+                    <div className="flex items-center justify-between px-4 py-3.5 hover:bg-[#2b2d31]/25 transition-colors group">
+                      <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 rounded-full bg-[#80848e]/20 flex items-center justify-center text-[#b5bac1] shrink-0 border border-[#80848e]/20">
+                          <Users className="h-4.5 w-4.5" />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-white text-sm">
+                            {t("serverSettingsModal.memberRoleName")}
+                          </span>
+                          <span className="text-[11px] text-[#949ba4] mt-0.5">
+                            {t("serverSettingsModal.memberRoleDesc")}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-6">
+                        <span className="flex items-center gap-1.5 text-xs text-[#b5bac1] w-20">
+                          <Users className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                          {normalMemberCount}
+                        </span>
+                        <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button className="h-7 w-7 rounded flex items-center justify-center text-[#b5bac1] hover:text-white hover:bg-[#35373c]/60 cursor-pointer">
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button className="h-7 w-7 rounded flex items-center justify-center text-[#b5bac1] hover:text-white hover:bg-[#35373c]/60 cursor-pointer">
+                            <MoreHorizontal className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : activeTab === "invites" ? (
+              /* Invites active list layout (Image 3 details) */
+              <div className="space-y-6 animate-in fade-in duration-300">
+                {/* Header */}
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-white mb-2">{t("serverSettingsModal.invitesTitle")}</h2>
+                    <p className="text-sm text-[#949ba4] max-w-[800px] leading-relaxed">
+                      {t("serverSettingsModal.invitesDesc")}
+                    </p>
+                  </div>
+
+                  {/* Create Invites button */}
+                  <button
+                    onClick={() => setShowInviteCreator(true)}
+                    className="rounded bg-[#5865f2] hover:bg-[#4752c4] text-white px-4 py-1.5 text-xs font-semibold shadow transition-colors cursor-pointer shrink-0"
+                  >
+                    {t("serverSettingsModal.createInviteLink")}
+                  </button>
+                </div>
+
+                <div className="border-t border-[#35373c]/60 my-2" />
+
+                {/* Active invitation section */}
+                <div className="space-y-3">
+                  <span className="text-xs font-bold text-[#b5bac1] uppercase tracking-wider block">
+                    {t("serverSettingsModal.activeInviteHeader")}
+                  </span>
+
+                  {activeInvites.length > 0 ? (
+                    <div className="overflow-x-auto rounded-md bg-[#2b2d31]/40 border border-[#1f2023]/20">
+                      <table className="w-full border-collapse text-left text-xs text-[#dbdee1]">
+                        <thead>
+                          <tr className="bg-[#2b2d31]/60 text-[#b5bac1] font-bold uppercase tracking-wider border-b border-[#2b2d31]">
+                            <th className="px-4 py-2.5">{t("serverSettingsModal.tableHeaderInviter")}</th>
+                            <th className="px-4 py-2.5">{t("serverSettingsModal.tableHeaderInviteCode")}</th>
+                            <th className="px-4 py-2.5">{t("serverSettingsModal.tableHeaderUses")}</th>
+                            <th className="px-4 py-2.5">{t("serverSettingsModal.tableHeaderDuration")}</th>
+                            <th className="px-4 py-2.5">{t("serverSettingsModal.tableHeaderRoles")}</th>
+                            <th className="px-4 py-2.5 w-10"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#2b2d31]/40">
+                          {activeInvites.map((invite) => (
+                            <tr key={invite.id} className="hover:bg-[#2b2d31]/25 transition-colors">
+                              <td className="px-4 py-3.5 whitespace-nowrap">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="h-7 w-7 rounded-full bg-[#5865f2]/20 flex items-center justify-center shrink-0">
+                                    <span className="text-[10px] font-bold text-[#5865f2] uppercase">
+                                      {invite.inviterName.substring(0, 2)}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className="font-semibold text-white truncate text-xs">
+                                      {invite.inviterName}
+                                    </span>
+                                    <span className="text-[10px] text-[#949ba4]">
+                                      #{invite.channelName}
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3.5 text-white font-mono whitespace-nowrap">
+                                {invite.code}
+                              </td>
+                              <td className="px-4 py-3.5 text-[#b5bac1] whitespace-nowrap">
+                                {invite.uses}
+                              </td>
+                              <td className="px-4 py-3.5 text-[#b5bac1] font-mono whitespace-nowrap">
+                                {invite.duration}
+                              </td>
+                              <td className="px-4 py-3.5 text-[#949ba4] whitespace-nowrap">
+                                {invite.role || "—"}
+                              </td>
+                              <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                                <button
+                                  onClick={() => setActiveInvites(prev => prev.filter(i => i.id !== invite.id))}
+                                  className="h-6 w-6 rounded flex items-center justify-center text-[#b5bac1] hover:text-white hover:bg-[#f23f43]/20 hover:text-[#f23f43] transition-colors cursor-pointer"
+                                  title={t("common.remove")}
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="rounded-md bg-[#2b2d31]/40 border border-[#1f2023]/20 py-8 text-center text-xs text-[#949ba4]">
+                      {t("serverSettingsModal.noInvitesFound")}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
+
+      {/* Invite Friends Creator Modal Overlay (matching picture 4) */}
+      {showInviteCreator && (
+        <div className="fixed inset-0 z-[9995] bg-black/60 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-[#313338] text-[#dbdee1] w-full max-w-[440px] rounded-lg shadow-2xl overflow-hidden border border-[#232428]/45 relative animate-in zoom-in-95 duration-200">
+            {/* Close Cross icon */}
+            <button
+              onClick={() => setShowInviteCreator(false)}
+              className="absolute top-4 right-4 text-[#b5bac1] hover:text-white transition-colors cursor-pointer"
+              aria-label="Close"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            {/* Inner Content Card container */}
+            <div className="p-6 pb-4">
+              <h3 className="text-base font-bold text-white pr-6 leading-tight">
+                {t("serverSettingsModal.friendsInviteTitle", { serverName: currentRoom?.name || "" })}
+              </h3>
+              <p className="text-xs text-[#949ba4] mt-1 leading-snug">
+                {t("serverSettingsModal.friendsInviteSubtitle", { channelName: "chung" })}
+              </p>
+
+              {/* Search input field */}
+              <div className="relative flex items-center mt-4 mb-3">
+                <input
+                  type="text"
+                  value={searchFriendQuery}
+                  onChange={(e) => setSearchFriendQuery(e.target.value)}
+                  placeholder={t("serverSettingsModal.searchFriends")}
+                  className="w-full rounded bg-[#1e1f22] pl-3 pr-8 py-2 text-xs text-white placeholder-[#80848e] outline-none"
+                />
+                <Search className="absolute right-2.5 h-3.5 w-3.5 text-[#80848e] shrink-0 pointer-events-none" />
+              </div>
+
+              {/* Friends list container */}
+              <ScrollArea className="h-[200px] pr-2 -mr-2">
+                <div className="space-y-1 pt-1">
+                  {filteredMockFriends.length > 0 ? (
+                    filteredMockFriends.map((friend) => {
+                      const isInvited = invitedFriends.includes(friend.id);
+                      return (
+                        <div key={friend.id} className="flex items-center justify-between py-1.5 px-2 hover:bg-[#35373c]/40 rounded transition-colors group">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="h-8 w-8 rounded-full bg-[#5865f2]/10 flex items-center justify-center shrink-0">
+                              <span className="text-[10px] font-bold text-[#5865f2] uppercase">
+                                {friend.username.substring(0, 2)}
+                              </span>
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                              <span className="font-semibold text-white text-xs truncate">
+                                {friend.username}
+                              </span>
+                              <span className="text-[10px] text-[#949ba4] truncate">
+                                {friend.tag}
+                              </span>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => {
+                              if (!isInvited) {
+                                setInvitedFriends(prev => [...prev, friend.id]);
+                              }
+                            }}
+                            disabled={isInvited}
+                            className={cn(
+                              "px-3 py-1.5 rounded text-xs font-semibold select-none border transition-colors cursor-pointer shrink-0 font-sans",
+                              isInvited
+                                ? "border-[#23a55a] text-[#23a55a] bg-transparent cursor-default"
+                                : "border-[#5865f2] bg-[#5865f2] text-white hover:bg-[#4752c4] hover:border-[#4752c4]"
+                            )}
+                          >
+                            {isInvited ? t("serverSettingsModal.invitedButton") : t("serverSettingsModal.inviteButton")}
+                          </button>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="text-center py-8 text-xs text-[#949ba4]">
+                      {t("invite.noFriendsFound")}
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+            </div>
+
+            {/* Bottom Section Link clipboard block */}
+            <div className="bg-[#2b2d31] p-6 border-t border-[#1f2023]/25 font-sans">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-[#949ba4] block mb-2 leading-none">
+                {t("serverSettingsModal.orSendLink")}
+              </span>
+              <div className="flex items-center gap-2 bg-[#1e1f22] p-1.5 rounded border border-[#1f2023]/30">
+                <input
+                  type="text"
+                  readOnly
+                  value="https://discord.gg/chJgUK3Y"
+                  className="flex-1 bg-transparent border-0 outline-none text-xs text-[#dbdee1] pl-2 select-all font-mono"
+                />
+                <button
+                  onClick={handleCopyLink}
+                  className={cn(
+                    "px-4 py-2 rounded text-xs font-semibold text-white transition-all shadow select-none cursor-pointer shrink-0 min-w-[96px]",
+                    copiedStatus
+                      ? "bg-[#23a55a] hover:bg-[#23a55a]"
+                      : "bg-[#5865f2] hover:bg-[#4752c4]"
+                  )}
+                >
+                  {copiedStatus ? t("serverSettingsModal.copiedButton") : t("serverSettingsModal.copyButton")}
+                </button>
+              </div>
+
+              <span className="text-[10px] text-[#949ba4] block mt-3 leading-snug">
+                {t("serverSettingsModal.inviteExpiryDesc", { days: 7 })}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>,
     document.body
   );

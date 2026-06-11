@@ -2,7 +2,7 @@
 
 import { StatusAvatar } from "@/components/ui/StatusAvatar";
 import { MessageActions } from "@/components/chat/MessageActions";
-import { Reply, FileIcon, Pin, CornerUpRight } from "lucide-react";
+import { Reply, FileIcon, Pin, CornerUpRight, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chatStore";
 import { ForwardModal } from "@/components/chat/ForwardModal";
@@ -14,6 +14,7 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { useTranslation, getDateLocale } from "@/lib/i18n";
 import { useState, useRef, useEffect } from "react";
 import { api } from "@/lib/api";
+import { getStompClient } from "@/lib/websocket";
 
 // Outside component to survive re-renders (cache)
 const resolvedUrlsMap = new Map<string, { url: string; expiresAt: number }>();
@@ -46,7 +47,7 @@ function formatFullDate(dateStr: string) {
   });
 }
 
-const EMPTY_MEMBERS: any[] = [];
+const EMPTY_MEMBERS: never[] = [];
 
 export function MessageItem({
   message,
@@ -163,9 +164,10 @@ export function MessageItem({
       } else {
         await pinMessage(channelId || message.channelId, apiId);
       }
-    } catch (e: any) {
+    } catch (e) {
       console.error("Failed to toggle pin message:", e);
-      alert(e.response?.data?.message || e.message || "Failed to toggle pin");
+      const err = e as { response?: { data?: { message?: string } }; message?: string };
+      alert(err.response?.data?.message || err.message || "Failed to toggle pin");
     }
   };
 
@@ -215,6 +217,48 @@ export function MessageItem({
     }
   }
 
+  const token = useAuthStore((s) => s.token);
+
+  const handleRetry = () => {
+    if (!channelId || !token) return;
+    const client = getStompClient(token);
+    if (!client.connected) {
+      console.warn("[chat] Cannot retry, STOMP client is not connected.");
+      return;
+    }
+
+    const retriedMsg = useChatStore.getState().retryMessage(channelId, message.id);
+    if (!retriedMsg) return;
+
+    const payload = {
+      id: retriedMsg.id,
+      messageId: retriedMsg.messageId || retriedMsg.id,
+      roomId: retriedMsg.roomId,
+      channelId: retriedMsg.channelId,
+      senderId: retriedMsg.senderId,
+      senderName: retriedMsg.senderName,
+      senderAvatar: retriedMsg.senderAvatar,
+      type: retriedMsg.type,
+      content: retriedMsg.content,
+      fileKey: retriedMsg.fileKey,
+      fileName: retriedMsg.fileName,
+      fileSize: retriedMsg.fileSize,
+      replyTo: retriedMsg.replyTo,
+      mentions: retriedMsg.mentions,
+    };
+
+    client.publish({
+      destination: "/app/chat.send",
+      body: JSON.stringify(payload),
+    });
+  };
+
+  const handleRemoveFailed = () => {
+    if (channelId) {
+      useChatStore.getState().removeFailedMessage(channelId, message.id);
+    }
+  };
+
   useEffect(() => {
     if (isEditing && editInputRef.current) {
       editInputRef.current.focus();
@@ -231,7 +275,7 @@ export function MessageItem({
     return (
       <div className={cn("group flex gap-4 px-4 py-1 transition-colors hover:bg-background-secondary/30", !isGrouped && "mt-3 pt-1")}>
         <div className="w-10 shrink-0">
-          {!isGrouped && <StatusAvatar src={avatarSrc} fallback={message.senderName} status={status as any} size="lg" />}
+          {!isGrouped && <StatusAvatar src={avatarSrc} fallback={message.senderName} status={status as "ONLINE" | "OFFLINE" | "IDLE" | "DND"} size="lg" />}
         </div>
         <div className="flex-1 min-w-0">
           {!isGrouped && (
@@ -290,7 +334,8 @@ export function MessageItem({
           : "pl-4 hover:bg-background-secondary/30",
         !isGrouped && "mt-3 pt-1",
         isBeingReplied && (isSelfMention ? "bg-[#f5c211]/12 hover:bg-[#f5c211]/15" : "bg-accent/8 hover:bg-accent/12"),
-        message.id.startsWith("optimistic-") && "opacity-50"
+        (message.status === "SENDING" || (message.id.startsWith("optimistic-") && !message.status)) && "opacity-50",
+        message.status === "FAILED" && "opacity-70 border-l-2 border-red-500 pl-[14px]"
       )}
     >
       <div className="w-10 shrink-0">
@@ -298,7 +343,7 @@ export function MessageItem({
           <StatusAvatar
             src={avatarSrc}
             fallback={resolvedSenderName}
-            status={status as any}
+            status={status as "ONLINE" | "OFFLINE" | "IDLE" | "DND"}
             size="lg"
           />
         ) : (
@@ -472,9 +517,29 @@ export function MessageItem({
             })}
           </div>
         )}
+
+        {message.status === "FAILED" && (
+          <div className="flex items-center gap-2 mt-1.5 select-none">
+            <AlertCircle className="h-4 w-4 text-red-500 shrink-0 animate-pulse" />
+            <span className="text-[12px] text-red-400 font-medium">{t("chat.sendFailed")}</span>
+            <button
+              onClick={handleRetry}
+              className="text-[12px] text-accent font-semibold hover:underline bg-transparent border-none p-0 cursor-pointer"
+            >
+              {t("chat.retry")}
+            </button>
+            <span className="text-[12px] text-[#4e5058] select-none">•</span>
+            <button
+              onClick={handleRemoveFailed}
+              className="text-[12px] text-muted-foreground hover:text-foreground hover:underline bg-transparent border-none p-0 cursor-pointer"
+            >
+              {t("chat.dismiss")}
+            </button>
+          </div>
+        )}
       </div>
 
-      {!isEditing && (
+      {!isEditing && !message.status && (
         <MessageActions
           onReaction={handleReaction}
           onReply={handleReply}

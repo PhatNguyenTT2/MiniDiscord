@@ -72,9 +72,22 @@ export function useWebSocket() {
         subscriptionsRef.current.set(roomKey, sub);
       });
 
-      // REMOVED: usePrefetch handles initial data loading.
-      // Real-time PRESENCE_UPDATE events update statuses via
-      // updateFriendStatus() and updateMemberStatus() — no polling needed.
+      // ── Sync messages for the active channel after reconnection ──
+      const activeChannelId = useUIStore.getState().activeChannelId;
+      if (activeChannelId) {
+        const roomsState = useRoomStore.getState();
+        let activeRoomId = "";
+        for (const [rId, cList] of Object.entries(roomsState.channels)) {
+          if (cList.some((c) => c.id === activeChannelId)) {
+            activeRoomId = rId;
+            break;
+          }
+        }
+        if (activeRoomId) {
+          console.log(`[STOMP] Reconnected — syncing messages for channel ${activeChannelId} in room ${activeRoomId}`);
+          useChatStore.getState().syncMessagesOnReconnect(activeRoomId, activeChannelId);
+        }
+      }
     };
 
     client.onStompError = (frame) => {
@@ -91,6 +104,9 @@ export function useWebSocket() {
       console.log("[STOMP] WebSocket closed — clearing stale subscriptions");
       // Clear all subscription refs so onConnect re-subscribes cleanly
       subscriptionsRef.current.clear();
+
+      // Instantly fail all in-flight sending messages
+      useChatStore.getState().markAllSendingAsFailed();
 
       const prevStatus = useNetworkStore.getState().wsStatus;
 
@@ -176,6 +192,7 @@ function handleRoomMessage(msg: IMessage) {
     useChatStore.getState().receiveMessage(data.channelId, {
       id: data.id || data.messageId,
       messageId: data.messageId,
+      nonce: data.nonce,
       roomId: data.roomId,
       channelId: data.channelId,
       senderId: data.senderId,

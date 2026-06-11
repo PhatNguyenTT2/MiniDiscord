@@ -2,15 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import {
-  X,
-  ChevronRight,
-  Sparkles,
-  Gamepad2,
-  Users,
-  GraduationCap,
-  School,
-} from "lucide-react";
+import { X } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useRoomStore } from "@/stores/roomStore";
@@ -22,27 +14,18 @@ interface CreateServerModalProps {
   onClose: () => void;
 }
 
-const TEMPLATE_OPTIONS = [
-  { key: "gaming" as const, icon: Gamepad2, emoji: "🎮" },
-  { key: "friends" as const, icon: Users, emoji: "🤝" },
-  { key: "study" as const, icon: GraduationCap, emoji: "📚" },
-  { key: "school" as const, icon: School, emoji: "🏫" },
-];
-
 export function CreateServerModal({ isOpen, onClose }: CreateServerModalProps) {
   const { t } = useTranslation();
   const modalRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const { createRoom } = useRoomStore();
 
-  const [step, setStep] = useState<"templates" | "form">("templates");
   const [serverName, setServerName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Reset state when modal opens/closes
   useEffect(() => {
     if (isOpen) {
-      setStep("templates");
       setServerName("");
       setIsSubmitting(false);
     }
@@ -76,7 +59,7 @@ export function CreateServerModal({ isOpen, onClose }: CreateServerModalProps) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center"
+      className="fixed inset-0 z-[9999] flex items-center justify-center font-sans"
       role="dialog"
       aria-modal="true"
     >
@@ -101,7 +84,7 @@ export function CreateServerModal({ isOpen, onClose }: CreateServerModalProps) {
             <X className="h-5 w-5" />
           </button>
 
-          <h2 className="text-xl font-bold text-foreground">
+          <h2 className="text-xl font-bold text-white">
             {t("createServer.title")}
           </h2>
           <p className="mt-2 text-[13px] text-[#b5bac1] leading-relaxed">
@@ -109,119 +92,58 @@ export function CreateServerModal({ isOpen, onClose }: CreateServerModalProps) {
           </p>
         </div>
 
-        {/* ─── Body ─── */}
-        {step === "templates" ? (
-          <>
-            <div className="flex-1 overflow-y-auto px-4 pb-2">
-              <button
-                onClick={() => setStep("form")}
-                className={cn(
-                  "flex w-full items-center justify-between rounded-md border border-[#3f4147] p-3.5 transition-colors cursor-pointer",
-                  "hover:bg-[#3a3c41]"
-                )}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-xl">🌈</span>
-                  <span className="text-[15px] font-semibold text-foreground">
-                    {t("createServer.createOwn")}
-                  </span>
-                </div>
-                <ChevronRight className="h-5 w-5 text-[#b5bac1]" />
-              </button>
+        {/* ─── Body Form ─── */}
+        <div className="px-6 pb-6 pt-2">
+          <label className="text-xs font-bold uppercase tracking-wide text-[#b5bac1] block">
+            {t("createServer.serverNameLabel")}
+          </label>
+          <input
+            type="text"
+            autoFocus
+            value={serverName}
+            onChange={(e) => setServerName(e.target.value)}
+            className="mt-2 w-full rounded-[4px] bg-[#1e1f22] p-2.5 text-white outline-none border border-transparent focus:border-[#5865f2] transition-colors text-sm"
+            placeholder="My Awesome Server"
+            disabled={isSubmitting}
+          />
+        </div>
 
-              <p className="mt-4 mb-2 text-xs font-bold text-[#b5bac1] uppercase tracking-wide">
-                {t("createServer.templateLabel")}
-              </p>
-
-              <div className="flex flex-col gap-2">
-                {TEMPLATE_OPTIONS.map(({ key, emoji }) => (
-                  <button
-                    key={key}
-                    onClick={() => setStep("form")}
-                    className={cn(
-                      "flex w-full items-center justify-between rounded-md border border-[#3f4147] p-3.5 transition-colors cursor-pointer",
-                      "hover:bg-[#3a3c41]"
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="text-xl">{emoji}</span>
-                      <span className="text-[15px] font-semibold text-foreground">
-                        {t(`createServer.template.${key}`)}
-                      </span>
-                    </div>
-                    <ChevronRight className="h-5 w-5 text-[#b5bac1]" />
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-[#2b2d31] px-4 py-4">
-              <h3 className="text-center text-base font-semibold text-foreground mb-2">
-                {t("createServer.joinTitle")}
-              </h3>
-              <button
-                className={cn(
-                  "w-full rounded-md bg-[#4e5058] px-4 py-2.5 text-sm font-medium text-[#dbdee1] transition-colors cursor-pointer",
-                  "hover:bg-[#6d6f78]"
-                )}
-              >
-                {t("createServer.joinButton")}
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="px-4 pb-4">
-              <label className="text-xs font-bold uppercase tracking-wide text-[#b5bac1]">
-                Server Name
-              </label>
-              <input
-                type="text"
-                autoFocus
-                value={serverName}
-                onChange={(e) => setServerName(e.target.value)}
-                className="mt-2 w-full rounded-md bg-[#1e1f22] p-2.5 text-foreground outline-none border border-transparent focus:border-brand transition-colors"
-                placeholder="My Awesome Server"
-                disabled={isSubmitting}
-              />
-            </div>
-            <div className="flex items-center justify-between bg-[#2b2d31] px-4 py-4">
-              <button
-                onClick={() => setStep("templates")}
-                disabled={isSubmitting}
-                className="text-sm font-medium text-muted-foreground hover:underline cursor-pointer"
-              >
-                Back
-              </button>
-              <button
-                onClick={async () => {
-                  if (!serverName.trim()) return;
-                  try {
-                    setIsSubmitting(true);
-                    const newRoom = await createRoom(serverName.trim());
-                    // Fetch channels for the new room, then navigate
-                    const { fetchChannels } = useRoomStore.getState();
-                    await fetchChannels(newRoom.id);
-                    const newChannels = useRoomStore.getState().channels[newRoom.id] || [];
-                    const defaultCh = newChannels.find(c => c.type === "TEXT") || newChannels[0];
-                    onClose();
-                    if (defaultCh) {
-                      router.push(`/channels/${newRoom.id}/${defaultCh.id}`);
-                    }
-                  } catch (err) {
-                    console.error(err);
-                  } finally {
-                    setIsSubmitting(false);
-                  }
-                }}
-                disabled={!serverName.trim() || isSubmitting}
-                className="rounded-md bg-brand px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-brand/80 disabled:opacity-50 cursor-pointer"
-              >
-                {isSubmitting ? "Creating..." : "Create"}
-              </button>
-            </div>
-          </>
-        )}
+        {/* ─── Footer Options ─── */}
+        <div className="flex items-center justify-between bg-[#2b2d31] px-6 py-4">
+          <button
+            onClick={onClose}
+            disabled={isSubmitting}
+            className="text-sm font-medium text-white hover:underline cursor-pointer transition-colors"
+          >
+            {t("createServer.back")}
+          </button>
+          <button
+            onClick={async () => {
+              if (!serverName.trim()) return;
+              try {
+                setIsSubmitting(true);
+                const newRoom = await createRoom(serverName.trim());
+                // Fetch channels for the new room, then navigate
+                const { fetchChannels } = useRoomStore.getState();
+                await fetchChannels(newRoom.id);
+                const newChannels = useRoomStore.getState().channels[newRoom.id] || [];
+                const defaultCh = newChannels.find(c => c.type === "TEXT") || newChannels[0];
+                onClose();
+                if (defaultCh) {
+                  router.push(`/channels/${newRoom.id}/${defaultCh.id}`);
+                }
+              } catch (err) {
+                console.error(err);
+              } finally {
+                setIsSubmitting(false);
+              }
+            }}
+            disabled={!serverName.trim() || isSubmitting}
+            className="rounded-[3px] bg-[#5865f2] hover:bg-[#4752c4] px-6 py-2.5 text-sm font-medium text-white transition-colors disabled:opacity-50 cursor-pointer shadow-md select-none font-sans"
+          >
+            {isSubmitting ? t("createServer.creating") : t("createServer.create")}
+          </button>
+        </div>
       </div>
     </div>,
     document.body
