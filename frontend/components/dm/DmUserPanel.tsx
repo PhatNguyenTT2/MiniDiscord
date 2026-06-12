@@ -272,7 +272,7 @@ export function DmUserPanel({ userId }: { userId: string }) {
         {/* ─── Banner (Color Header) ─── */}
         <div className="relative h-[120px] shrink-0">
           {/* Banner gradient background */}
-          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-700" />
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 via-indigo-600 to-indigo-800" />
 
           {/* Avatar: overlap banner → inner card boundary */}
           <div className="absolute -bottom-[40px] left-4 z-10">

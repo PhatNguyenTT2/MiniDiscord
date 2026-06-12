@@ -137,6 +137,18 @@ public class VoiceStateService {
     log.info("DM Call state cleared for room: {}", roomId);
   }
 
+  /**
+   * Transition call from RINGING to ACTIVE, refreshing startedAt to the moment
+   * the callee accepts (for accurate duration calculation on end).
+   */
+  public void setActiveCallState(String roomId) {
+    String key = "voice:call:" + roomId;
+    redisTemplate.opsForHash().put(key, "status", "ACTIVE");
+    redisTemplate.opsForHash().put(key, "startedAt", String.valueOf(System.currentTimeMillis()));
+    redisTemplate.expire(key, Duration.ofDays(1));
+    log.info("DM Call state transitioned to ACTIVE for room: {}", roomId);
+  }
+
   public Map<Object, Object> getCallState(String roomId) {
     return redisTemplate.opsForHash().entries("voice:call:" + roomId);
   }

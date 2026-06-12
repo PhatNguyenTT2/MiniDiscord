@@ -255,6 +255,13 @@ export function ChannelList() {
     }
   }, [displayRoomId, voiceChannels.length]);
 
+  // Load server's channels if absent or on active server change (Lazy Loading support)
+  useEffect(() => {
+    if (displayRoomId && !useRoomStore.getState().channels[displayRoomId]) {
+      useRoomStore.getState().fetchChannels(displayRoomId);
+    }
+  }, [displayRoomId]);
+
   function handleChannelClick(channelId: string) {
     const channel = roomChannels.find(c => c.id === channelId);
     if (channel?.type === "VOICE") {

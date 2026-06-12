@@ -25,31 +25,13 @@ function clearCache() {
 
 export { clearCache as clearRoomCache };
 
-async function backgroundFetchQueue(
-  rooms: Room[],
-  get: () => RoomState,
-) {
-  for (const room of rooms) {
-    // Yield to main thread — không block UI
-    await new Promise(r => setTimeout(r, 500));
-    try {
-      await get().fetchChannels(room.id);
-      await get().fetchMembers(room.id);
-    } catch {
-      console.warn("[roomStore] Background fetch skipped:", room.id);
-    }
-  }
-  // Re-save cache sau khi background hoàn tất
-  const state = get();
-  saveCache(state.rooms, state.channels, state.members);
-}
-
 interface RoomState {
   rooms: Room[];
   channels: Record<string, Channel[]>; // roomId -> channels
   members: Record<string, MemberDetailResponse[]>; // roomId -> members
   memberHasMore: Record<string, boolean>; // roomId -> hasMore
   lastActivityMap: Record<string, number>; // roomId -> timestamp (ms)
+  isFetchingMembers: Record<string, boolean>; // roomId -> isFetching
   isLoading: boolean;
   error: string | null;
 
@@ -75,6 +57,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   members: {},
   memberHasMore: {},
   lastActivityMap: {},
+  isFetchingMembers: {},
   isLoading: false,
   error: null,
 
@@ -97,11 +80,11 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       set({ rooms, isLoading: false });
 
       // === Active-First Lazy Loading ===
-      // 1. Detect active room from URL (nếu có)
+      // 1. Detect active room from URL (using negative lookahead to skip "me")
       const activeRoomId = typeof window !== 'undefined'
-        ? window.location.pathname.match(/\/channels\/([^/]+)/)?.[1]
+        ? window.location.pathname.match(/\/channels\/(?!me\b)([^/]+)/)?.[1]
         : null;
-      const activeRoom = activeRoomId && activeRoomId !== '@me' && activeRoomId !== 'me'
+      const activeRoom = activeRoomId
         ? rooms.find(r => r.id === activeRoomId)
         : null;
 
@@ -111,9 +94,13 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         await get().fetchMembers(activeRoom.id);
       }
 
-      // 3. Background queue for remaining rooms
-      const remaining = rooms.filter(r => r.id !== activeRoom?.id);
-      backgroundFetchQueue(remaining, get);
+      // 3. Eagerly fetch channels & members for all DM rooms (needed for sidebar and mapping)
+      const dmRooms = rooms.filter(r => r.type === "DM");
+      for (const dmRoom of dmRooms) {
+        if (dmRoom.id === activeRoom?.id) continue;
+        await get().fetchChannels(dmRoom.id);
+        await get().fetchMembers(dmRoom.id);
+      }
 
       saveCache(get().rooms, get().channels, get().members);
     } catch (error: any) {
@@ -133,6 +120,12 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   },
 
   fetchMembers: async (roomId: string, beforeJoinedAt?: string) => {
+    if (!beforeJoinedAt && get().isFetchingMembers[roomId]) {
+      console.log("[roomStore] Duplicated fetchMembers call ignored for", roomId);
+      return;
+    }
+    set(s => ({ isFetchingMembers: { ...s.isFetchingMembers, [roomId]: true } }));
+
     const MAX_RETRIES = 2;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
@@ -152,6 +145,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
             [roomId]: beforeJoinedAt ? [...(state.members[roomId] || []), ...page] : page,
           },
           memberHasMore: { ...state.memberHasMore, [roomId]: hasMore },
+          isFetchingMembers: { ...state.isFetchingMembers, [roomId]: false }
         }));
         return;
       } catch (error: any) {
@@ -161,7 +155,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
           continue;
         }
         console.error("[roomStore] fetchMembers failed for", roomId, error.message);
-        set({ error: error.message });
+        set(s => ({ error: error.message, isFetchingMembers: { ...s.isFetchingMembers, [roomId]: false } }));
         return;
       }
     }

@@ -156,7 +156,8 @@ public class VoiceWebSocketController {
 
     String callerId = (String) callState.get("callerId");
 
-    voiceStateService.clearCallState(roomId);
+    // Transition to ACTIVE (preserves startedAt for duration calc in endCall)
+    voiceStateService.setActiveCallState(roomId);
 
     messagingTemplate.convertAndSendToUser(
         callerId, "/queue/voice",
@@ -164,6 +165,19 @@ public class VoiceWebSocketController {
             "type", "CALL_ACCEPTED",
             "roomId", roomId,
             "acceptedBy", principal.getName()));
+
+    // Write system log: Call started
+    MessageEvent startLog = MessageEvent.builder()
+        .id(new ObjectId().toHexString())
+        .messageId(UUID.randomUUID().toString())
+        .roomId(roomId)
+        .senderId(callerId)
+        .content("voice.callStarted")
+        .type("SYSTEM")
+        .createdAt(Instant.now())
+        .build();
+    messageRouter.publishToHistory(startLog);
+
     log.info("DM call accepted for room {}, signaling sent to caller {}", roomId, callerId);
   }
 
@@ -177,6 +191,19 @@ public class VoiceWebSocketController {
     }
 
     String callerId = (String) callState.get("callerId");
+
+    // Write system log: Missed call
+    MessageEvent missedLog = MessageEvent.builder()
+        .id(new ObjectId().toHexString())
+        .messageId(UUID.randomUUID().toString())
+        .roomId(roomId)
+        .senderId(callerId)
+        .content("voice.callMissed")
+        .type("SYSTEM")
+        .createdAt(Instant.now())
+        .build();
+    messageRouter.publishToHistory(missedLog);
+
     voiceStateService.clearCallState(roomId);
 
     messagingTemplate.convertAndSendToUser(
@@ -216,20 +243,16 @@ public class VoiceWebSocketController {
         roomId);
 
     // Render system log for historical logs
-    if (duration > 0) {
-      String durationText = formatDuration(duration);
-      MessageEvent logEvent = MessageEvent.builder()
-          .id(new ObjectId().toHexString())
-          .messageId(UUID.randomUUID().toString())
-          .roomId(roomId)
-          .senderId(principal.getName())
-          .content("Cuộc gọi kết thúc sau " + durationText)
-          .type("SYSTEM")
-          .createdAt(Instant.now())
-          .build();
-
-      messageRouter.publishToHistory(logEvent);
-    }
+    MessageEvent logEvent = MessageEvent.builder()
+        .id(new ObjectId().toHexString())
+        .messageId(UUID.randomUUID().toString())
+        .roomId(roomId)
+        .senderId(principal.getName())
+        .content("voice.callEndedDuration:" + duration)
+        .type("SYSTEM")
+        .createdAt(Instant.now())
+        .build();
+    messageRouter.publishToHistory(logEvent);
     log.info("DM call ended in room {} after duration: {}s", roomId, duration);
   }
 

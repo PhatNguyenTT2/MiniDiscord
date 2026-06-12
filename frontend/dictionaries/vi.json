@@ -409,7 +409,12 @@
     "decline": "Từ chối",
     "callEnded": "Cuộc gọi kết thúc",
     "startCall": "Bắt đầu cuộc gọi",
-    "inviteToChannel": "Mời vào Kênh Thoại"
+    "inviteToChannel": "Mời vào Kênh Thoại",
+    "callStarted": "Bắt đầu cuộc gọi thoại",
+    "callMissed": "Cuộc gọi nhỡ",
+    "callEndedDuration": "Cuộc gọi kết thúc sau {duration}",
+    "durationSeconds": "{count} giây",
+    "durationMinutesSeconds": "{minutes} phút {seconds} giây"
   },
   "imageViewer": {
     "zoomIn": "Phóng to",

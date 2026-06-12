@@ -409,7 +409,12 @@
     "decline": "Decline",
     "callEnded": "Call ended",
     "startCall": "Start Call",
-    "inviteToChannel": "Invite to Voice"
+    "inviteToChannel": "Invite to Voice",
+    "callStarted": "Voice call started",
+    "callMissed": "Missed call",
+    "callEndedDuration": "Call ended after {duration}",
+    "durationSeconds": "{count} seconds",
+    "durationMinutesSeconds": "{minutes} minutes {seconds} seconds"
   },
   "imageViewer": {
     "zoomIn": "Zoom In",

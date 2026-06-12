@@ -31,7 +31,7 @@ spring:
         - id: messaging-service
           uri: lb://messaging-service
           predicates:
-            - Path=/ws/**
+            - Path=/ws/**, /api/voice/**
 
         - id: file-service
           uri: lb://file-service

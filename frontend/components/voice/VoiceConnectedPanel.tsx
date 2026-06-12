@@ -13,11 +13,11 @@ export function VoiceConnectedPanel() {
   const currentChannel = useVoiceStore((s) => s.currentChannel);
   const activeCallRoomId = useVoiceStore((s) => s.activeCallRoomId);
 
-  // If not in voice channel and not in active call, don't show the panel
-  if (!currentChannel && !activeCallRoomId) return null;
-
   const rooms = useRoomStore((s) => s.rooms);
   const channels = useRoomStore((s) => s.channels);
+
+  // If not in voice channel and not in active call, don't show the panel
+  if (!currentChannel && !activeCallRoomId) return null;
 
   let title = t("voice.incomingCall");
   let subTitle = "MiniDiscord";

@@ -291,6 +291,18 @@ export function MessageItem({
                 {t("chat.viewPinnedMessages")}
               </button>
             </>
+          ) : message.content === "voice.callStarted" ? (
+            <span>{t("voice.callStarted")}</span>
+          ) : message.content === "voice.callMissed" ? (
+            <span>{t("voice.callMissed")}</span>
+          ) : message.content.startsWith("voice.callEndedDuration:") ? (
+            (() => {
+              const secs = parseInt(message.content.split(":")[1] || "0", 10);
+              const durationText = secs < 60
+                ? t("voice.durationSeconds", { count: secs })
+                : t("voice.durationMinutesSeconds", { minutes: Math.floor(secs / 60), seconds: secs % 60 });
+              return <span>{t("voice.callEndedDuration", { duration: durationText })}</span>;
+            })()
           ) : (
             <span>{message.content}</span>
           )}
@@ -377,6 +389,7 @@ export function MessageItem({
               ref={editInputRef}
               value={editContent}
               onChange={(e) => setEditContent(e.target.value)}
+              aria-label="Edit message"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();

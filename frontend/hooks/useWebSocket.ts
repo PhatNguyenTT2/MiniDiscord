@@ -170,6 +170,20 @@ function handleRoomMessage(msg: IMessage) {
       return;
     }
 
+    if (eventType === "VOICE_CALL") {
+      const callData = data.data || data;
+      console.log("[STOMP] VOICE_CALL via room:", callData);
+      useVoiceStore.getState().handleCallEvent({
+        action: callData.action,
+        roomId: callData.roomId,
+        callerId: callData.callerId || "",
+        callerName: callData.callerName || "",
+        callerAvatar: callData.callerAvatar || null,
+        targetUserId: callData.targetUserId || "",
+      });
+      return;
+    }
+
     if (eventType === "MESSAGE_DELETED") {
       useChatStore.getState().removeMessage(data.channelId, data.messageId);
       return;
@@ -324,6 +338,16 @@ function handleVoiceMessage(msg: IMessage) {
           type: "SIGNAL_ICE",
           fromUserId: data.senderId || data.fromUserId,
           payload: data.payload,
+        });
+        break;
+      case "VOICE_CALL":
+        useVoiceStore.getState().handleCallEvent({
+          action: data.action || data.data?.action,
+          roomId: data.roomId || data.data?.roomId,
+          callerId: data.callerId || data.data?.callerId,
+          callerName: data.callerName || data.data?.callerName,
+          callerAvatar: data.callerAvatar || data.data?.callerAvatar || null,
+          targetUserId: data.targetUserId || data.data?.targetUserId,
         });
         break;
       case "CALL_INCOMING":

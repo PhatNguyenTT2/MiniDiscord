@@ -4,6 +4,8 @@ export class WebRTCManager {
   private peers = new Map<string, RTCPeerConnection>();
   private localStream: MediaStream | null = null;
   private iceServers: RTCIceServer[] = [];
+  private iceServersFetchedAt = 0;
+  private static readonly ICE_CACHE_TTL = 15 * 60 * 1000; // 15 minutes
 
   // Callbacks wired by voiceStore
   onRemoteStream: ((userId: string, stream: MediaStream) => void) | null = null;
@@ -14,10 +16,15 @@ export class WebRTCManager {
    * Fetch one-time STUN/TURN configurations from Backend key-mask endpoints.
    */
   async fetchIceServers(): Promise<void> {
+    if (this.iceServers.length > 0 && Date.now() - this.iceServersFetchedAt < WebRTCManager.ICE_CACHE_TTL) {
+      console.log("[WebRTC] Using cached ICE servers:", this.iceServers);
+      return;
+    }
     try {
       const response = await api.get("/voice/ice-servers");
       // Backend returns either dynamic Metered array or fallback Google list
       this.iceServers = response.data;
+      this.iceServersFetchedAt = Date.now();
       console.log("[WebRTC] Successfully loaded ICE servers:", this.iceServers);
     } catch (error) {
       console.error("[WebRTC] Failed to fetch ICE servers, using local Google STUN fallback instead:", error);

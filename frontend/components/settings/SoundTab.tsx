@@ -74,6 +74,7 @@ export function SoundTab() {
               max="100"
               value={masterVolume}
               onChange={(e) => setMasterVolume(parseInt(e.target.value))}
+              aria-label="Master volume"
               className="w-full accent-accent h-2 bg-background-tertiary rounded-lg appearance-none cursor-pointer"
             />
             <Volume2 className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -365,6 +366,7 @@ function SoundRow({
           onChange={handleFileChange}
           accept=".mp3,.ogg,.wav"
           className="hidden"
+          aria-label="Upload custom sound"
           disabled={!globalEnabled || isUploading}
         />
 
