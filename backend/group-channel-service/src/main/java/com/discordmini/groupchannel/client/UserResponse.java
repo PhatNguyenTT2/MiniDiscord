@@ -11,4 +11,5 @@ public class UserResponse {
     private String email;
     private String avatarUrl;
     private String status;
+    private String displayName;
 }

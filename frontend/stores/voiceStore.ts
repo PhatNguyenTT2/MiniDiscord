@@ -12,6 +12,7 @@ export interface VoiceParticipant {
   avatarUrl: string | null;
   muted: boolean;
   deafened: boolean;
+  displayName?: string;
 }
 
 export interface VoiceCallEvent {
@@ -403,9 +404,20 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
 
       if (action === "JOIN") {
         if (!updatedList.some((p) => p.userId === userId)) {
+          const channelsMap = useRoomStore.getState().channels;
+          let foundRoomId = "";
+          for (const [rId, cList] of Object.entries(channelsMap)) {
+            if (cList.some((ch) => ch.id === channelId)) {
+              foundRoomId = rId;
+              break;
+            }
+          }
+          const roomMembers = foundRoomId ? (useRoomStore.getState().members[foundRoomId] || []) : [];
+          const details = roomMembers.find((m: any) => m.userId === userId);
           updatedList.push({
             userId,
             username: username || `User-${userId.substring(0, 4)}`,
+            displayName: details?.displayName || details?.username || username || `User-${userId.substring(0, 4)}`,
             avatarUrl: avatarUrl || null,
             muted: false,
             deafened: false,
@@ -567,6 +579,7 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
           return {
             userId: uid,
             username: details?.username || `User-${uid.substring(0, 4)}`,
+            displayName: details?.displayName || details?.username || `User-${uid.substring(0, 4)}`,
             avatarUrl: details?.avatarUrl || null,
             muted: false, // will update when state sync is done or lazy matching
             deafened: false,

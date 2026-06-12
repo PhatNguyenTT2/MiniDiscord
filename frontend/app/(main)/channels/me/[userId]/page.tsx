@@ -8,7 +8,6 @@ import { DmUserPanel } from "@/components/dm/DmUserPanel";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { MessageInput } from "@/components/chat/MessageInput";
 import { MessageList, type MessageListHandle } from "@/components/chat/MessageList";
-import { ScrollToBottomBanner } from "@/components/chat/ScrollToBottomBanner";
 import { StatusAvatar } from "@/components/ui/StatusAvatar";
 import { SearchDropdown, type ActiveFilter } from "@/components/chat/SearchDropdown";
 import { parseSearchFilters } from "@/lib/searchParser";
@@ -383,7 +382,7 @@ export default function DmChatPage() {
         roomId: activeRoomId,
         channelId: activeChannelId,
         senderId: currentUser?.id || "",
-        senderName: currentUser?.username || "",
+        senderName: currentUser?.displayName || currentUser?.username || "",
         senderAvatar: currentUser?.avatarUrl || null,
         type: attachment ? "FILE" : "TEXT",
         content,
@@ -420,7 +419,7 @@ export default function DmChatPage() {
         channelId: activeChannelId,
         content,
         type: attachment ? "FILE" : "TEXT",
-        senderName: currentUser?.username,
+        senderName: currentUser?.displayName || currentUser?.username,
         senderAvatar: currentUser?.avatarUrl,
         fileKey: attachment?.fileKey,
         fileName: attachment?.fileName,
@@ -462,7 +461,8 @@ export default function DmChatPage() {
     const client = getStompClient(token);
     if (!client.connected) return;
 
-    const username = useAuthStore.getState().user?.username;
+    const currentUser = useAuthStore.getState().user;
+    const username = currentUser?.displayName || currentUser?.username;
     client.publish({
       destination: "/app/chat.typing",
       body: JSON.stringify({ roomId, channelId, username }),
@@ -727,10 +727,8 @@ export default function DmChatPage() {
 
             {/* Input wrapper — relative context for floating banner */}
             <div className="relative w-full">
-              <ScrollToBottomBanner
-                visible={showJumpBanner}
-                onJumpToPresent={() => messageListRef.current?.scrollToBottom()}
-              />
+              {/* Opaque bottom overlay to prevent chat messages from showing below the floating composer */}
+              <div className="absolute bottom-0 left-0 right-0 h-[88px] bg-[#313338] z-10 pointer-events-none" />
               {/* Bottom bar: MessageInput or Blocked bar */}
               {relationship === "blocked" ? (
                 <div
@@ -764,6 +762,8 @@ export default function DmChatPage() {
                   onSend={handleSend}
                   onTyping={handleTyping}
                   members={roomId ? (allMembers[roomId] || []) : []}
+                  showScrollDown={showJumpBanner}
+                  onScrollDown={() => messageListRef.current?.scrollToBottom()}
                 />
               )}
             </div>

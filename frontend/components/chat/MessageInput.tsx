@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { FileUp, ImageIcon, Video, AlertTriangle, Smile, Plus, X, Reply } from "lucide-react";
+import { FileUp, ImageIcon, Video, AlertTriangle, Smile, Plus, X, Reply, ArrowDown } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { EmojiPicker } from "@/components/ui/EmojiPicker";
 import { useFileStore } from "@/stores/fileStore";
@@ -23,6 +23,8 @@ interface MessageInputProps {
   onTyping?: () => void;
   typingUsers?: { userId: string; username: string }[];
   members?: MemberDetailResponse[];
+  showScrollDown?: boolean;
+  onScrollDown?: () => void;
 }
 
 const EMPTY_TYPING: { userId: string; username: string }[] = [];
@@ -38,7 +40,9 @@ export function MessageInput({
   onSend,
   onTyping,
   typingUsers = EMPTY_TYPING,
-  members = []
+  members = [],
+  showScrollDown,
+  onScrollDown
 }: MessageInputProps) {
   const { t } = useTranslation();
   const [message, setMessage] = useState("");
@@ -265,6 +269,19 @@ export function MessageInput({
           backgroundColor: "#383a40",
         }}
       >
+        {showScrollDown && (
+          <div className="absolute -top-11 left-1/2 -translate-x-1/2 z-30">
+            <button
+              onClick={onScrollDown}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-[#5865F2] hover:bg-[#4752c4] text-white shadow-[0_4px_12px_rgba(0,0,0,0.3)] transition-all hover:scale-105 active:scale-95 duration-150 cursor-pointer"
+              aria-label="Scroll to bottom"
+              title="Scroll to bottom"
+              type="button"
+            >
+              <ArrowDown className="h-5 w-5" />
+            </button>
+          </div>
+        )}
         {replyingTo && (
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#202225]/30 bg-[#2b2d31] rounded-t-[var(--floating-bar-radius)] animate-in slide-in-from-bottom-[6px] duration-150">
             <div className="flex min-w-0 items-center gap-2">

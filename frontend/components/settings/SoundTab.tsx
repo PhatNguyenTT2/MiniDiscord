@@ -39,10 +39,10 @@ export function SoundTab() {
     clearCustomSound
   } = useSoundStore();
 
-  const handlePreview = (name: SoundName) => {
+  const handlePreview = async (name: SoundName) => {
     if (!soundEnabled) return;
     if (soundEngine) {
-      soundEngine.play(name);
+      await soundEngine.play(name);
     }
   };
 
@@ -271,7 +271,7 @@ function SoundRow({
   onToggle: () => void,
   globalEnabled: boolean,
   previewSound: SoundName,
-  onPreview: (name: SoundName) => void,
+  onPreview: (name: SoundName) => Promise<void> | void,
   customFileKey?: string,
   onUpload: (fileKey: string) => void,
   onReset: () => void
@@ -279,6 +279,7 @@ function SoundRow({
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const uploadFile = useFileStore((s) => s.uploadFile);
 
   const handleUploadClick = () => {
@@ -305,6 +306,14 @@ function SoundRow({
       const res = await uploadFile(file, "sound");
       if (res.fileKey) {
         onUpload(res.fileKey);
+        if (soundEngine) {
+          soundEngine.invalidateBuffer(previewSound);
+          await soundEngine.preload([previewSound]);
+          if (previewSound === "voice_join") await soundEngine.preload(["user_join_voice"]);
+          if (previewSound === "voice_leave") await soundEngine.preload(["user_leave_voice"]);
+          if (previewSound === "mute") await soundEngine.preload(["deafen"]);
+          if (previewSound === "unmute") await soundEngine.preload(["undeafen"]);
+        }
       }
     } catch (error) {
       console.error("Failed to upload custom sound:", error);
@@ -321,12 +330,23 @@ function SoundRow({
       <div className="flex items-center gap-3">
         <span className={cn("text-[15px] font-medium transition-colors", !globalEnabled ? "text-muted-foreground line-through" : "text-foreground")}>{label}</span>
         <button
-          onClick={() => onPreview(previewSound)}
-          disabled={!globalEnabled || !enabled || isUploading}
-          className="p-1 text-muted-foreground hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          onClick={async () => {
+            setIsPreviewLoading(true);
+            try {
+              await onPreview(previewSound);
+            } finally {
+              setIsPreviewLoading(false);
+            }
+          }}
+          disabled={!globalEnabled || !enabled || isUploading || isPreviewLoading}
+          className="p-1 text-muted-foreground hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center min-w-[24px]"
           title={t("settings.previewSound")}
         >
-          <Volume2 className="h-4 w-4" />
+          {isPreviewLoading ? (
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-white" />
+          ) : (
+            <Volume2 className="h-4 w-4" />
+          )}
         </button>
 
         {/* Custom sound badge */}

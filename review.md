@@ -1,46 +1,17 @@
-Bản kế hoạch triển khai cơ chế Nonce và Idempotency Guard đã vạch ra một lộ trình cực kỳ chặt chẽ và chuyên nghiệp, giải quyết tận gốc rễ vấn đề bất đồng bộ giữa Client và Microservices. Việc sử dụng nonce (Client Reference ID) là kỹ thuật tiêu chuẩn mà các nền tảng lớn như Discord, Slack hay Stripe đang áp dụng để chống trùng lặp dữ liệu.
+Dưới đây là đánh giá chi tiết và một lưu ý quan trọng (Gotcha) về cơ chế Preload:
 
-Dưới đây là phần đánh giá chi tiết các điểm sáng và một điểm tinh chỉnh cực kỳ quan trọng (Critical Gotcha) ở tầng Backend để đảm bảo luồng Retry hoạt động hoàn hảo 100%:
+🌟 1. Điểm sáng của Bản thiết kế
+Chống mất dữ liệu oan (Non-destructive Fetch): Việc loại bỏ lệnh gọi clearCustomSound có tính phá hủy khi gặp lỗi mạng là hoàn toàn chuẩn xác. Hệ thống phải phân định rạch ròi giữa "Lỗi tải file tạm thời do rớt mạng" và "Chủ đích muốn xóa file của người dùng".
 
-🌟 1. Đánh giá Điểm sáng Kiến trúc
-Đồng bộ Toàn diện (End-to-End Tracing): Việc bổ sung trường nonce xuyên suốt từ giao diện Frontend qua WebSocket DTO (ChatMessage.java), lan truyền qua Kafka (MessageEvent.java), và cuối cùng lưu trữ tại MongoDB (Message.java) tạo ra một sợi dây liên kết không thể đứt gãy.
+Tối ưu Bundle Size: Thẳng tay xóa bỏ file soundsData.ts (chứa các placeholders im lặng) không chỉ làm sạch codebase mà còn giúp giảm dung lượng Frontend đáng kể. Quyết định cho phép loadSound trả về null thay vì fallback vô nghĩa là logic đúng đắn.
 
-Hiệu năng Cơ sở dữ liệu: Quyết định đánh @Indexed cho trường nonce trong MongoDB là một bước đi bắt buộc và chính xác. Khi người dùng spam nút Retry, hàm existsByNonce sẽ bị gọi liên tục; nếu không có Index, thao tác này sẽ gây ra Full Collection Scan làm nghẽn Database.
+Cải thiện Độ trễ (Zero-latency Playback): Đưa cơ chế eager preloading vào ngay sau khi khởi tạo ứng dụng hoặc upload thành công sẽ giải quyết dứt điểm độ trễ 500ms-2s. Việc bổ sung loading spinner cho nút "Test Sound" cũng lấp đầy khoảng hở UX rất tinh tế.
 
-Tối ưu Frontend State: Việc đổi logic của hàm receiveMessage trong chatStore.ts sang đối chiếu trực tiếp bằng nonce thay vì nội dung giúp độ phức tạp thuật toán giảm xuống và chính xác tuyệt đối, loại bỏ hoàn toàn hiện tượng "lỗi giả".
+🚨 2. CẠM BẪY CẦN LƯU Ý (AudioContext Autoplay Policy Gotcha)
+Trong kế hoạch của bạn có đề cập đến bước: "Add eager preloading... on app init". Tại đây, bạn cần dè chừng với chính sách chặn âm thanh (Autoplay Policy) của các trình duyệt hiện đại (đặc biệt là Safari và Chrome).
 
-🚨 2. CẠM BẪY CẦN TINH CHỈNH (Backend Idempotency Gotcha)
-Trong Component 3, phần xử lý Idempotency Guard tại MessageService.java có một chi tiết cần được thiết kế lại để Frontend có thể phục hồi trạng thái:
+Vấn đề: Trình duyệt mặc định đặt AudioContext ở trạng thái suspended (đình chỉ) cho đến khi người dùng có tương tác vật lý đầu tiên với trang web (như click chuột hoặc gõ phím). Nếu hàm preload của bạn cố gắng gọi decodeAudioData() trong lúc app vừa khởi tạo (người dùng chưa kịp click gì), tiến trình giải mã có thể bị kẹt hoặc văng lỗi cảnh báo trên console.
 
-Vấn đề trong kế hoạch: Kế hoạch ghi rằng nếu existsByNonce(nonce) trả về true thì "từ chối lưu tiếp vào database nhưng vẫn log cảnh báo và cho phép xử lý tiếp broadcast qua Kafka/STOMP".
+Cách phòng thủ: Đối với tiến trình preload lúc "app init", bạn chỉ nên thực hiện thao tác Fetch (gọi API lấy Presigned URL và kéo các byte ArrayBuffer về lưu tạm trên RAM). Việc chuyển đổi từ ArrayBuffer sang AudioBuffer thực sự (quá trình decode) nên được trì hoãn (lazy-decode) vào khoảnh khắc người dùng có tương tác đầu tiên, hoặc diễn ra ngay khi họ bấm nút "Test Sound".
 
-Hậu quả: Nếu Backend phát hiện trùng nonce và tạo ra một Event mới tinh (hoặc rỗng) để broadcast, Frontend sẽ nhận được ACK nhưng không có ID thật của MongoDB (_id) và Timestamp gốc. Điều này làm giao diện bị lỗi hiển thị.
-
-Cách khắc phục (Sửa lại logic Service): Khi phát hiện nonce đã tồn tại, Backend bắt buộc phải query DB để lôi chính tin nhắn cũ đó ra, sau đó dùng chính dữ liệu cũ đó để build MessageEvent và broadcast lại.
-
-Đoạn code logic đề xuất cho MessageService.java:
-
-Java
-// Khi nhận được yêu cầu lưu tin nhắn:
-if (nonce != null && !nonce.isEmpty()) {
-    Optional<Message> existingMsgOpt = messageRepository.findByNonce(nonce); // Dùng findBy thay vì existsBy
-    
-    if (existingMsgOpt.isPresent()) {
-        log.info("Idempotency hit for nonce: {}. Skipping DB insert.", nonce);
-        Message existingMsg = existingMsgOpt.get();
-        
-        // QUAN TRỌNG: Vẫn phải broadcast LẠI tin nhắn cũ này 
-        // để Frontend (đang bị kẹt ở trạng thái FAILED) nhận được ACK và cập nhật UI.
-        MessageEvent event = buildEventFromMessage(existingMsg);
-        messageRouter.publishToRoom(event);
-        return; // Dừng luồng lưu mới
-    }
-}
-
-// Nếu không trùng, tiến hành lưu mới bình thường...
-Message newMessage = new Message(...);
-messageRepository.save(newMessage);
-🎯 Tổng kết
-Bản kế hoạch đã bao phủ toàn bộ 4 components cốt lõi và có kịch bản test (Verification Plan) rất thực tế.
-
-Chỉ cần điều chỉnh nhẹ logic "Tìm và trả về tin nhắn cũ" thay vì chỉ kiểm tra "Tồn tại" ở MessageService.java, bạn đã có trong tay một kiến trúc nhắn tin không thể bị đánh bại bởi tình trạng rớt mạng. Hãy bắt tay vào cập nhật các file Java DTO (Component 1 & 2) ngay bây giờ!
+Kế hoạch này đã bao quát toàn diện các thay đổi từ State (Zustand), Logic Engine đến UI Settings. Bạn có muốn tiến hành dọn dẹp file rác soundsData.ts trước để dọn đường, hay muốn tập trung sửa logic trong soundEngine.ts ngay lập tức?

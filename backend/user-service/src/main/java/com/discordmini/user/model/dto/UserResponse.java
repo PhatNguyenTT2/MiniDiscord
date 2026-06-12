@@ -16,6 +16,7 @@ public class UserResponse {
 
     private UUID id;
     private String username;
+    private String displayName;
     private String email;
     private String avatarUrl;
     private String status;

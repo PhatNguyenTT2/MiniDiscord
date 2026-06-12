@@ -11,10 +11,8 @@ import {
   Globe,
   LogOut,
   X,
-  Edit2,
   Pencil,
   Camera,
-  Sparkles,
   Check,
   Volume2
 } from "lucide-react";
@@ -22,6 +20,8 @@ import { SoundTab } from "./SoundTab";
 import { CURRENT_USER } from "@/lib/mock-data";
 import { useTranslation, useI18nStore, type Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { useFileStore } from "@/stores/fileStore";
 
 type SettingsTab = "account" | "language" | "sound";
 
@@ -35,7 +35,11 @@ function AvatarWithPopup() {
   const { t } = useTranslation();
   const [showPopup, setShowPopup] = useState(false);
   const popupRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const user = useAuthStore((s) => s.user) || CURRENT_USER;
+  const updateProfile = useAuthStore((s) => s.updateProfile);
+  const isUploading = useFileStore((s) => s.isUploading);
+  const [localUploading, setLocalUploading] = useState(false);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -49,11 +53,46 @@ function AvatarWithPopup() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showPopup]);
 
+  const handleAvatarChangeClick = () => {
+    fileInputRef.current?.click();
+    setShowPopup(false);
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (localUploading || isUploading) return;
+
+    try {
+      setLocalUploading(true);
+      const res = await useFileStore.getState().uploadFile(file, "avatar");
+      if (res && res.fileKey) {
+        await updateProfile({ avatarUrl: res.fileKey });
+      }
+    } catch (err) {
+      console.error("Failed to upload avatar:", err);
+    } finally {
+      setLocalUploading(false);
+      if (e.target) e.target.value = "";
+    }
+  };
+
+  const showLoading = isUploading || localUploading;
+
   return (
     <div className="relative" ref={popupRef}>
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        accept="image/*"
+        className="hidden"
+      />
       <button
         onClick={() => setShowPopup(!showPopup)}
-        className="group relative cursor-pointer"
+        disabled={showLoading}
+        className="group relative cursor-pointer disabled:opacity-50"
       >
         <StatusAvatar
           src={user.avatarUrl}
@@ -61,20 +100,25 @@ function AvatarWithPopup() {
           status={user.status}
           size="xl"
         />
-        <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Camera className="h-5 w-5 text-white" />
-        </div>
+        {showLoading ? (
+          <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/60 z-10">
+            <div className="h-6 w-6 rounded-full border-2 border-white border-t-transparent animate-spin" />
+          </div>
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+            <Camera className="h-5 w-5 text-white" />
+          </div>
+        )}
       </button>
 
       {showPopup && (
-        <div className="absolute left-1/2 top-full z-10 mt-2 -translate-x-1/2 rounded-lg bg-background-tertiary p-2 shadow-xl border border-border min-w-[180px]">
-          <button className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-xs text-foreground hover:bg-accent hover:text-white transition-colors cursor-pointer">
+        <div className="absolute left-0 top-full z-50 mt-2 rounded-lg bg-background-tertiary p-2 shadow-xl border border-border min-w-[180px]">
+          <button
+            onClick={handleAvatarChangeClick}
+            className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-xs text-foreground hover:bg-accent hover:text-white transition-colors cursor-pointer"
+          >
             <Camera className="h-3.5 w-3.5" />
             {t("settings.changeAvatar")}
-          </button>
-          <button className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-xs text-foreground hover:bg-accent hover:text-white transition-colors cursor-pointer">
-            <Sparkles className="h-3.5 w-3.5" />
-            {t("settings.changeDecoration")}
           </button>
         </div>
       )}
@@ -88,37 +132,135 @@ type AccountSubTab = "security" | "standing";
 function SecurityContent() {
   const { t } = useTranslation();
   const user = useAuthStore((s) => s.user) || CURRENT_USER;
+  const updateProfile = useAuthStore((s) => s.updateProfile);
+
+  const [isEditingDisplayName, setIsEditingDisplayName] = useState(false);
+  const [newDisplayName, setNewDisplayName] = useState("");
+  const [readonlyWarningField, setReadonlyWarningField] = useState<"username" | "email" | null>(null);
+
+  const handleEditClick = () => {
+    setNewDisplayName(user.displayName || user.username || "");
+    setIsEditingDisplayName(true);
+  };
+
+  const [isSavingDisplayName, setIsSavingDisplayName] = useState(false);
+
+  const handleSaveDisplayName = async () => {
+    if (!newDisplayName.trim() || isSavingDisplayName) return;
+    try {
+      setIsSavingDisplayName(true);
+      await updateProfile({ displayName: newDisplayName.trim() });
+      setIsEditingDisplayName(false);
+    } catch (err) {
+      console.error("Failed to save display name:", err);
+    } finally {
+      setIsSavingDisplayName(false);
+    }
+  };
 
   return (
     <div className="mt-4">
-      <div className="overflow-hidden rounded-lg">
+      <div className="rounded-lg">
         {/* Profile banner */}
-        <div className="h-[100px] bg-accent" />
+        <div className="h-[100px] bg-accent rounded-t-lg" />
 
         {/* Profile card */}
-        <div className="relative bg-background-secondary px-4 pb-4">
+        <div className="relative bg-background-secondary px-4 pb-4 rounded-b-lg">
           <div className="relative -mt-10 mb-3 flex items-end justify-between">
             <AvatarWithPopup />
-            <Button variant="outline" size="sm" className="text-xs h-8">
-              <Edit2 className="mr-1.5 h-3 w-3" />
-              {t("settings.editUserProfile")}
-            </Button>
           </div>
 
           {/* Info fields */}
           <div className="space-y-3 rounded-lg bg-background-tertiary p-4">
             <InfoRow
               label={t("settings.displayName")}
-              value={user.username}
+              value={user.displayName || user.username}
+              onEdit={handleEditClick}
             />
             <InfoRow
               label={t("settings.username")}
-              value={user.username.toLowerCase()}
+              value={(user.username || "").toLowerCase()}
+              onEdit={() => setReadonlyWarningField("username")}
             />
-            <InfoRow label={t("settings.email")} value={user.email} />
+            <InfoRow
+              label={t("settings.email")}
+              value={user.email || ""}
+              onEdit={() => setReadonlyWarningField("email")}
+            />
           </div>
         </div>
       </div>
+
+      {readonlyWarningField && (
+        <ConfirmModal
+          title={
+            readonlyWarningField === "username"
+              ? t("settings.cannotChangeUsernameTitle")
+              : t("settings.cannotChangeEmailTitle")
+          }
+          description={
+            readonlyWarningField === "username"
+              ? t("settings.cannotChangeUsernameDesc")
+              : t("settings.cannotChangeEmailDesc")
+          }
+          confirmText="OK"
+          showCancel={false}
+          variant="primary"
+          onClose={() => setReadonlyWarningField(null)}
+          onConfirm={() => setReadonlyWarningField(null)}
+        />
+      )}
+
+      {isEditingDisplayName && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/70" onClick={() => !isSavingDisplayName && setIsEditingDisplayName(false)} />
+          <div className="relative z-10 w-full max-w-[440px] rounded-md bg-[#313338] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6">
+              <h2 className="text-xl font-bold text-white">{t("settings.editDisplayNameTitle")}</h2>
+              <div className="mt-4 flex flex-col gap-2">
+                <label className="text-xs font-bold uppercase text-muted-foreground">
+                  {t("settings.editDisplayNameLabel")}
+                </label>
+                <input
+                  type="text"
+                  value={newDisplayName}
+                  onChange={(e) => setNewDisplayName(e.target.value)}
+                  disabled={isSavingDisplayName}
+                  className="w-full bg-[#1e1f22] text-white p-2.5 rounded-md border border-neutral-800 focus:border-accent focus:outline-none text-[15px] disabled:opacity-50"
+                  placeholder={t("settings.displayName")}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleSaveDisplayName();
+                    } else if (e.key === "Escape" && !isSavingDisplayName) {
+                      setIsEditingDisplayName(false);
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 bg-[#2b2d31] px-4 py-4">
+              <button
+                onClick={() => setIsEditingDisplayName(false)}
+                disabled={isSavingDisplayName}
+                className="px-4 py-2 text-sm font-medium text-[#dbdee1] hover:text-white hover:underline bg-transparent border-none transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {t("settings.cancel")}
+              </button>
+              <button
+                onClick={handleSaveDisplayName}
+                disabled={isSavingDisplayName}
+                className="flex items-center gap-2 rounded bg-[#5865f2] px-6 py-2 text-sm font-medium text-white hover:bg-[#4752c4] transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {isSavingDisplayName && (
+                  <div className="h-3.5 w-3.5 rounded-full border border-white border-t-transparent animate-spin shrink-0" />
+                )}
+                {t("settings.save")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -240,7 +382,7 @@ function AccountTab() {
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function InfoRow({ label, value, onEdit }: { label: string; value: string; onEdit: () => void }) {
   const { t } = useTranslation();
 
   return (
@@ -251,7 +393,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
         </p>
         <p className="text-sm text-foreground">{value}</p>
       </div>
-      <Button variant="outline" size="sm" className="text-xs h-7">
+      <Button variant="outline" size="sm" className="text-xs h-7" onClick={onEdit}>
         {t("settings.edit")}
       </Button>
     </div>
@@ -403,7 +545,7 @@ export function SettingsOverlay({ onClose }: { onClose: () => void }) {
               />
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-foreground leading-tight">
-                  {user.username}
+                  {user.displayName || user.username}
                 </p>
                 <button className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-accent transition-colors cursor-pointer">
                   <span className="whitespace-nowrap truncate">{t("settings.editProfile")}</span>

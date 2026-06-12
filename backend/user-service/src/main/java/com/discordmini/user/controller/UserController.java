@@ -39,7 +39,7 @@ public class UserController {
         UUID userId = UUID.fromString(auth.getName());
         UserResponse user = userService.updateProfile(
                 userId,
-                updates.get("username"),
+                updates.get("displayName"),
                 updates.get("avatarUrl"));
         return ResponseEntity.ok(ApiResponse.ok("Profile updated", user));
     }

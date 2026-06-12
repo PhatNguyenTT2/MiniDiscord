@@ -20,4 +20,5 @@ public class MemberDetailResponse {
     private String status;
     private RoomRole role;
     private Instant joinedAt;
+    private String displayName;
 }

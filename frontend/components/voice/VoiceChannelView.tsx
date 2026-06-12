@@ -71,7 +71,7 @@ export function VoiceChannelView({ channelId, roomId, channelName }: VoiceChanne
                     {p.avatarUrl ? (
                       <img
                         src={p.avatarUrl}
-                        alt={p.username}
+                        alt={p.displayName || p.username}
                         className={cn(
                           "rounded-full object-cover shadow-2xl transition-transform duration-350 scale-100 hover:scale-105",
                           participants.length <= 2 ? "h-20 w-20 md:h-24 md:w-24" : "h-14 w-14 md:h-16 md:w-16"
@@ -83,13 +83,13 @@ export function VoiceChannelView({ channelId, roomId, channelName }: VoiceChanne
                         participants.length <= 2 ? "h-20 w-20 md:h-24 md:w-24 text-2xl" : "h-14 w-14 md:h-16 md:w-16 text-lg",
                         "font-extrabold text-white"
                       )}>
-                        {p.username.substring(0, 2)}
+                        {(p.displayName || p.username).substring(0, 2)}
                       </div>
                     )}
 
                     {/* Username text badge */}
                     <div className="absolute bottom-3 left-3 bg-[#111214]/75 backdrop-blur-sm px-2.5 py-1 rounded-md text-[13px] font-bold text-white max-w-[85%] truncate">
-                      {p.username}
+                      {p.displayName || p.username}
                     </div>
 
                     {/* State flag indicators overlay */}

@@ -1,5 +1,7 @@
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/Avatar";
+import { useState, useEffect } from "react";
+import { getResolvedFileUrl } from "@/lib/fileResolver";
 
 type UserStatus = "ONLINE" | "OFFLINE" | "IDLE" | "DND";
 type AvatarSize = "sm" | "md" | "lg" | "xl";
@@ -40,10 +42,41 @@ export function StatusAvatar({
   size = "lg",
   className,
 }: StatusAvatarProps) {
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
+
+  const isB2Key =
+    !!src &&
+    !(
+      src.startsWith("http://") ||
+      src.startsWith("https://") ||
+      src.startsWith("data:") ||
+      src.startsWith("/")
+    );
+
+  useEffect(() => {
+    if (!isB2Key) return;
+
+    let isMounted = true;
+    getResolvedFileUrl(src)
+      .then((url) => {
+        if (isMounted) setResolvedUrl(url);
+      })
+      .catch((err) => {
+        console.error("StatusAvatar: failed to resolve URL", err);
+        if (isMounted) setResolvedUrl(null);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [src, isB2Key, getResolvedFileUrl]);
+
+  const displayUrl = isB2Key ? resolvedUrl : src;
+
   return (
     <div className={cn("relative inline-flex", className)}>
       <Avatar className={sizeClasses[size]}>
-        {src && <AvatarImage src={src} alt={fallback} />}
+        {displayUrl && <AvatarImage src={displayUrl} alt={fallback} />}
         <AvatarFallback className="text-xs">
           {fallback.slice(0, 2).toUpperCase()}
         </AvatarFallback>

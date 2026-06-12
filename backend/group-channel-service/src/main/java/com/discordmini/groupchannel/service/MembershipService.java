@@ -147,6 +147,9 @@ public class MembershipService {
                     .status(user != null ? user.getStatus() : "OFFLINE")
                     .role(p.getRole())
                     .joinedAt(p.getJoinedAt())
+                    .displayName(
+                            user != null ? (user.getDisplayName() != null ? user.getDisplayName() : user.getUsername())
+                                    : "Unknown")
                     .build();
         }).toList();
 

@@ -5,7 +5,6 @@ import { ChannelList } from "@/components/sidebar/ChannelList";
 import { ChatHeader } from "@/components/chat/ChatHeader";
 import { MessageList, type MessageListHandle } from "@/components/chat/MessageList";
 import { MessageInput } from "@/components/chat/MessageInput";
-import { ScrollToBottomBanner } from "@/components/chat/ScrollToBottomBanner";
 import { MemberList } from "@/components/sidebar/MemberList";
 import { ResizeHandle } from "@/components/ui/ResizeHandle";
 import { SlidingPanel } from "@/components/ui/SlidingPanel";
@@ -81,7 +80,7 @@ export default function ChannelPage() {
         channelId,
         content,
         type: attachment ? "FILE" : "TEXT",
-        senderName: currentUser?.username || "User",
+        senderName: currentUser?.displayName || currentUser?.username || "User",
         senderAvatar: currentUser?.avatarUrl || null,
         fileKey: attachment?.fileKey,
         fileName: attachment?.fileName,
@@ -104,7 +103,7 @@ export default function ChannelPage() {
         roomId,
         channelId,
         senderId: currentUser?.id || "",
-        senderName: currentUser?.username || "User",
+        senderName: currentUser?.displayName || currentUser?.username || "User",
         senderAvatar: currentUser?.avatarUrl || null,
         type: attachment ? "FILE" : "TEXT",
         content,
@@ -152,7 +151,8 @@ export default function ChannelPage() {
     const client = getStompClient(token);
     if (!client.connected) return;
 
-    const username = useAuthStore.getState().user?.username;
+    const currentUser = useAuthStore.getState().user;
+    const username = currentUser?.displayName || currentUser?.username;
     client.publish({
       destination: "/app/chat.typing",
       body: JSON.stringify({ roomId, channelId, username }),
@@ -243,16 +243,16 @@ export default function ChannelPage() {
 
           {/* Input wrapper — relative context for floating banner */}
           <div className="relative">
-            <ScrollToBottomBanner
-              visible={showJumpBanner}
-              onJumpToPresent={() => messageListRef.current?.scrollToBottom()}
-            />
+            {/* Opaque bottom overlay to prevent chat messages from showing below the floating composer */}
+            <div className="absolute bottom-0 left-0 right-0 h-[88px] bg-[#313338] z-10 pointer-events-none" />
             <MessageInput
               channelId={channelId}
               channelName={channelName}
               onSend={handleSend}
               onTyping={handleTyping}
               members={members}
+              showScrollDown={showJumpBanner}
+              onScrollDown={() => messageListRef.current?.scrollToBottom()}
             />
           </div>
         </main>

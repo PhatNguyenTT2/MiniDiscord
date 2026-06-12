@@ -16,7 +16,7 @@ interface AuthState {
   logout: () => void;
   setUser: (user: User) => void;
   setOwnStatus: (status: "ONLINE" | "OFFLINE") => void;
-  updateProfile: (updates: { username?: string; avatarUrl?: string }) => Promise<void>;
+  updateProfile: (updates: { username?: string; displayName?: string; avatarUrl?: string }) => Promise<void>;
   hydrate: () => Promise<void>;
 }
 

@@ -13,11 +13,8 @@ import type { Message } from "@/types";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { useTranslation, getDateLocale } from "@/lib/i18n";
 import { useState, useRef, useEffect } from "react";
-import { api } from "@/lib/api";
 import { getStompClient } from "@/lib/websocket";
-
-// Outside component to survive re-renders (cache)
-const resolvedUrlsMap = new Map<string, { url: string; expiresAt: number }>();
+import { getResolvedFileUrl } from "@/lib/fileResolver";
 
 interface MessageItemProps {
   message: Message;
@@ -71,47 +68,27 @@ export function MessageItem({
   const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
   const editInputRef = useRef<HTMLTextAreaElement>(null);
 
-  const [resolvedUrl, setResolvedUrl] = useState<string | null>(() => {
-    if (message.fileKey) {
-      const cached = resolvedUrlsMap.get(message.fileKey);
-      if (cached && Date.now() < cached.expiresAt) return cached.url;
-    }
-    return null;
-  });
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!message.fileKey) return;
-
-    let isMounted = true;
-    const cached = resolvedUrlsMap.get(message.fileKey);
-
-    if (cached && Date.now() < cached.expiresAt - 15 * 60 * 1000) {
-      if (resolvedUrl !== cached.url) setResolvedUrl(cached.url);
+    if (!message.fileKey) {
+      setResolvedUrl(null);
       return;
     }
 
-    const fetchUrl = async () => {
-      try {
-        const res = await api.get<{ data: { url: string; expiresIn: number } }>(
-          `/files/url?key=${encodeURIComponent(message.fileKey!)}`
-        );
-        const { url, expiresIn } = res.data.data;
+    let isMounted = true;
+    getResolvedFileUrl(message.fileKey)
+      .then((url) => {
+        if (isMounted) setResolvedUrl(url);
+      })
+      .catch((err) => {
+        console.error("Failed to resolve message file URL", err);
+      });
 
-        if (url) {
-          resolvedUrlsMap.set(message.fileKey!, {
-            url,
-            expiresAt: Date.now() + (expiresIn * 1000)
-          });
-          if (isMounted) setResolvedUrl(url);
-        }
-      } catch (err) {
-        console.error("Failed to resolve presigned URL", err);
-      }
+    return () => {
+      isMounted = false;
     };
-
-    fetchUrl();
-    return () => { isMounted = false; };
-  }, [message.fileKey]);
+  }, [message.fileKey, getResolvedFileUrl]);
 
   const currentUserId = useAuthStore((s) => s.user?.id);
   const members = useRoomStore((s) => s.members[message.roomId] ?? EMPTY_MEMBERS);
@@ -119,7 +96,7 @@ export function MessageItem({
 
   const getMemberUsername = (uid: string) => {
     const m = members.find((member) => member.userId === uid);
-    return m ? m.username : null;
+    return m ? (m.displayName || m.username) : null;
   };
 
   const isSelfMention = !!(
@@ -178,7 +155,7 @@ export function MessageItem({
     : (memberStatusMap?.[message.senderId] || senderMember?.status || "OFFLINE");
 
   const avatarSrc = memberAvatarMap ? memberAvatarMap[message.senderId] : message.senderAvatar;
-  const resolvedSenderName = senderMember?.username || message.senderName;
+  const resolvedSenderName = senderMember?.displayName || senderMember?.username || message.senderName;
   const isBeingReplied = replyingTo?.messageId === message.id;
 
   function handleReply() {

@@ -85,7 +85,7 @@ function MemberSection({
               size="md"
             />
             <span className="truncate text-[15px] font-medium text-muted-foreground group-hover:text-foreground transition-colors">
-              {user.username}
+              {user.displayName || user.username}
             </span>
           </button>
         ))}

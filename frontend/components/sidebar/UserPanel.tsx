@@ -34,7 +34,7 @@ export function UserPanel() {
           style={{
             minHeight: "var(--floating-user-panel-height)",
             borderRadius: "var(--floating-bar-radius)",
-            backgroundColor: "#232428",
+            backgroundColor: "var(--muted)",
           }}
         >
           <div className="h-8 w-8 rounded-full bg-[#3f4147] animate-pulse shrink-0" />
@@ -89,7 +89,7 @@ export function UserPanel() {
         style={{
           minHeight: "var(--floating-user-panel-height)",
           borderRadius: "var(--floating-bar-radius)",
-          backgroundColor: "#232428",
+          backgroundColor: "var(--muted)",
         }}
       >
         <StatusAvatar
@@ -101,7 +101,7 @@ export function UserPanel() {
 
         <div className="min-w-0 flex-1">
           <p className="truncate text-[15px] font-semibold text-foreground leading-tight">
-            {user.username}
+            {user.displayName || user.username}
           </p>
           <p className="truncate text-[13px] text-muted-foreground leading-tight">
             {t(`status.${statusKey}`)}

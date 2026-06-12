@@ -41,4 +41,5 @@ export interface MemberDetailResponse {
   status: string;
   role: "OWNER" | "ADMIN" | "MEMBER";
   joinedAt: string;
+  displayName?: string;
 }

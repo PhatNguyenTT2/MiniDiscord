@@ -8,7 +8,6 @@ import {
   Pin,
   Users,
   Search,
-  Inbox,
   X,
 } from "lucide-react";
 import { Separator } from "@/components/ui/Separator";
@@ -299,9 +298,6 @@ export function ChatHeader({
             onSearchSubmit={handleSearchSubmit}
           />
         </div>
-        <HeaderIcon label={t("chat.inbox")}>
-          <Inbox className="h-5 w-5" />
-        </HeaderIcon>
       </div>
     </div>
   );

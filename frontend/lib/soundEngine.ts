@@ -30,20 +30,12 @@ export const ALL_SOUNDS: SoundName[] = [
   'user_leave_voice'
 ];
 
-function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binaryString = window.atob(base64);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return bytes.buffer;
-}
-
 class SoundEngine {
   private ctx: AudioContext | null = null;
   private buffers = new Map<SoundName, AudioBuffer>();
-  private loadingPromises = new Map<SoundName, Promise<void>>();
+  private arrayBuffers = new Map<SoundName, ArrayBuffer>();
+  private loadingPromises = new Map<SoundName, Promise<AudioBuffer | null>>();
+  private preloadPromises = new Map<SoundName, Promise<ArrayBuffer | null>>();
   private lastPlayedAt = new Map<SoundName, number>();
 
   private getContext(): AudioContext {
@@ -55,30 +47,32 @@ class SoundEngine {
 
   invalidateBuffer(name: SoundName): void {
     this.buffers.delete(name);
+    this.arrayBuffers.delete(name);
     this.loadingPromises.delete(name);
+    this.preloadPromises.delete(name);
     if (name === 'voice_join') {
       this.buffers.delete('user_join_voice');
+      this.arrayBuffers.delete('user_join_voice');
       this.loadingPromises.delete('user_join_voice');
+      this.preloadPromises.delete('user_join_voice');
     }
     if (name === 'voice_leave') {
       this.buffers.delete('user_leave_voice');
+      this.arrayBuffers.delete('user_leave_voice');
       this.loadingPromises.delete('user_leave_voice');
+      this.preloadPromises.delete('user_leave_voice');
     }
   }
 
-  /** Load a single sound on-demand (deduped, cached) */
-  private async loadSound(name: SoundName): Promise<AudioBuffer | null> {
-    if (this.buffers.has(name)) return this.buffers.get(name)!;
+  /** Fetch sound binary bytes to cache on RAM without AudioContext context dependency */
+  private async preloadSoundArrayBuffer(name: SoundName): Promise<ArrayBuffer | null> {
+    if (this.arrayBuffers.has(name)) return this.arrayBuffers.get(name)!;
 
-    // Dedup: if already loading, wait for existing promise
-    if (this.loadingPromises.has(name)) {
-      await this.loadingPromises.get(name);
-      return this.buffers.get(name) ?? null;
+    if (this.preloadPromises.has(name)) {
+      return this.preloadPromises.get(name)!;
     }
 
     const promise = (async () => {
-      const ctx = this.getContext();
-
       let configName: SoundName = name;
       if (name === 'user_join_voice') configName = 'voice_join';
       if (name === 'user_leave_voice') configName = 'voice_leave';
@@ -86,56 +80,69 @@ class SoundEngine {
       if (name === 'undeafen') configName = 'unmute';
 
       const customFileKey = useSoundStore.getState().customSounds?.[configName];
+      if (!customFileKey) return null;
 
-      // 1. Try Custom Sound first (B2 pre-signed dynamic authorization)
-      if (customFileKey) {
-        try {
-          const urlRes = await api.get<{ message: string; data: { url: string; expiresIn: number } }>(
-            `/files/url?key=${encodeURIComponent(customFileKey)}`
-          );
-          const freshUrl = urlRes.data.data.url;
-          if (freshUrl) {
-            const res = await fetch(freshUrl);
-            if (res.ok) {
-              const arrayBuffer = await res.arrayBuffer();
-              const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-              this.buffers.set(name, audioBuffer);
-              return;
-            }
-          }
-        } catch (err) {
-          console.warn(`[SoundEngine] Custom sound failed for ${name}, falling back to default`, err);
-          useSoundStore.getState().clearCustomSound(name);
-        }
-      }
-
-      // 2. Fallback to Default Base64 embedded audio data
       try {
-        const { SOUNDS_BASE64 } = await import('./soundsData');
-        const base64Data = SOUNDS_BASE64[name];
-        if (base64Data) {
-          const arrayBuffer = base64ToArrayBuffer(base64Data);
-          const audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
-          this.buffers.set(name, audioBuffer);
-        } else {
-          console.warn(`[SoundEngine] No default base64 sound data for: ${name}`);
+        const urlRes = await api.get<{ message: string; data: { url: string; expiresIn: number } }>(
+          `/files/url?key=${encodeURIComponent(customFileKey)}`
+        );
+        const freshUrl = urlRes.data.data.url;
+        if (freshUrl) {
+          const res = await fetch(freshUrl);
+          if (res.ok) {
+            const arrayBuffer = await res.arrayBuffer();
+            this.arrayBuffers.set(name, arrayBuffer);
+            return arrayBuffer;
+          }
         }
       } catch (err) {
-        console.warn(`[SoundEngine] Failed to decode base64 sound: ${name}`, err);
+        console.warn(`[SoundEngine] Preload array buffer failed for ${name}:`, err);
+      } finally {
+        this.preloadPromises.delete(name);
+      }
+      return null;
+    })();
+
+    this.preloadPromises.set(name, promise);
+    return promise;
+  }
+
+  /** Load and decode a sound utilizing cached array buffer if available */
+  private async loadSound(name: SoundName): Promise<AudioBuffer | null> {
+    if (this.buffers.has(name)) return this.buffers.get(name)!;
+
+    if (this.loadingPromises.has(name)) {
+      return this.loadingPromises.get(name)!;
+    }
+
+    const promise = (async () => {
+      try {
+        let arrayBuffer = this.arrayBuffers.get(name) || null;
+        if (!arrayBuffer) {
+          arrayBuffer = await this.preloadSoundArrayBuffer(name);
+        }
+        if (!arrayBuffer) return null;
+
+        const ctx = this.getContext();
+        const audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
+        this.buffers.set(name, audioBuffer);
+        return audioBuffer;
+      } catch (err) {
+        console.warn(`[SoundEngine] Failed to decode audio for ${name}:`, err);
+        return null;
       } finally {
         this.loadingPromises.delete(name);
       }
     })();
 
     this.loadingPromises.set(name, promise);
-    await promise;
-    return this.buffers.get(name) ?? null;
+    return promise;
   }
 
-  /** Eagerly preload specific sounds (use sparingly) */
+  /** Eagerly preload sound file key and download its binary buffer to RAM array buffer cache */
   async preload(sounds: SoundName[]): Promise<void> {
     if (typeof window === 'undefined') return;
-    await Promise.all(sounds.map((name) => this.loadSound(name)));
+    await Promise.all(sounds.map((name) => this.preloadSoundArrayBuffer(name)));
   }
 
   async play(name: SoundName): Promise<void> {

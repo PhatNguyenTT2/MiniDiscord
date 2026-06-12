@@ -9,24 +9,18 @@ interface ScrollToBottomBannerProps {
 }
 
 export function ScrollToBottomBanner({ visible, onJumpToPresent }: ScrollToBottomBannerProps) {
-  const { t } = useTranslation();
-
   if (!visible) return null;
 
   return (
-    <div className="absolute -top-14 left-1/2 -translate-x-1/2 z-30">
-      <div className="flex items-center gap-3 rounded-full bg-[#2b2d31]/95 px-4 py-2 shadow-lg whitespace-nowrap">
-        <span className="text-[13px] font-medium text-[#dbdee1]">
-          {t("chat.viewingOldMessages")}
-        </span>
-        <button
-          onClick={onJumpToPresent}
-          className="flex items-center gap-1.5 rounded-full bg-[#5865F2] px-3 py-1 text-sm font-medium text-white hover:bg-[#4752c4] transition-colors cursor-pointer"
-        >
-          {t("chat.jumpToPresent")}
-          <ArrowDown className="h-3.5 w-3.5" />
-        </button>
-      </div>
+    <div className="absolute -top-11 left-1/2 -translate-x-1/2 z-30">
+      <button
+        onClick={onJumpToPresent}
+        className="flex h-9 w-9 items-center justify-center rounded-full bg-[#5865F2] hover:bg-[#4752c4] text-white shadow-[0_4px_12px_rgba(0,0,0,0.3)] transition-all hover:scale-105 active:scale-95 duration-150 cursor-pointer"
+        aria-label="Scroll to bottom"
+        title="Scroll to bottom"
+      >
+        <ArrowDown className="h-5 w-5" />
+      </button>
     </div>
   );
 }

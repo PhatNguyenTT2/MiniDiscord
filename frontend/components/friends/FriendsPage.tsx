@@ -16,6 +16,7 @@ import {
   Video,
   Phone,
   UserX,
+  Inbox,
 } from "lucide-react";
 import { FriendUser, FriendResponse, PendingFriendResponse } from "@/types/friend";
 import { useFriendStore } from "@/stores/friendStore";
@@ -143,6 +144,15 @@ function FriendsHeader({
           </button>
         ))}
       </div>
+
+      <div className="ml-auto flex items-center">
+        <button
+          aria-label={t("chat.inbox")}
+          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors duration-150 cursor-pointer"
+        >
+          <Inbox className="h-5 w-5" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -198,7 +208,7 @@ function FriendItem({
 
       <div className="flex-1 min-w-0 flex flex-col justify-center">
         <p className="text-[15px] font-semibold text-foreground truncate leading-snug">
-          {user.username}
+          {user.displayName || user.username}
         </p>
         <p className="text-[13px] text-muted-foreground leading-snug">
           {isPending
@@ -271,7 +281,16 @@ function FriendItem({
 /* ─── Online friends tab ───────────────────────────────────────────── */
 function OnlineFriends({ friends }: { friends: FriendResponse[] }) {
   const { t } = useTranslation();
+  const [searchQuery, setSearchQuery] = useState("");
   const onlineFriends = friends.filter((f) => f.user.status !== "OFFLINE");
+
+  const filteredFriends = onlineFriends.filter((f) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+    const nameMatches = f.user.username?.toLowerCase().includes(query) || false;
+    const displayNameMatches = f.user.displayName?.toLowerCase().includes(query) || false;
+    return nameMatches || displayNameMatches;
+  });
 
   return (
     <div>
@@ -280,6 +299,8 @@ function OnlineFriends({ friends }: { friends: FriendResponse[] }) {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <input
             type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={t("friends.search")}
             className="h-8 w-full rounded-md bg-background-tertiary pl-9 pr-3 text-[13px] text-foreground placeholder:text-muted-foreground outline-none"
           />
@@ -287,12 +308,12 @@ function OnlineFriends({ friends }: { friends: FriendResponse[] }) {
       </div>
       <div className="px-6 mt-4">
         <h3 className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          {t("friends.onlineCount")} — {onlineFriends.length}
+          {t("friends.onlineCount")} — {filteredFriends.length}
         </h3>
-        {onlineFriends.map((f) => (
+        {filteredFriends.map((f) => (
           <FriendItem key={f.friendshipId} user={f.user} friendshipId={f.friendshipId} />
         ))}
-        {onlineFriends.length === 0 && (
+        {filteredFriends.length === 0 && (
           <p className="py-8 text-center text-[14px] text-muted-foreground">
             {t("friends.noOnline")}
           </p>
@@ -305,6 +326,15 @@ function OnlineFriends({ friends }: { friends: FriendResponse[] }) {
 /* ─── All friends tab ──────────────────────────────────────────────── */
 function AllFriends({ friends }: { friends: FriendResponse[] }) {
   const { t } = useTranslation();
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredFriends = friends.filter((f) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+    const nameMatches = f.user.username?.toLowerCase().includes(query) || false;
+    const displayNameMatches = f.user.displayName?.toLowerCase().includes(query) || false;
+    return nameMatches || displayNameMatches;
+  });
 
   return (
     <div>
@@ -313,6 +343,8 @@ function AllFriends({ friends }: { friends: FriendResponse[] }) {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <input
             type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={t("friends.search")}
             className="h-8 w-full rounded-md bg-background-tertiary pl-9 pr-3 text-[13px] text-foreground placeholder:text-muted-foreground outline-none"
           />
@@ -320,9 +352,9 @@ function AllFriends({ friends }: { friends: FriendResponse[] }) {
       </div>
       <div className="px-6 mt-4">
         <h3 className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          {t("friends.allCount")} — {friends.length}
+          {t("friends.allCount")} — {filteredFriends.length}
         </h3>
-        {friends.map((f) => (
+        {filteredFriends.map((f) => (
           <FriendItem key={f.friendshipId} user={f.user} friendshipId={f.friendshipId} />
         ))}
       </div>

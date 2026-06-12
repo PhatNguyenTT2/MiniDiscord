@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useTranslation } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 interface ConfirmModalProps {
   title: string;
@@ -9,6 +10,8 @@ interface ConfirmModalProps {
   confirmText: string;
   onClose: () => void;
   onConfirm: () => void;
+  showCancel?: boolean;
+  variant?: "danger" | "primary";
 }
 
 export function ConfirmModal({
@@ -17,6 +20,8 @@ export function ConfirmModal({
   confirmText,
   onClose,
   onConfirm,
+  showCancel = true,
+  variant = "danger",
 }: ConfirmModalProps) {
   const { t } = useTranslation();
 
@@ -46,18 +51,25 @@ export function ConfirmModal({
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 rounded-b-md bg-[#2b2d31] px-4 py-4">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-[#dbdee1] hover:text-white hover:underline bg-transparent transition-colors cursor-pointer"
-          >
-            {t("modal.cancel")}
-          </button>
+          {showCancel && (
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-[#dbdee1] hover:text-white hover:underline bg-transparent transition-colors cursor-pointer"
+            >
+              {t("modal.cancel")}
+            </button>
+          )}
           <button
             onClick={() => {
               onConfirm();
               onClose();
             }}
-            className="rounded-md bg-[#da373c] px-6 py-2 text-sm font-medium text-white hover:bg-[#a12828] transition-colors cursor-pointer"
+            className={cn(
+              "rounded-md px-6 py-2 text-sm font-medium text-white transition-colors cursor-pointer",
+              variant === "danger"
+                ? "bg-[#da373c] hover:bg-[#a12828]"
+                : "bg-[#5865f2] hover:bg-[#4752c4]"
+            )}
           >
             {confirmText}
           </button>

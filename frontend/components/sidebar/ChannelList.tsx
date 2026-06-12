@@ -49,10 +49,18 @@ function ChannelItem({
 
   return (
     <div className="flex flex-col">
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onClick}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onClick?.();
+          }
+        }}
         className={cn(
-          "group flex w-full items-center justify-between rounded-md px-3 py-1.5 text-[15px] transition-colors duration-150 cursor-pointer",
+          "group flex w-full items-center justify-between rounded-md px-3 py-1.5 text-[15px] transition-colors duration-150 cursor-pointer outline-none",
           isActive
             ? "bg-secondary text-foreground font-medium"
             : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
@@ -97,7 +105,7 @@ function ChannelItem({
             </button>
           )}
         </div>
-      </button>
+      </div>
 
       {/* Voice Participants List */}
       {channel.type === "VOICE" && participants.length > 0 && (
@@ -110,18 +118,18 @@ function ChannelItem({
               {p.avatarUrl ? (
                 <img
                   src={p.avatarUrl}
-                  alt={p.username}
+                  alt={p.displayName || p.username}
                   className="h-5 w-5 rounded-full shrink-0 object-cover"
                 />
               ) : (
                 <div className="h-5 w-5 rounded-full bg-[#5865f2]/20 flex items-center justify-center shrink-0">
                   <span className="text-[10px] font-bold text-[#5865f2] uppercase">
-                    {p.username.substring(0, 2)}
+                    {(p.displayName || p.username).substring(0, 2)}
                   </span>
                 </div>
               )}
               <span className="text-[13px] text-[#949ba4] font-medium truncate select-none">
-                {p.username}
+                {p.displayName || p.username}
               </span>
               <div className="flex items-center gap-0.5 ml-auto shrink-0">
                 {p.deafened && <HeadphoneOff className="h-3.5 w-3.5 text-[#ed4245]" />}
