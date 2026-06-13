@@ -40,6 +40,7 @@ public class MessageResponse {
     private Message.ReplyTo replyTo;
     private List<ReactionResponse> reactions;
     private List<String> mentions;
+    private List<String> stickerIds;
 
     @Data
     @Builder
@@ -73,6 +74,7 @@ public class MessageResponse {
                 .updatedAt(message.getUpdatedAt())
                 .replyTo(message.getReplyTo())
                 .mentions(message.getMentions())
+                .stickerIds(message.getStickerIds())
                 .reactions(message.getReactions() != null ? message.getReactions().stream()
                         .map(r -> ReactionResponse.builder()
                                 .emoji(r.getEmoji())

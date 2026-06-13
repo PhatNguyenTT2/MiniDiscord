@@ -32,4 +32,5 @@ public class ChatMessage {
     private boolean isPinned;
     private String createdAt;
     private ReplyInfo replyTo;
+    private List<String> stickerIds;
 }

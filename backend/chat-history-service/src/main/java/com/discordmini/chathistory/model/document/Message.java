@@ -69,6 +69,8 @@ public class Message {
     @Builder.Default
     private List<Reaction> reactions = new ArrayList<>();
 
+    private List<String> stickerIds;
+
     @Data
     @Builder
     @NoArgsConstructor

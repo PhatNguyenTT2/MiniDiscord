@@ -34,11 +34,21 @@ export function ServerList() {
   const activeRoomId = (params?.serverId as string) || null;
   const isDashboard = pathname?.startsWith("/channels/me") || pathname === "/channels";
 
-  function handleServerClick(roomId: string) {
-    const roomChannels = channels[roomId] || [];
+  async function handleServerClick(roomId: string) {
+    let roomChannels = channels[roomId] || [];
+    if (roomChannels.length === 0) {
+      try {
+        await useRoomStore.getState().fetchChannels(roomId);
+        roomChannels = useRoomStore.getState().channels[roomId] || [];
+      } catch (err) {
+        console.error("[ServerList] Failed to fetch channels for room:", roomId, err);
+      }
+    }
     if (roomChannels.length > 0) {
       const defaultChannel = roomChannels.find((c) => c.type === "TEXT") || roomChannels[0];
       router.push(`/channels/${roomId}/${defaultChannel.id}`);
+    } else {
+      console.warn("[ServerList] No channels found for room:", roomId);
     }
   }
 

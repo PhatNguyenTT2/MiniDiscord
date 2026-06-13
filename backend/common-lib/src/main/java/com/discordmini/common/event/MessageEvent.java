@@ -35,4 +35,5 @@ public class MessageEvent implements Serializable {
     private ReplyInfo replyTo;
     private Instant createdAt;
     private List<String> mentions;
+    private List<String> stickerIds;
 }

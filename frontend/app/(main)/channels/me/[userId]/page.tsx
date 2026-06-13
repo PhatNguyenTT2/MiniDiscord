@@ -289,6 +289,11 @@ export default function DmChatPage() {
 
   const token = useAuthStore((s) => s.token);
 
+  // Fetch my rooms from the backend on page mount to bypass cache and load any new DM rooms immediately
+  useEffect(() => {
+    useRoomStore.getState().fetchMyRooms(true);
+  }, []);
+
   // Dynamically auto-hide DM User Panel when viewport drops below 1024px (minimized/narrow screens)
   useEffect(() => {
     const handleViewportResize = () => {
@@ -306,7 +311,12 @@ export default function DmChatPage() {
   }, []);
 
   const handleSend = useCallback(
-    async (content: string, attachment?: { fileKey: string; fileName: string; fileSize: number } | null, mentions?: string[]) => {
+    async (
+      content: string,
+      attachment?: { fileKey: string; fileName: string; fileSize: number } | null,
+      mentions?: string[],
+      stickerIds?: string[]
+    ) => {
       let activeRoomId = roomId;
       let activeChannelId = channelId;
 
@@ -351,6 +361,7 @@ export default function DmChatPage() {
                     createdAt: data.createdAt || new Date().toISOString(),
                     replyTo: data.replyTo || null,
                     mentions: data.mentions || [],
+                    stickerIds: data.stickerIds || [],
                   });
                 } catch (e) {
                   console.error("Failed to parse lazy room message", e);
@@ -402,6 +413,7 @@ export default function DmChatPage() {
           }
           : null,
         mentions,
+        stickerIds,
         status: client.connected ? "SENDING" : "FAILED",
       };
       addOptimisticMessage(activeChannelId, optimisticMsg);
@@ -432,6 +444,7 @@ export default function DmChatPage() {
           }
           : null,
         mentions,
+        stickerIds,
       };
 
       client.publish({
@@ -493,7 +506,10 @@ export default function DmChatPage() {
       {/* Column 3 is the positioning context for the floating message composer. */}
       <main className="relative flex flex-1 min-w-0 flex-col bg-[#313338]">
         {/* Unified header bar across both columns */}
-        <div className="flex h-12 shrink-0 items-center border-b border-[#1e1f22] bg-[#313338] px-4">
+        <div className={cn(
+          "flex h-12 shrink-0 items-center border-b transition-colors duration-300 px-4",
+          activeCallRoomId === roomId ? "bg-[#111214] border-[#1f2023]" : "bg-[#313338] border-[#1e1f22]"
+        )}>
           <div className="flex items-center gap-2">
             <span className="text-[15px] font-semibold text-foreground">
               @ {friendName}
@@ -501,20 +517,42 @@ export default function DmChatPage() {
           </div>
           <div className="flex items-center gap-4 ml-auto">
             <div className="flex items-center gap-1">
-              <button
-                onClick={() => {
-                  if (roomId && userId) {
-                    useVoiceStore.getState().startCall(roomId, userId);
-                  }
-                }}
-                className="flex h-8 w-8 items-center justify-center rounded-md text-[#23a55a] hover:text-[#1a7f43] bg-[#23a55a]/10 hover:bg-[#23a55a]/20 transition-all duration-150 cursor-pointer shadow-sm animate-pulse"
-                title={t("voice.startCall")}
-              >
-                <Phone className="h-5 w-5" />
-              </button>
-              <button className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                <Video className="h-5 w-5" />
-              </button>
+              {activeCallRoomId !== roomId && (
+                <>
+                  <button
+                    onClick={async () => {
+                      if (!userId) return;
+                      let activeRoomId = roomId;
+                      let activeChannelId = channelId;
+                      if (!activeRoomId) {
+                        try {
+                          const newRoom = await findOrCreateDmRoom(userId);
+                          activeRoomId = newRoom.id;
+                          const { channels: updatedChannels } = useRoomStore.getState();
+                          const newChannels = updatedChannels[newRoom.id] || [];
+                          const defaultCh = newChannels.find((c) => c.type === "TEXT") || newChannels[0];
+                          if (defaultCh) {
+                            activeChannelId = defaultCh.id;
+                          }
+                        } catch (err) {
+                          console.error("Failed to create lazy room for calling", err);
+                          return;
+                        }
+                      }
+                      if (activeRoomId) {
+                        useVoiceStore.getState().startCall(activeRoomId, userId, activeChannelId);
+                      }
+                    }}
+                    className="flex h-8 w-8 items-center justify-center rounded-md text-[#23a55a] hover:text-[#1a7f43] bg-[#23a55a]/10 hover:bg-[#23a55a]/20 transition-all duration-150 cursor-pointer shadow-sm animate-pulse"
+                    title={t("voice.startCall")}
+                  >
+                    <Phone className="h-5 w-5" />
+                  </button>
+                  <button className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                    <Video className="h-5 w-5" />
+                  </button>
+                </>
+              )}
               <div className="relative">
                 <button
                   onClick={() => setShowPinnedModal(!showPinnedModal)}

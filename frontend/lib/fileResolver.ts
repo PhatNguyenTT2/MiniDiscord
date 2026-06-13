@@ -40,7 +40,8 @@ export async function getResolvedFileUrl(fileKey: string): Promise<string> {
     promise = (async () => {
       try {
         const res = await api.get<{ data: { url: string; expiresIn: number } }>(
-          `/files/url?key=${encodeURIComponent(fileKey)}`
+          `/files/url?key=${encodeURIComponent(fileKey)}`,
+          { timeout: 5000 }
         );
         const { url, expiresIn } = res.data.data;
         if (url) {
@@ -50,10 +51,9 @@ export async function getResolvedFileUrl(fileKey: string): Promise<string> {
           });
           return url;
         }
-        throw new Error("Empty URL returned from server");
+        return "";
       } catch (err) {
-        console.error(`Error resolving pre-signed URL for key: ${fileKey}`, err);
-        throw err;
+        return "";
       } finally {
         activeRequests.delete(fileKey);
       }

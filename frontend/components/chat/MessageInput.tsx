@@ -1,8 +1,8 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { FileUp, ImageIcon, Video, AlertTriangle, Smile, Plus, X, Reply, ArrowDown } from "lucide-react";
+import { FileUp, ImageIcon, Video, AlertTriangle, Smile, Plus, X, Reply, ArrowDown, Sticker as StickerIcon } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
-import { EmojiPicker } from "@/components/ui/EmojiPicker";
+import { ExpressionPicker } from "@/components/ui/ExpressionPicker";
 import { useFileStore } from "@/stores/fileStore";
 import { useChatStore } from "@/stores/chatStore";
 import { cn } from "@/lib/utils";
@@ -19,7 +19,7 @@ interface MessageInputProps {
   channelId: string;
   channelName: string;
   isDm?: boolean;
-  onSend?: (content: string, attachment: AttachmentData | null, mentions?: string[]) => void;
+  onSend?: (content: string, attachment: AttachmentData | null, mentions?: string[], stickerIds?: string[]) => void;
   onTyping?: () => void;
   typingUsers?: { userId: string; username: string }[];
   members?: MemberDetailResponse[];
@@ -179,6 +179,10 @@ export function MessageInput({
     setMessage((prev) => prev + emoji);
   }
 
+  const handleStickerSelect = (stickerId: string) => {
+    onSend?.("", null, [], [stickerId]);
+  };
+
   async function handleFileUpload(file: File) {
     setUploadError(null);
     setIsAttachOpen(false);
@@ -269,19 +273,22 @@ export function MessageInput({
           backgroundColor: "#383a40",
         }}
       >
-        {showScrollDown && (
-          <div className="absolute -top-11 left-1/2 -translate-x-1/2 z-30">
-            <button
-              onClick={onScrollDown}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-[#5865F2] hover:bg-[#4752c4] text-white shadow-[0_4px_12px_rgba(0,0,0,0.3)] transition-all hover:scale-105 active:scale-95 duration-150 cursor-pointer"
-              aria-label="Scroll to bottom"
-              title="Scroll to bottom"
-              type="button"
-            >
-              <ArrowDown className="h-5 w-5" />
-            </button>
-          </div>
-        )}
+        <div
+          className={`absolute -top-11 left-1/2 -translate-x-1/2 z-30 transition-all duration-300 transform ${showScrollDown
+              ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
+              : "opacity-0 scale-75 translate-y-2 pointer-events-none"
+            }`}
+        >
+          <button
+            onClick={onScrollDown}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-[#5865F2] hover:bg-[#4752c4] text-white shadow-[0_4px_12px_rgba(0,0,0,0.3)] transition-all hover:scale-105 active:scale-95 duration-150 cursor-pointer"
+            aria-label="Scroll to bottom"
+            title="Scroll to bottom"
+            type="button"
+          >
+            <ArrowDown className="h-5 w-5" />
+          </button>
+        </div>
         {replyingTo && (
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#202225]/30 bg-[#2b2d31] rounded-t-[var(--floating-bar-radius)] animate-in slide-in-from-bottom-[6px] duration-150">
             <div className="flex min-w-0 items-center gap-2">
@@ -479,19 +486,28 @@ export function MessageInput({
             {/* Dashboard launcher right icons (Only GIF and Emoji Picker are kept) */}
             <div className="absolute right-2 top-0 bottom-0 flex items-center gap-1.5 select-none shrink-0 z-10">
 
-              {/* GIF launcher */}
-              <button
-                type="button"
-                className="p-1 text-[#b5bac1] hover:text-[#dbdee1] hover:bg-[#4e5058]/40 rounded transition-all shrink-0 cursor-pointer flex items-center justify-center h-7"
-                title="Search GIFs"
+              {/* Sticker launcher button */}
+              <ExpressionPicker
+                onEmojiSelect={handleEmojiSelect}
+                onStickerSelect={handleStickerSelect}
+                defaultTab="sticker"
               >
-                <div className="text-[10px] font-bold px-[5.5px] py-[1.5px] rounded border-2 border-current font-sans tracking-wider leading-none select-none">
-                  GIF
-                </div>
-              </button>
+                <button
+                  type="button"
+                  disabled={isUploading}
+                  className="p-[5px] text-[#b5bac1] hover:text-[#dbdee1] hover:bg-[#4e5058]/40 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-all shrink-0 cursor-pointer flex items-center justify-center"
+                  title="Stickers"
+                >
+                  <StickerIcon className="h-5 w-5" />
+                </button>
+              </ExpressionPicker>
 
               {/* Emoji Picker launcher */}
-              <EmojiPicker onEmojiSelect={handleEmojiSelect}>
+              <ExpressionPicker
+                onEmojiSelect={handleEmojiSelect}
+                onStickerSelect={handleStickerSelect}
+                defaultTab="emoji"
+              >
                 <button
                   type="button"
                   disabled={isUploading}
@@ -500,7 +516,7 @@ export function MessageInput({
                 >
                   <Smile className="h-5 w-5" />
                 </button>
-              </EmojiPicker>
+              </ExpressionPicker>
             </div>
           </div>
         </div>

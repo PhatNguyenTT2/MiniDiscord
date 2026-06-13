@@ -6,7 +6,7 @@ import { Mic, MicOff, Headphones, HeadphoneOff, Settings } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { useUIStore } from "@/stores/uiStore";
 import { useAuthStore } from "@/stores/authStore";
-import { soundEngine } from "@/lib/soundEngine";
+import { useVoiceStore } from "@/stores/voiceStore";
 import { cn } from "@/lib/utils";
 
 /**
@@ -20,8 +20,12 @@ export function UserPanel() {
   const { t } = useTranslation();
   const openSettings = useUIStore((s) => s.openSettings);
   const user = useAuthStore((s) => s.user);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isDeafened, setIsDeafened] = useState(false);
+
+  // Sync mute/deafen state directly with useVoiceStore
+  const isMuted = useVoiceStore((s) => s.isMuted);
+  const isDeafened = useVoiceStore((s) => s.isDeafened);
+  const toggleMuteStore = useVoiceStore((s) => s.toggleMute);
+  const toggleDeafenStore = useVoiceStore((s) => s.toggleDeafen);
 
   if (!user) {
     return (
@@ -34,7 +38,7 @@ export function UserPanel() {
           style={{
             minHeight: "var(--floating-user-panel-height)",
             borderRadius: "var(--floating-bar-radius)",
-            backgroundColor: "var(--muted)",
+            backgroundColor: "#2b2d31",
           }}
         >
           <div className="h-8 w-8 rounded-full bg-[#3f4147] animate-pulse shrink-0" />
@@ -63,21 +67,20 @@ export function UserPanel() {
     | "dnd";
 
   function toggleMute() {
-    soundEngine?.play(isMuted ? "unmute" : "mute");
-    setIsMuted((prev) => !prev);
+    toggleMuteStore();
   }
 
   function toggleDeafen() {
-    soundEngine?.play(isDeafened ? "undeafen" : "deafen");
-    setIsDeafened((prev) => {
-      const next = !prev;
-      if (next) setIsMuted(true);
-      return next;
-    });
+    toggleDeafenStore();
   }
 
   const micActive = !isMuted;
   const headphoneActive = !isDeafened;
+
+  // Read voice presence
+  const currentChannel = useVoiceStore?.((s) => s.currentChannel);
+  const activeCallRoomId = useVoiceStore?.((s) => s.activeCallRoomId);
+  const isInVoice = currentChannel || activeCallRoomId;
 
   return (
     <div
@@ -89,7 +92,7 @@ export function UserPanel() {
         style={{
           minHeight: "var(--floating-user-panel-height)",
           borderRadius: "var(--floating-bar-radius)",
-          backgroundColor: "var(--muted)",
+          backgroundColor: "#2b2d31",
         }}
       >
         <StatusAvatar
@@ -103,8 +106,15 @@ export function UserPanel() {
           <p className="truncate text-[15px] font-semibold text-foreground leading-tight">
             {user.displayName || user.username}
           </p>
-          <p className="truncate text-[13px] text-muted-foreground leading-tight">
-            {t(`status.${statusKey}`)}
+          <p className="truncate text-[13px] leading-tight select-none mt-0.5">
+            {isInVoice ? (
+              <span className="flex items-center gap-1 text-[#23a55a] font-medium leading-none">
+                <span className="inline-block w-2.5 h-2.5 shrink-0 bg-[#23a55a] rounded-full animate-pulse mr-0.5" />
+                {t("voice.inVoiceChannel")}
+              </span>
+            ) : (
+              <span className="text-muted-foreground">{t(`status.${statusKey}`)}</span>
+            )}
           </p>
         </div>
 

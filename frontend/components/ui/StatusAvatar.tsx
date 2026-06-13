@@ -62,7 +62,6 @@ export function StatusAvatar({
         if (isMounted) setResolvedUrl(url);
       })
       .catch((err) => {
-        console.error("StatusAvatar: failed to resolve URL", err);
         if (isMounted) setResolvedUrl(null);
       });
 

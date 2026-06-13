@@ -120,19 +120,55 @@ public class VoiceStateService {
   }
 
   // ── Transient DM Call State Management ──
+  // voice:call:{roomId} → HASH {callerId, targetUserId, status, startedAt} (DM
+  // call transient state)
+  // voice:active_call_user:{userId} → String (roomId)
 
-  public void setCallState(String roomId, String callerId, String status) {
+  public void setCallState(String roomId, String callerId, String targetUserId, String status) {
+    setCallState(roomId, null, callerId, targetUserId, status, null, null);
+  }
+
+  public void setCallState(String roomId, String channelId, String callerId, String targetUserId, String status,
+      String callerName, String callerAvatar) {
     String key = "voice:call:" + roomId;
-    redisTemplate.opsForHash().putAll(key, Map.of(
-        "callerId", callerId,
-        "status", status,
-        "startedAt", String.valueOf(System.currentTimeMillis())));
+    Map<String, String> mapData = new HashMap<>();
+    mapData.put("callerId", callerId);
+    mapData.put("targetUserId", targetUserId);
+    mapData.put("status", status);
+    mapData.put("startedAt", String.valueOf(System.currentTimeMillis()));
+    if (channelId != null) {
+      mapData.put("channelId", channelId);
+    }
+    if (callerName != null) {
+      mapData.put("callerName", callerName);
+    }
+    if (callerAvatar != null) {
+      mapData.put("callerAvatar", callerAvatar);
+    }
+    redisTemplate.opsForHash().putAll(key, mapData);
     // Auto expire in 60s if the callee does not accept or decline
     redisTemplate.expire(key, Duration.ofSeconds(60));
-    log.info("DM Call state created for room: {} caller: {} status: {}", roomId, callerId, status);
+
+    // Store reverse mappings
+    redisTemplate.opsForValue().set("voice:active_call_user:" + callerId, roomId, Duration.ofSeconds(60));
+    redisTemplate.opsForValue().set("voice:active_call_user:" + targetUserId, roomId, Duration.ofSeconds(60));
+
+    log.info("DM Call state created for room: {} caller: {} target: {} status: {}", roomId, callerId, targetUserId,
+        status);
   }
 
   public void clearCallState(String roomId) {
+    Map<Object, Object> callState = getCallState(roomId);
+    if (callState != null && !callState.isEmpty()) {
+      String callerId = (String) callState.get("callerId");
+      String targetUserId = (String) callState.get("targetUserId");
+      if (callerId != null) {
+        redisTemplate.delete("voice:active_call_user:" + callerId);
+      }
+      if (targetUserId != null) {
+        redisTemplate.delete("voice:active_call_user:" + targetUserId);
+      }
+    }
     redisTemplate.delete("voice:call:" + roomId);
     log.info("DM Call state cleared for room: {}", roomId);
   }
@@ -146,7 +182,24 @@ public class VoiceStateService {
     redisTemplate.opsForHash().put(key, "status", "ACTIVE");
     redisTemplate.opsForHash().put(key, "startedAt", String.valueOf(System.currentTimeMillis()));
     redisTemplate.expire(key, Duration.ofDays(1));
+
+    // Refresh reverse mapping TTL to 1 day
+    Map<Object, Object> callState = getCallState(roomId);
+    if (callState != null && !callState.isEmpty()) {
+      String callerId = (String) callState.get("callerId");
+      String targetUserId = (String) callState.get("targetUserId");
+      if (callerId != null) {
+        redisTemplate.expire("voice:active_call_user:" + callerId, Duration.ofDays(1));
+      }
+      if (targetUserId != null) {
+        redisTemplate.expire("voice:active_call_user:" + targetUserId, Duration.ofDays(1));
+      }
+    }
     log.info("DM Call state transitioned to ACTIVE for room: {}", roomId);
+  }
+
+  public String getActiveCallRoomForUser(String userId) {
+    return redisTemplate.opsForValue().get("voice:active_call_user:" + userId);
   }
 
   public Map<Object, Object> getCallState(String roomId) {

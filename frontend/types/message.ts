@@ -24,6 +24,7 @@ export interface Message {
   createdAt: string;
   replyTo: ReplyReference | null;
   mentions?: string[];
+  stickerIds?: string[];
 }
 
 export interface Reaction {
@@ -46,6 +47,7 @@ export interface ChatMessage {
   fileKey?: string;
   isForwarded?: boolean;
   mentions?: string[];
+  stickerIds?: string[];
 }
 
 export interface TypingEvent {

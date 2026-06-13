@@ -413,8 +413,22 @@
     "callStarted": "Voice call started",
     "callMissed": "Missed call",
     "callEndedDuration": "Call ended after {duration}",
+    "callCompletedLog": "{caller} started a call that lasted {duration}.",
+    "callMissedLog": "{caller} started a missed call.",
+    "callUnavailable": "User is currently offline",
     "durationSeconds": "{count} seconds",
-    "durationMinutesSeconds": "{minutes} minutes {seconds} seconds"
+    "durationMinutesSeconds": "{minutes} minutes {seconds} seconds",
+    "inVoiceChannel": "In Voice Channel",
+    "voiceCallDetails": "Voice Call Details",
+    "averagePing": "Average ping:",
+    "latestPing": "Latest ping:",
+    "pingDetailsInfo": "Connection is stable. You can converse in HD quality audio.",
+    "secureConnection": "Secure Connection",
+    "micTest": "Mic Test",
+    "startTest": "Test",
+    "stopTest": "Stop",
+    "sponsoredBy": "Sponsored by",
+    "learnMore": "Learn more"
   },
   "imageViewer": {
     "zoomIn": "Zoom In",

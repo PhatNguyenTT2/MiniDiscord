@@ -62,51 +62,32 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   error: null,
 
   fetchMyRooms: async (skipCache?: boolean) => {
+    // A. Nạp nhanh từ Cache (Nếu có)
+    const cache = loadCache();
+    if (cache && !skipCache) {
+      set({ rooms: cache.rooms, channels: cache.channels, members: cache.members, isLoading: false });
+      return;
+    }
+
+    // B. Chỉ fetch danh sách phòng (Nhanh, chỉ 1 request)
+    set({ isLoading: true });
     try {
-      set({ isLoading: true, error: null });
-
-      // Show cached data for instant UI, but DON'T background refresh here.
-      // The post-WS-connect refresh in useWebSocket.ts handles status updates
-      // to avoid race conditions with real-time PRESENCE_UPDATE events.
-      const cache = loadCache();
-      if (cache && !skipCache) {
-        set({ rooms: cache.rooms, channels: cache.channels, members: cache.members, isLoading: false });
-        return;
-      }
-
       const res = await api.get<{ message: string; data: Room[] }>("/rooms/my");
       const rooms = res.data.data;
-      console.log("[roomStore] fetchMyRooms:", rooms.map(r => ({ id: r.id, type: r.type, name: r.name })));
+
+      // Gán rooms vào store ngay lập tức để UI render và WebSocket nhận diện được dependency
       set({ rooms, isLoading: false });
 
-      // === Active-First Lazy Loading ===
-      // 1. Detect active room from URL (using negative lookahead to skip "me")
-      const activeRoomId = typeof window !== 'undefined'
-        ? window.location.pathname.match(/\/channels\/(?!me\b)([^/]+)/)?.[1]
-        : null;
-      const activeRoom = activeRoomId
-        ? rooms.find(r => r.id === activeRoomId)
-        : null;
-
-      // 2. Fetch active room IMMEDIATELY (0 delay)
-      if (activeRoom) {
-        await get().fetchChannels(activeRoom.id);
-        await get().fetchMembers(activeRoom.id);
-      }
-
-      // 3. Eagerly fetch channels & members for all DM rooms (needed for sidebar and mapping)
-      const dmRooms = rooms.filter(r => r.type === "DM");
-      for (const dmRoom of dmRooms) {
-        if (dmRoom.id === activeRoom?.id) continue;
-        await get().fetchChannels(dmRoom.id);
-        await get().fetchMembers(dmRoom.id);
-      }
-
-      saveCache(get().rooms, get().channels, get().members);
+      // C. Khởi chạy luồng nạp dữ liệu ngầm (Fire-and-forget)
+      // LƯU Ý: KHÔNG dùng await ở đây để tránh block hàm fetchMyRooms
+      hydrateRoomDetails(rooms);
     } catch (error: any) {
+      console.error("Failed to fetch rooms:", error);
       set({ error: error.message, isLoading: false });
     }
   },
+
+  
 
   fetchChannels: async (roomId: string) => {
     try {
@@ -279,4 +260,41 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     await Promise.all(dmRooms.map(r => get().fetchMembers(r.id)));
   },
 }));
+
+// 2. Định nghĩa hàm nạp dữ liệu chạy ngầm
+async function hydrateRoomDetails(rooms: Room[]) {
+  const store = useRoomStore.getState;
+
+  // A. Ưu tiên nạp dữ liệu cho phòng đang Active (Đang xem)
+  // Dùng Regex lấy ID phòng từ URL, loại trừ chuỗi "me"
+  const activeRoomId = typeof window !== "undefined"
+    ? window.location.pathname.match(/\/channels\/(?!me\b)([^/]+)/)?.[1]
+    : null;
+  const activeRoom = activeRoomId ? rooms.find(r => r.id === activeRoomId) : null;
+
+  if (activeRoom) {
+    // Đợi phòng active nạp xong kênh và thành viên
+    await Promise.allSettled([
+      store().fetchChannels(activeRoom.id),
+      store().fetchMembers(activeRoom.id),
+    ]);
+  }
+
+  // B. Nạp dữ liệu các phòng DM khác theo từng cụm (Batching)
+  // Giới hạn 3 phòng / lượt để chừa băng thông cho WebSocket và tải ảnh
+  const dmRooms = rooms.filter(r => r.type === "DM" && r.id !== activeRoom?.id);
+
+  for (let i = 0; i < dmRooms.length; i += 3) {
+    const batch = dmRooms.slice(i, i + 3);
+    await Promise.allSettled(
+      batch.flatMap(r => [
+        store().fetchChannels(r.id),
+        store().fetchMembers(r.id)
+      ])
+    );
+  }
+
+  // C. Lưu cache sau khi mọi dữ liệu đã nạp xong
+  saveCache(store().rooms, store().channels, store().members);
+}
 

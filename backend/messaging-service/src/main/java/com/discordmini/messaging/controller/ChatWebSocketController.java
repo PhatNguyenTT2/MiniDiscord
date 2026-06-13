@@ -45,6 +45,12 @@ public class ChatWebSocketController {
         // 2. Membership Check
         membershipClient.verifyMembership(userId, message.getRoomId());
 
+        // Validation: Verify stickerIds limit (max 1)
+        if (message.getStickerIds() != null && message.getStickerIds().size() > 1) {
+            log.warn("Message rejected: User tried to send more than 1 sticker: {}", message.getStickerIds());
+            return;
+        }
+
         // 3. Populate server-controlled fields
         message.setMessageId(UUID.randomUUID().toString());
         message.setSenderId(userId);
@@ -93,6 +99,7 @@ public class ChatWebSocketController {
                 .replyTo(message.getReplyTo())
                 .createdAt(now)
                 .mentions(mentions)
+                .stickerIds(message.getStickerIds())
                 .build();
 
         // 5. Non-blocking Publish

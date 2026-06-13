@@ -413,8 +413,22 @@
     "callStarted": "Bắt đầu cuộc gọi thoại",
     "callMissed": "Cuộc gọi nhỡ",
     "callEndedDuration": "Cuộc gọi kết thúc sau {duration}",
+    "callCompletedLog": "{caller} đã bắt đầu cuộc gọi kéo dài trong {duration}.",
+    "callMissedLog": "{caller} đã bắt đầu một cuộc gọi nhỡ.",
+    "callUnavailable": "Người dùng hiện không trực tuyến",
     "durationSeconds": "{count} giây",
-    "durationMinutesSeconds": "{minutes} phút {seconds} giây"
+    "durationMinutesSeconds": "{minutes} phút {seconds} giây",
+    "inVoiceChannel": "Trong kênh thoại",
+    "voiceCallDetails": "Chi tiết cuộc gọi thoại",
+    "averagePing": "Mức ping trung bình:",
+    "latestPing": "Mức ping gần nhất:",
+    "pingDetailsInfo": "Đường truyền kết nối ổn định. Bạn có thể trò chuyện thoại với chất lượng âm thanh HD.",
+    "secureConnection": "Kết Nối Bảo Mật",
+    "micTest": "Kiểm tra Mic",
+    "startTest": "Kiểm tra",
+    "stopTest": "Dừng",
+    "sponsoredBy": "Tài trợ bởi",
+    "learnMore": "Tìm hiểu thêm"
   },
   "imageViewer": {
     "zoomIn": "Phóng to",

@@ -2,7 +2,7 @@
 
 import { StatusAvatar } from "@/components/ui/StatusAvatar";
 import { MessageActions } from "@/components/chat/MessageActions";
-import { Reply, FileIcon, Pin, CornerUpRight, AlertCircle } from "lucide-react";
+import { Reply, FileIcon, Pin, CornerUpRight, AlertCircle, Phone, PhoneOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chatStore";
 import { ForwardModal } from "@/components/chat/ForwardModal";
@@ -15,6 +15,7 @@ import { useTranslation, getDateLocale } from "@/lib/i18n";
 import { useState, useRef, useEffect } from "react";
 import { getStompClient } from "@/lib/websocket";
 import { getResolvedFileUrl } from "@/lib/fileResolver";
+import { StickerPreview } from "@/components/chat/StickerPreview";
 
 interface MessageItemProps {
   message: Message;
@@ -269,15 +270,29 @@ export function MessageItem({
 
   if (message.type === "SYSTEM") {
     const isPinnedNotification = message.content === "pinned_message";
+    const isCompletedCall = message.content.startsWith("voice.callCompletedLog:") || message.content.startsWith("voice.callEndedDuration:");
+    const isMissedCall = message.content === "voice.callMissed" || message.content === "voice.callMissedLog";
+    const isUnavailableCall = message.content === "voice.callUnavailable";
+    const isCallEvent = isCompletedCall || isMissedCall || isUnavailableCall;
+
+    let icon = <Pin className="h-4 w-4 text-[#b5bac1]" />;
+    if (isCompletedCall) {
+      icon = <Phone className="h-4 w-4 text-[#23a55a] fill-current" />;
+    } else if (isMissedCall || isUnavailableCall) {
+      icon = <PhoneOff className="h-4 w-4 text-[#ed4245]" />;
+    }
+
     return (
       <div className="group relative flex gap-4 px-4 py-1.5 transition-colors hover:bg-background-secondary/30 my-1">
         <div className="w-10 shrink-0 flex items-center justify-center">
-          <Pin className="h-4 w-4 text-[#b5bac1]" />
+          {icon}
         </div>
         <div className="flex-1 min-w-0 pr-12 text-[14.5px] leading-relaxed text-[#b5bac1]">
-          <span className="font-semibold text-white hover:underline cursor-pointer mr-1.5 inline-block">
-            {resolvedSenderName}
-          </span>
+          {!isCallEvent && (
+            <span className="font-semibold text-white hover:underline cursor-pointer mr-1.5 inline-block">
+              {resolvedSenderName}
+            </span>
+          )}
           {isPinnedNotification ? (
             <>
               {t("chat.pinnedMessageNotification")}
@@ -293,15 +308,20 @@ export function MessageItem({
             </>
           ) : message.content === "voice.callStarted" ? (
             <span>{t("voice.callStarted")}</span>
-          ) : message.content === "voice.callMissed" ? (
-            <span>{t("voice.callMissed")}</span>
-          ) : message.content.startsWith("voice.callEndedDuration:") ? (
+          ) : isMissedCall ? (
+            <span>{t("voice.callMissedLog", { caller: resolvedSenderName })}</span>
+          ) : isUnavailableCall ? (
+            <span>{t("voice.callUnavailable")}</span>
+          ) : isCompletedCall ? (
             (() => {
-              const secs = parseInt(message.content.split(":")[1] || "0", 10);
+              // Extract seconds depending on legacy (voice.callEndedDuration:secs) vs new format (voice.callCompletedLog:secs)
+              const parts = message.content.split(":");
+              const secsRaw = parts[1] || "0";
+              const secs = parseInt(secsRaw, 10);
               const durationText = secs < 60
                 ? t("voice.durationSeconds", { count: secs })
                 : t("voice.durationMinutesSeconds", { minutes: Math.floor(secs / 60), seconds: secs % 60 });
-              return <span>{t("voice.callEndedDuration", { duration: durationText })}</span>;
+              return <span>{t("voice.callCompletedLog", { caller: resolvedSenderName, duration: durationText })}</span>;
             })()
           ) : (
             <span>{message.content}</span>
@@ -415,6 +435,14 @@ export function MessageItem({
               </span>
             )}
           </p>
+        )}
+
+        {message.stickerIds && message.stickerIds.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {message.stickerIds.map((stickerId) => (
+              <StickerPreview key={stickerId} stickerId={stickerId} />
+            ))}
+          </div>
         )}
 
         {(resolvedUrl || message.fileKey) && (

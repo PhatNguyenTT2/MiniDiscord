@@ -65,7 +65,12 @@ export default function ChannelPage() {
   const token = useAuthStore((s) => s.token);
 
   const handleSend = useCallback(
-    (content: string, attachment?: { fileKey: string; fileName: string; fileSize: number } | null, mentions?: string[]) => {
+    (
+      content: string,
+      attachment?: { fileKey: string; fileName: string; fileSize: number } | null,
+      mentions?: string[],
+      stickerIds?: string[]
+    ) => {
       if (!token) return;
       const client = getStompClient(token);
 
@@ -93,6 +98,7 @@ export default function ChannelPage() {
           }
           : null,
         mentions,
+        stickerIds,
       };
 
       // Optimistic message
@@ -117,6 +123,7 @@ export default function ChannelPage() {
         createdAt: new Date().toISOString(),
         replyTo: payload.replyTo,
         mentions,
+        stickerIds,
         status: client.connected ? "SENDING" : "FAILED",
       };
 

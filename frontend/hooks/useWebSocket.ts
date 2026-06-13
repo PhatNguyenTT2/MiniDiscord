@@ -72,6 +72,10 @@ export function useWebSocket() {
         subscriptionsRef.current.set(roomKey, sub);
       });
 
+      // Check active calls status (e.g. if we just connected/reconnected/reloaded while a call is active/ringing)
+      const { useVoiceStore } = require("@/stores/voiceStore");
+      useVoiceStore.getState().checkActiveCall();
+
       // ── Sync messages for the active channel after reconnection ──
       const activeChannelId = useUIStore.getState().activeChannelId;
       if (activeChannelId) {
@@ -161,6 +165,33 @@ function handleRoomMessage(msg: IMessage) {
 
     if (eventType === "MESSAGE_PINNED") {
       useChatStore.getState().setPinnedState(data.channelId, data.messageId, data.isPinned);
+      return;
+    }
+
+    if (eventType === "SYSTEM_MESSAGE_NEW") {
+      useChatStore.getState().receiveMessage(data.channelId, {
+        id: data.messageId,
+        messageId: data.messageId,
+        roomId: data.roomId,
+        channelId: data.channelId,
+        senderId: data.senderId,
+        senderName: data.senderName,
+        senderAvatar: null,
+        type: "SYSTEM",
+        content: data.content,
+        fileKey: null,
+        fileName: null,
+        fileSize: null,
+        reactions: [],
+        isEdited: false,
+        isDeleted: false,
+        isPinned: false,
+        isForwarded: false,
+        editedAt: null,
+        createdAt: data.createdAt || new Date().toISOString(),
+        replyTo: null,
+        mentions: [],
+      });
       return;
     }
 
@@ -364,7 +395,7 @@ function handleVoiceMessage(msg: IMessage) {
         useVoiceStore.getState().handleCallEvent({
           action: "ACCEPT",
           roomId: data.roomId,
-          callerId: data.callerId,
+          callerId: data.acceptedBy || data.callerId,
           callerName: data.callerName,
           callerAvatar: data.callerAvatar,
           targetUserId: data.targetUserId,

@@ -367,7 +367,7 @@ export const MessageList = memo(forwardRef<MessageListHandle, MessageListProps>(
       messagesRef.current = messages;
     }, [messages]);
 
-    // Scroll handler — ONLY infinite scroll up (no auto-dismiss)
+    // Scroll handler — infinite scroll up and real-time bottom detection
     const handleScroll = useCallback(() => {
       const el = scrollContainerRef.current;
       if (!el || !isReadyToDetectRef.current) return;
@@ -396,7 +396,31 @@ export const MessageList = memo(forwardRef<MessageListHandle, MessageListProps>(
           isFetchingOlderRef.current = false;
         });
       }
-    }, [isLoading, roomId, channelId, fetchMessages]);
+
+      // Bottom detection
+      const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+      if (isAtBottom && !isAtBottomRef.current) {
+        isAtBottomRef.current = true;
+        hasReachedBottomRef.current = true;
+        onScrollStateChange?.(true);
+
+        const cid = channelIdRef.current;
+        if (cid && !manuallyMarkedUnreadRef.current) {
+          const currentUnread = useNotificationStore.getState().getUnreadCount(cid);
+          if (currentUnread > 0) {
+            markAsRead(cid);
+            setIsDismissed(true);
+            const rId = roomIdRef.current;
+            if (rId && latestMessageIdRef.current) {
+              onMarkAsReadBackend?.(rId, cid, latestMessageIdRef.current);
+            }
+          }
+        }
+      } else if (!isAtBottom && isAtBottomRef.current && !isProgrammaticScrollRef.current) {
+        isAtBottomRef.current = false;
+        onScrollStateChange?.(false);
+      }
+    }, [isLoading, roomId, channelId, fetchMessages, markAsRead, onScrollStateChange, onMarkAsReadBackend]);
 
     // Auto-scroll to bottom when NEW messages arrive (only if user was already at bottom)
     const prevMessagesLenRef = useRef(messages.length);

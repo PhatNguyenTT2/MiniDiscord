@@ -31,11 +31,11 @@ api.interceptors.response.use(
       return api.request(error.config);
     }
 
-    if (!error.response && error.code === "ERR_NETWORK") {
-      // Only mark disconnected for non-file-upload requests.
-      // File upload failures should NOT cascade into WebSocket disconnection.
-      const isFileUpload = error.config?.url?.includes("/files/");
-      if (!isFileUpload) {
+    if (!error.response && (error.code === "ERR_NETWORK" || error.code === "ECONNABORTED")) {
+      // Only mark disconnected for non-file requests.
+      // File API failures (downloads/uploads/URL resolution) should NOT cascade into WebSocket disconnection.
+      const isFileApi = error.config?.url?.includes("/files/");
+      if (!isFileApi) {
         useNetworkStore.getState().setWsStatus("disconnected");
       }
     }

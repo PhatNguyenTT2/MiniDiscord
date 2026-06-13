@@ -23,14 +23,12 @@ public class MessageEventListener {
     @RabbitListener(queues = "chat-history.message.queue")
     public void onMessageEvent(MessageEvent event) {
         if (event.getNonce() != null && !event.getNonce().trim().isEmpty()) {
-            org.springframework.data.mongodb.core.query.Query query =
-                new org.springframework.data.mongodb.core.query.Query(
-                    org.springframework.data.mongodb.core.query.Criteria.where("nonce").is(event.getNonce())
-                );
+            org.springframework.data.mongodb.core.query.Query query = new org.springframework.data.mongodb.core.query.Query(
+                    org.springframework.data.mongodb.core.query.Criteria.where("nonce").is(event.getNonce()));
             Message existing = mongoTemplate.findOne(query, Message.class);
             if (existing != null) {
                 log.info("Idempotency hit for nonce: {}. Re-broadcasting existing message: {}",
-                    event.getNonce(), existing.getMessageId());
+                        event.getNonce(), existing.getMessageId());
 
                 java.util.Map<String, Object> sysEvent = new java.util.HashMap<>();
                 sysEvent.put("eventType", "MESSAGE_NEW");
@@ -47,6 +45,7 @@ public class MessageEventListener {
                 sysEvent.put("fileKey", existing.getFileKey());
                 sysEvent.put("fileName", existing.getFileName());
                 sysEvent.put("fileSize", existing.getFileSize());
+                sysEvent.put("stickerIds", existing.getStickerIds());
                 sysEvent.put("createdAt", existing.getCreatedAt().toString());
 
                 rabbitTemplate.convertAndSend("chat.exchange", "message.system", sysEvent);
@@ -81,6 +80,7 @@ public class MessageEventListener {
                 .isForwarded(event.isForwarded())
                 .replyTo(replyTo)
                 .mentions(event.getMentions())
+                .stickerIds(event.getStickerIds())
                 .createdAt(event.getCreatedAt() != null ? event.getCreatedAt() : Instant.now())
                 .build();
 

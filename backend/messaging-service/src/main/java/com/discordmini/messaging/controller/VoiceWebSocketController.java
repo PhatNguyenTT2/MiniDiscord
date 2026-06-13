@@ -5,6 +5,7 @@ import com.discordmini.messaging.client.MembershipClient;
 import com.discordmini.messaging.model.dto.*;
 import com.discordmini.messaging.service.MessageRouter;
 import com.discordmini.messaging.service.VoiceStateService;
+import com.discordmini.messaging.service.PresenceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.bson.types.ObjectId;
@@ -26,6 +27,7 @@ public class VoiceWebSocketController {
   private final MembershipClient membershipClient;
   private final MessageRouter messageRouter;
   private final SimpMessagingTemplate messagingTemplate;
+  private final PresenceService presenceService;
 
   @MessageMapping("/voice.join")
   public void joinVoice(@Payload VoiceJoinRequest request, Principal principal) {
@@ -130,19 +132,44 @@ public class VoiceWebSocketController {
   @MessageMapping("/voice.call")
   public void initiateCall(@Payload VoiceCallEvent event, Principal principal) {
     String callerId = principal.getName();
-    voiceStateService.setCallState(event.getRoomId(), callerId, "RINGING");
+    String targetUserId = event.getTargetUserId();
+
+    // Online presence pre-check
+    if (!presenceService.isUserOnline(targetUserId)) {
+      log.info("Callee {} is offline. Aborting DM call and replying to caller {}", targetUserId, callerId);
+      messagingTemplate.convertAndSendToUser(
+          callerId, "/queue/voice",
+          VoiceCallEvent.builder()
+              .eventType("VOICE_CALL")
+              .roomId(event.getRoomId())
+              .callerId(callerId)
+              .targetUserId(targetUserId)
+              .action("UNAVAILABLE")
+              .build());
+      return;
+    }
+
+    voiceStateService.setCallState(
+        event.getRoomId(),
+        event.getChannelId(),
+        callerId,
+        targetUserId,
+        "RINGING",
+        event.getCallerName(),
+        event.getCallerAvatar());
 
     messagingTemplate.convertAndSendToUser(
-        event.getTargetUserId(), "/queue/voice",
+        targetUserId, "/queue/voice",
         VoiceCallEvent.builder()
             .eventType("VOICE_CALL")
             .roomId(event.getRoomId())
+            .channelId(event.getChannelId())
             .callerId(callerId)
             .callerName(event.getCallerName())
             .callerAvatar(event.getCallerAvatar())
             .action("RING")
             .build());
-    log.info("DM call initiated from caller {} to target target user {}", callerId, event.getTargetUserId());
+    log.info("DM call initiated from caller {} to target target user {}", callerId, targetUserId);
   }
 
   @MessageMapping("/voice.accept")
@@ -166,18 +193,6 @@ public class VoiceWebSocketController {
             "roomId", roomId,
             "acceptedBy", principal.getName()));
 
-    // Write system log: Call started
-    MessageEvent startLog = MessageEvent.builder()
-        .id(new ObjectId().toHexString())
-        .messageId(UUID.randomUUID().toString())
-        .roomId(roomId)
-        .senderId(callerId)
-        .content("voice.callStarted")
-        .type("SYSTEM")
-        .createdAt(Instant.now())
-        .build();
-    messageRouter.publishToHistory(startLog);
-
     log.info("DM call accepted for room {}, signaling sent to caller {}", roomId, callerId);
   }
 
@@ -191,18 +206,38 @@ public class VoiceWebSocketController {
     }
 
     String callerId = (String) callState.get("callerId");
+    String channelId = (String) callState.get("channelId");
+    String callerName = (String) callState.get("callerName");
+    String callerAvatar = (String) callState.get("callerAvatar");
 
     // Write system log: Missed call
     MessageEvent missedLog = MessageEvent.builder()
         .id(new ObjectId().toHexString())
         .messageId(UUID.randomUUID().toString())
         .roomId(roomId)
+        .channelId(channelId)
         .senderId(callerId)
-        .content("voice.callMissed")
+        .senderName(callerName != null ? callerName : "User")
+        .senderAvatar(callerAvatar)
+        .content("voice.callMissedLog")
         .type("SYSTEM")
         .createdAt(Instant.now())
         .build();
     messageRouter.publishToHistory(missedLog);
+
+    ChatMessage chatMsg = ChatMessage.builder()
+        .id(missedLog.getId())
+        .messageId(missedLog.getMessageId())
+        .roomId(missedLog.getRoomId())
+        .channelId(missedLog.getChannelId())
+        .senderId(missedLog.getSenderId())
+        .senderName(missedLog.getSenderName())
+        .senderAvatar(missedLog.getSenderAvatar())
+        .content(missedLog.getContent())
+        .type(missedLog.getType())
+        .createdAt(missedLog.getCreatedAt().toString())
+        .build();
+    messageRouter.fanOutToMembers(chatMsg, roomId);
 
     voiceStateService.clearCallState(roomId);
 
@@ -220,6 +255,12 @@ public class VoiceWebSocketController {
     Map<Object, Object> callState = voiceStateService.getCallState(roomId);
 
     long startedAt = 0;
+    String callerId = principal.getName();
+    String channelId = null;
+    String callerName = null;
+    String callerAvatar = null;
+    String status = null;
+
     if (callState != null && !callState.isEmpty()) {
       String startStr = (String) callState.get("startedAt");
       if (startStr != null) {
@@ -229,10 +270,16 @@ public class VoiceWebSocketController {
           log.error("Could not parse call start duration: {}", startStr);
         }
       }
+      String storedCallerId = (String) callState.get("callerId");
+      if (storedCallerId != null) {
+        callerId = storedCallerId;
+      }
+      channelId = (String) callState.get("channelId");
+      callerName = (String) callState.get("callerName");
+      callerAvatar = (String) callState.get("callerAvatar");
+      status = (String) callState.get("status");
       voiceStateService.clearCallState(roomId);
     }
-
-    long duration = startedAt > 0 ? (System.currentTimeMillis() - startedAt) / 1000 : 0;
 
     // Broadcast to both peers in DM room
     messageRouter.fanOutSystemEvent(Map.of(
@@ -242,18 +289,59 @@ public class VoiceWebSocketController {
             "roomId", roomId)),
         roomId);
 
-    // Render system log for historical logs
-    MessageEvent logEvent = MessageEvent.builder()
-        .id(new ObjectId().toHexString())
-        .messageId(UUID.randomUUID().toString())
-        .roomId(roomId)
-        .senderId(principal.getName())
-        .content("voice.callEndedDuration:" + duration)
-        .type("SYSTEM")
-        .createdAt(Instant.now())
-        .build();
-    messageRouter.publishToHistory(logEvent);
-    log.info("DM call ended in room {} after duration: {}s", roomId, duration);
+    // Only write system log if call state details were resolved (first end trigger)
+    if (callState != null && !callState.isEmpty()) {
+      boolean isRinging = "RINGING".equals(status);
+      MessageEvent logEvent;
+
+      if (isRinging) {
+        logEvent = MessageEvent.builder()
+            .id(new ObjectId().toHexString())
+            .messageId(UUID.randomUUID().toString())
+            .roomId(roomId)
+            .channelId(channelId)
+            .senderId(callerId)
+            .senderName(callerName != null ? callerName : "User")
+            .senderAvatar(callerAvatar)
+            .content("voice.callMissedLog")
+            .type("SYSTEM")
+            .createdAt(Instant.now())
+            .build();
+      } else {
+        long duration = startedAt > 0 ? (System.currentTimeMillis() - startedAt) / 1000 : 0;
+        logEvent = MessageEvent.builder()
+            .id(new ObjectId().toHexString())
+            .messageId(UUID.randomUUID().toString())
+            .roomId(roomId)
+            .channelId(channelId)
+            .senderId(callerId)
+            .senderName(callerName != null ? callerName : "User")
+            .senderAvatar(callerAvatar)
+            .content("voice.callCompletedLog:" + duration)
+            .type("SYSTEM")
+            .createdAt(Instant.now())
+            .build();
+      }
+
+      messageRouter.publishToHistory(logEvent);
+
+      ChatMessage chatMsg = ChatMessage.builder()
+          .id(logEvent.getId())
+          .messageId(logEvent.getMessageId())
+          .roomId(logEvent.getRoomId())
+          .channelId(logEvent.getChannelId())
+          .senderId(logEvent.getSenderId())
+          .senderName(logEvent.getSenderName())
+          .senderAvatar(logEvent.getSenderAvatar())
+          .content(logEvent.getContent())
+          .type(logEvent.getType())
+          .createdAt(logEvent.getCreatedAt().toString())
+          .build();
+      messageRouter.fanOutToMembers(chatMsg, roomId);
+
+      log.info("DM call ended in room {} with status: {}. System event logged.", roomId,
+          isRinging ? "MISSED" : "COMPLETED");
+    }
   }
 
   private String formatDuration(long seconds) {

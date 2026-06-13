@@ -5,6 +5,7 @@ import { useVoiceStore } from "@/stores/voiceStore";
 import { useTranslation } from "@/lib/i18n";
 import { Phone, X } from "lucide-react";
 import { soundEngine } from "@/lib/soundEngine";
+import { getResolvedFileUrl } from "@/lib/fileResolver";
 
 export function IncomingCallModal() {
   const { t } = useTranslation();
@@ -13,11 +14,23 @@ export function IncomingCallModal() {
   const declineCall = useVoiceStore((s) => s.declineCall);
 
   const [isRingtoneBlocked, setIsRingtoneBlocked] = useState(false);
+  const [resolvedAvatar, setResolvedAvatar] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!incomingCall) return;
+    if (!incomingCall) {
+      setResolvedAvatar(null);
+      return;
+    }
 
     setIsRingtoneBlocked(false);
+
+    if (incomingCall.callerAvatar) {
+      getResolvedFileUrl(incomingCall.callerAvatar)
+        .then((url) => setResolvedAvatar(url))
+        .catch(() => setResolvedAvatar(null));
+    } else {
+      setResolvedAvatar(null);
+    }
 
     if (soundEngine) {
       soundEngine.playLoop("call_ringing")
@@ -27,12 +40,19 @@ export function IncomingCallModal() {
         });
     }
 
+    // 60-second automatic decline timeout
+    const ringTimeout = setTimeout(() => {
+      console.log("[IncomingCallModal] Ringing timeout reached after 60s. Auto declining.");
+      declineCall();
+    }, 60000);
+
     return () => {
       if (soundEngine) {
         soundEngine.stopLoop("call_ringing");
       }
+      clearTimeout(ringTimeout);
     };
-  }, [incomingCall]);
+  }, [incomingCall, declineCall]);
 
   if (!incomingCall) return null;
 
@@ -43,9 +63,9 @@ export function IncomingCallModal() {
         {/* Ringing waves avatar container */}
         <div className="relative mb-4 flex items-center justify-center">
           <span className="absolute inset-0 rounded-full bg-[#23a55a]/20 scale-125 animate-pulse" />
-          {incomingCall.callerAvatar ? (
+          {resolvedAvatar ? (
             <img
-              src={incomingCall.callerAvatar}
+              src={resolvedAvatar}
               alt={incomingCall.callerName}
               className="h-20 w-20 rounded-full object-cover relative z-10 border-2 border-[#23a55a]"
             />

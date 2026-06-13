@@ -34,6 +34,11 @@ public class PresenceService {
         publishPresenceChange(userId, "OFFLINE");
     }
 
+    public boolean isUserOnline(String userId) {
+        String key = PRESENCE_KEY_PREFIX + userId;
+        return Boolean.TRUE.equals(redisTemplate.hasKey(key));
+    }
+
     private void publishPresenceChange(String userId, String status) {
         try {
             rabbitTemplate.convertAndSend("user.events", "user.presence.update",

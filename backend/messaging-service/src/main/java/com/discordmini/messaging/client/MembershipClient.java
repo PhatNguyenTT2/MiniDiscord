@@ -73,16 +73,18 @@ public class MembershipClient {
                     .body(new ParameterizedTypeReference<Map<String, Object>>() {
                     });
 
-            if (response != null && response.get("data") instanceof List<?> dataList) {
-                for (Object item : dataList) {
-                    if (item instanceof Map<?, ?> member) {
-                        Object uid = member.get("userId");
-                        if (uid != null) {
-                            redisTemplate.opsForSet().add(cacheKey, uid.toString());
+            if (response != null && response.get("data") instanceof Map<?, ?> dataMap) {
+                if (dataMap.get("members") instanceof List<?> dataList) {
+                    for (Object item : dataList) {
+                        if (item instanceof Map<?, ?> member) {
+                            Object uid = member.get("userId");
+                            if (uid != null) {
+                                redisTemplate.opsForSet().add(cacheKey, uid.toString());
+                            }
                         }
                     }
+                    log.debug("Pre-populated {} members for room {}", dataList.size(), roomId);
                 }
-                log.debug("Pre-populated {} members for room {}", dataList.size(), roomId);
             }
         } catch (Exception e) {
             log.warn("Could not pre-populate room members cache for {}: {}", roomId, e.getMessage());

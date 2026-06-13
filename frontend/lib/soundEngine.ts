@@ -193,6 +193,7 @@ class SoundEngine {
   }
 
   private activeLoopSources = new Map<SoundName, AudioBufferSourceNode>();
+  private expectedLoopState = new Map<SoundName, boolean>();
 
   async playLoop(name: SoundName): Promise<void> {
     if (typeof window === 'undefined') return;
@@ -200,10 +201,14 @@ class SoundEngine {
     if (!settings.soundEnabled) return;
     if (name === 'call_ringing' && !settings.callSound) return;
 
+    this.expectedLoopState.set(name, true);
     this.stopLoop(name);
 
     const ctx = this.getContext();
     const buffer = await this.loadSound(name);
+    if (!this.expectedLoopState.get(name)) {
+      return;
+    }
     if (!buffer) return;
 
     try {
@@ -226,6 +231,7 @@ class SoundEngine {
   }
 
   stopLoop(name: SoundName): void {
+    this.expectedLoopState.set(name, false);
     const source = this.activeLoopSources.get(name);
     if (source) {
       try {

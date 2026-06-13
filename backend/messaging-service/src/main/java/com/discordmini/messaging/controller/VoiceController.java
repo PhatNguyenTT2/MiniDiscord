@@ -65,4 +65,22 @@ public class VoiceController {
     log.debug("GET local voice states in room: {} paths: {}", roomId, channelIds);
     return ApiResponse.ok("Voice states loaded", voiceStateService.getAllVoiceStates(roomId, channelIds));
   }
+
+  /**
+   * Check if the authenticated user has an active incoming or outgoing transient
+   * call.
+   */
+  @GetMapping("/active-call")
+  public ApiResponse<Map<Object, Object>> getActiveCall(@RequestHeader("X-User-Id") String userId) {
+    log.info("Checking active call for user ID: {}", userId);
+    String roomId = voiceStateService.getActiveCallRoomForUser(userId);
+    if (roomId != null) {
+      Map<Object, Object> callState = voiceStateService.getCallState(roomId);
+      if (callState != null && !callState.isEmpty()) {
+        callState.put("roomId", roomId);
+        return ApiResponse.ok("Active call found", callState);
+      }
+    }
+    return ApiResponse.ok("No active call found", null);
+  }
 }

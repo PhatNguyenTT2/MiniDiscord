@@ -12,6 +12,7 @@ import lombok.NoArgsConstructor;
 public class VoiceCallEvent {
   private String eventType; // "VOICE_CALL"
   private String roomId;
+  private String channelId;
   private String callerId;
   private String callerName;
   private String callerAvatar;

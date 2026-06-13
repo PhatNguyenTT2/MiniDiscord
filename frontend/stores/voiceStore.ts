@@ -5,6 +5,7 @@ import { getStompClient } from "@/lib/websocket";
 import { useAuthStore } from "./authStore";
 import { useRoomStore } from "./roomStore";
 import { soundEngine } from "@/lib/soundEngine";
+import { resumeAudioContext } from "@/hooks/useAudioActivity";
 
 export interface VoiceParticipant {
   userId: string;
@@ -22,11 +23,12 @@ export interface VoiceCallEvent {
   callerName: string;
   callerAvatar: string | null;
   targetUserId: string;
-  action: "RING" | "ACCEPT" | "DECLINE" | "END" | "MISSED";
+  action: "RING" | "ACCEPT" | "DECLINE" | "END" | "MISSED" | "UNAVAILABLE";
 }
 
 interface VoiceStoreState {
   currentChannel: { roomId: string; channelId: string } | null;
+  localStream: MediaStream | null;
   isMuted: boolean;
   isDeafened: boolean;
   connectionDuration: number; // in seconds
@@ -36,6 +38,7 @@ interface VoiceStoreState {
 
   incomingCall: VoiceCallEvent | null;
   activeCallRoomId: string | null;
+  callStatus: "RINGING" | "ACTIVE" | "DECLINED" | "UNAVAILABLE" | null;
 
   // Voice Channel Actions
   joinVoiceChannel: (roomId: string, channelId: string) => Promise<void>;
@@ -44,23 +47,25 @@ interface VoiceStoreState {
   toggleDeafen: () => void;
 
   // DM call Actions
-  startCall: (roomId: string, targetUserId: string) => void;
+  startCall: (roomId: string, targetUserId: string, channelId?: string) => void;
   acceptCall: () => void;
   declineCall: () => void;
   endCall: () => void;
 
   // Signaling & Sync hooks
-  handleVoiceStateUpdate: (update: any) => void;
-  handleSignal: (signal: any) => void;
+  handleVoiceStateUpdate: (update: Record<string, unknown>) => void;
+  handleSignal: (signal: Record<string, unknown>) => void;
   handleCallEvent: (event: VoiceCallEvent) => void;
   fetchVoiceStates: (roomId: string, channelIds: string[]) => Promise<void>;
+  checkActiveCall: () => Promise<void>;
 }
 
 let tickerInterval: ReturnType<typeof setInterval> | null = null;
-let ringingSoundInterval: ReturnType<typeof setInterval> | null = null;
+let callTimeout: ReturnType<typeof setTimeout> | null = null;
 
 export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
   currentChannel: null,
+  localStream: null,
   isMuted: false,
   isDeafened: false,
   connectionDuration: 0,
@@ -68,6 +73,7 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
   channelParticipants: {},
   incomingCall: null,
   activeCallRoomId: null,
+  callStatus: null,
 
   joinVoiceChannel: async (roomId: string, channelId: string) => {
     const activeChannel = get().currentChannel;
@@ -82,7 +88,15 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
       console.log(`[VoiceStore] Joining channel ${channelId} in room ${roomId}`);
 
       // 1. Initialise WebRTC manager stream & fetch dynamic TURN credentials
+      resumeAudioContext();
       const localStream = await webrtcManager.initLocalStream();
+      set({ localStream });
+      const startingMute = get().isMuted;
+      const startingDeafen = get().isDeafened;
+      const audioTrack = localStream?.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !startingMute && !startingDeafen;
+      }
 
       // 2. Setup WebRTC callbacks
       webrtcManager.onRemoteStream = (userId, stream) => {
@@ -131,8 +145,6 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
       set({
         currentChannel: { roomId, channelId },
         connectionDuration: 0,
-        isMuted: false,
-        isDeafened: false,
         remoteStreams: {},
       });
 
@@ -175,9 +187,8 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
 
     set({
       currentChannel: null,
+      localStream: null,
       connectionDuration: 0,
-      isMuted: false,
-      isDeafened: false,
       remoteStreams: {},
     });
 
@@ -185,50 +196,56 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
   },
 
   toggleMute: () => {
-    const active = get().currentChannel;
-    if (!active) return;
-
+    resumeAudioContext();
     const isCurrentlyMuted = get().isMuted;
     const isCurrentlyDeafened = get().isDeafened;
+    const nowMuted = !isCurrentlyMuted;
 
-    // Toggle mute locally in media device
-    const nowMuted = webrtcManager.toggleMute();
+    // Toggle mute locally in media device track if exists
+    const audioTrack = webrtcManager.localStream?.getAudioTracks()[0];
+    if (audioTrack) {
+      audioTrack.enabled = !nowMuted;
+    }
 
     set({ isMuted: nowMuted });
 
-    // Send mute state event to servers
-    const token = useAuthStore.getState().token;
-    if (token) {
-      getStompClient(token).publish({
-        destination: "/app/voice.mute",
-        body: JSON.stringify({
-          roomId: active.roomId,
-          channelId: active.channelId,
-          muted: nowMuted,
-          deafened: isCurrentlyDeafened
-        })
-      });
+    // Send mute state event to servers if inside any active calling room
+    const active = get().currentChannel || get().activeCallRoomId;
+    if (active) {
+      const roomId = typeof active === "string" ? active : active.roomId;
+      const channelId = typeof active === "string" ? "dm" : active.channelId;
+      const token = useAuthStore.getState().token;
+      if (token) {
+        getStompClient(token).publish({
+          destination: "/app/voice.mute",
+          body: JSON.stringify({
+            roomId,
+            channelId,
+            muted: nowMuted,
+            deafened: isCurrentlyDeafened
+          })
+        });
+      }
     }
 
     soundEngine?.play(nowMuted ? "mute" : "unmute");
   },
 
   toggleDeafen: () => {
-    const active = get().currentChannel;
-    if (!active) return;
-
+    resumeAudioContext();
     const isCurrentlyDeafened = get().isDeafened;
     const nowDeafened = !isCurrentlyDeafened;
 
     // Discord style: deafening automatically forces mic mute
     let nowMuted = get().isMuted;
-    const audioTrack = webrtcManager.initLocalStream; // dummy read check
+    if (nowDeafened) {
+      nowMuted = true;
+    }
 
-    const localTrack = (webrtcManager as any).localStream?.getAudioTracks()[0];
+    // Toggle local stream track if exists
+    const localTrack = webrtcManager.localStream?.getAudioTracks()[0];
     if (localTrack) {
-      // If going deafen -> force mute local stream. If going undeafen -> restore to original mute status
       localTrack.enabled = !nowDeafened;
-      nowMuted = nowDeafened;
     }
 
     // Adjust speaker volumes for all remote stream components if deafened
@@ -243,29 +260,35 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
       isMuted: nowMuted
     });
 
-    // Informs signaling server
-    const token = useAuthStore.getState().token;
-    if (token) {
-      getStompClient(token).publish({
-        destination: "/app/voice.mute",
-        body: JSON.stringify({
-          roomId: active.roomId,
-          channelId: active.channelId,
-          muted: nowMuted,
-          deafened: nowDeafened
-        })
-      });
+    // Informs signaling server if inside any active calling room
+    const active = get().currentChannel || get().activeCallRoomId;
+    if (active) {
+      const roomId = typeof active === "string" ? active : active.roomId;
+      const channelId = typeof active === "string" ? "dm" : active.channelId;
+      const token = useAuthStore.getState().token;
+      if (token) {
+        getStompClient(token).publish({
+          destination: "/app/voice.mute",
+          body: JSON.stringify({
+            roomId,
+            channelId,
+            muted: nowMuted,
+            deafened: nowDeafened
+          })
+        });
+      }
     }
 
     soundEngine?.play(nowDeafened ? "deafen" : "undeafen");
   },
 
-  startCall: (roomId: string, targetUserId: string) => {
+  startCall: (roomId: string, targetUserId: string, channelId?: string) => {
+    resumeAudioContext();
     const currentUser = useAuthStore.getState().user;
     if (!currentUser) return;
 
-    console.log(`[VoiceStore] Initiating DM direct call inside room ${roomId}`);
-    set({ activeCallRoomId: roomId });
+    console.log(`[VoiceStore] Initiating DM direct call inside room ${roomId} for channel ${channelId}`);
+    set({ activeCallRoomId: roomId, callStatus: "RINGING" });
 
     // Send call ringing event over WebSocket
     const token = useAuthStore.getState().token;
@@ -274,6 +297,7 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
         destination: "/app/voice.call",
         body: JSON.stringify({
           roomId,
+          channelId,
           targetUserId,
           callerId: currentUser.id,
           callerName: currentUser.username,
@@ -285,6 +309,13 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
 
     // Start local ringing playback loop
     soundEngine?.playLoop("call_ringing");
+
+    // Timeout call after 60 seconds of outgoing ringing
+    if (callTimeout) clearTimeout(callTimeout);
+    callTimeout = setTimeout(() => {
+      console.log("[VoiceStore] Outgoing call timed out after 60s.");
+      get().endCall();
+    }, 60000);
   },
 
   acceptCall: async () => {
@@ -292,12 +323,24 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
     if (!incoming) return;
 
     soundEngine?.stopLoop("call_ringing");
+    if (callTimeout) {
+      clearTimeout(callTimeout);
+      callTimeout = null;
+    }
 
     try {
       console.log(`[VoiceStore] Accepting call in room ${incoming.roomId}`);
+      resumeAudioContext();
 
       // Start local media stream for peer call
-      await webrtcManager.initLocalStream();
+      const localStream = await webrtcManager.initLocalStream();
+      set({ localStream });
+      const startingMute = get().isMuted;
+      const startingDeafen = get().isDeafened;
+      const audioTrack = localStream?.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !startingMute && !startingDeafen;
+      }
 
       // Configure peer callback events
       webrtcManager.onRemoteStream = (userId, stream) => {
@@ -337,6 +380,7 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
 
       set({
         activeCallRoomId: incoming.roomId,
+        callStatus: "ACTIVE",
         incomingCall: null,
       });
 
@@ -352,6 +396,10 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
     if (!incoming) return;
 
     soundEngine?.stopLoop("call_ringing");
+    if (callTimeout) {
+      clearTimeout(callTimeout);
+      callTimeout = null;
+    }
 
     const token = useAuthStore.getState().token;
     if (token) {
@@ -361,7 +409,7 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
       });
     }
 
-    set({ incomingCall: null });
+    set({ incomingCall: null, callStatus: null });
     soundEngine?.play("voice_leave");
   },
 
@@ -372,6 +420,10 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
     console.log(`[VoiceStore] Ending active call in room ${activeRoomId}`);
 
     soundEngine?.stopLoop("call_ringing");
+    if (callTimeout) {
+      clearTimeout(callTimeout);
+      callTimeout = null;
+    }
 
     const token = useAuthStore.getState().token;
     if (token) {
@@ -385,15 +437,17 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
 
     set({
       activeCallRoomId: null,
+      callStatus: null,
       incomingCall: null,
+      localStream: null,
       remoteStreams: {},
     });
 
     soundEngine?.play("voice_disconnect");
   },
 
-  handleVoiceStateUpdate: (update: any) => {
-    const { channelId, userId, action, username, avatarUrl } = update;
+  handleVoiceStateUpdate: (update: Record<string, unknown>) => {
+    const { channelId, userId, action, username, avatarUrl } = update as { channelId?: string; userId: string; action: string; username?: string; avatarUrl?: string | null };
     if (!channelId) return;
 
     console.log(`[VoiceStore] handleVoiceStateUpdate from user ${userId} context:`, update);
@@ -413,7 +467,7 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
             }
           }
           const roomMembers = foundRoomId ? (useRoomStore.getState().members[foundRoomId] || []) : [];
-          const details = roomMembers.find((m: any) => m.userId === userId);
+          const details = roomMembers.find((m: { userId: string; username: string; displayName?: string | null }) => m.userId === userId);
           updatedList.push({
             userId,
             username: username || `User-${userId.substring(0, 4)}`,
@@ -437,10 +491,22 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
         // Peer hook cleanup if someone index leaves our channel
         if (state.currentChannel?.channelId === channelId) {
           webrtcManager.disconnectPeer(userId);
+
+          const updatedStreams = { ...state.remoteStreams };
+          delete updatedStreams[userId];
+
           const currentUserId = useAuthStore.getState().user?.id;
           if (userId !== currentUserId) {
             soundEngine?.play("user_leave_voice");
           }
+
+          return {
+            channelParticipants: {
+              ...state.channelParticipants,
+              [channelId]: updatedList,
+            },
+            remoteStreams: updatedStreams,
+          };
         }
       } else if (action === "MUTE" || action === "UNMUTE" || action === "DEAFEN") {
         updatedList = updatedList.map((p) => {
@@ -464,14 +530,14 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
     });
   },
 
-  handleSignal: async (signal: any) => {
+  handleSignal: async (signal: Record<string, unknown>) => {
     const active = get().currentChannel || get().activeCallRoomId;
     if (!active) return;
 
     const token = useAuthStore.getState().token;
     if (!token) return;
 
-    const { type, peerId, fromUserId, payload } = signal;
+    const { type, peerId, fromUserId, payload } = signal as { type: string; peerId: string; fromUserId: string; payload: string };
     console.log(`[VoiceStore] handleSignal [${type}] from peer user: ${fromUserId || peerId}`);
 
     try {
@@ -514,13 +580,32 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
     const { action, roomId } = event;
 
     if (action === "RING") {
-      set({ incomingCall: event });
+      set({ incomingCall: event, callStatus: "RINGING" });
       soundEngine?.playLoop("call_ringing");
+
+      // Timeout call after 60 seconds of incoming ringing
+      if (callTimeout) clearTimeout(callTimeout);
+      callTimeout = setTimeout(() => {
+        console.log("[VoiceStore] Incoming call timed out after 60s.");
+        get().declineCall();
+      }, 60000);
     } else if (action === "ACCEPT") {
       soundEngine?.stopLoop("call_ringing");
-      set({ activeCallRoomId: roomId, incomingCall: null });
+      if (callTimeout) {
+        clearTimeout(callTimeout);
+        callTimeout = null;
+      }
+      set({ activeCallRoomId: roomId, callStatus: "ACTIVE", incomingCall: null });
       // Initiate WebRTC peer logic
-      webrtcManager.initLocalStream().then(() => {
+      resumeAudioContext();
+      webrtcManager.initLocalStream().then((localStream) => {
+        set({ localStream });
+        const startingMute = get().isMuted;
+        const startingDeafen = get().isDeafened;
+        const audioTrack = localStream?.getAudioTracks()[0];
+        if (audioTrack) {
+          audioTrack.enabled = !startingMute && !startingDeafen;
+        }
         webrtcManager.onRemoteStream = (userId, stream) => {
           set((state) => ({
             remoteStreams: { ...state.remoteStreams, [userId]: stream }
@@ -548,12 +633,42 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
       soundEngine?.play("voice_join");
     } else if (action === "DECLINE" || action === "MISSED") {
       soundEngine?.stopLoop("call_ringing");
-      set({ incomingCall: null, activeCallRoomId: null });
+      if (callTimeout) {
+        clearTimeout(callTimeout);
+        callTimeout = null;
+      }
+      set({ callStatus: "DECLINED", incomingCall: null });
       soundEngine?.play("voice_leave");
+      setTimeout(() => {
+        if (get().activeCallRoomId === roomId) {
+          set({ activeCallRoomId: null, callStatus: null });
+        }
+      }, 3000);
+    } else if (action === "UNAVAILABLE") {
+      soundEngine?.stopLoop("call_ringing");
+      if (callTimeout) {
+        clearTimeout(callTimeout);
+        callTimeout = null;
+      }
+      set({ callStatus: "UNAVAILABLE", incomingCall: null });
+      soundEngine?.play("voice_leave");
+      console.warn("[VoiceStore] Target user is offline/unavailable.");
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("voice-call-unavailable"));
+      }
+      setTimeout(() => {
+        if (get().activeCallRoomId === roomId) {
+          set({ activeCallRoomId: null, callStatus: null });
+        }
+      }, 3000);
     } else if (action === "END") {
       soundEngine?.stopLoop("call_ringing");
+      if (callTimeout) {
+        clearTimeout(callTimeout);
+        callTimeout = null;
+      }
       webrtcManager.disconnectAll();
-      set({ activeCallRoomId: null, incomingCall: null, remoteStreams: {} });
+      set({ activeCallRoomId: null, incomingCall: null, callStatus: null, localStream: null, remoteStreams: {} });
       soundEngine?.play("voice_disconnect");
     }
   },
@@ -570,7 +685,9 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
 
       // Backend returns map {channelId -> Set<userId>}
       const roomMembers = useRoomStore.getState().members[roomId] || [];
-      const userCachedMap = new Map<string, any>(roomMembers.map((m: any) => [m.userId, m]));
+      const userCachedMap = new Map<string, { userId: string; username: string; displayName?: string | null; avatarUrl?: string | null }>(
+        roomMembers.map((m: { userId: string; username: string; displayName?: string | null; avatarUrl?: string | null }) => [m.userId, m])
+      );
 
       Object.entries(payloadData).forEach(([chId, userIdsList]) => {
         const list = userIdsList as string[];
@@ -596,6 +713,45 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
       console.log("[VoiceStore] Successfully preloaded voice participants:", newParticipantsMap);
     } catch (e) {
       console.error("[VoiceStore] Failed fetching room voice states:", e);
+    }
+  },
+
+  checkActiveCall: async () => {
+    try {
+      const res = await api.get<{ message: string; data: any }>("/voice/active-call");
+      if (res.data && res.data.data) {
+        const callState = res.data.data;
+        const currentUserId = useAuthStore.getState().user?.id;
+
+        // If status is RINGING and targetUserId is current user, we should show the incoming call modal!
+        if (callState.status === "RINGING" && callState.targetUserId === currentUserId) {
+          console.log("[VoiceStore] Active incoming call recovered:", callState);
+          set({
+            incomingCall: {
+              roomId: callState.roomId,
+              callerId: callState.callerId,
+              callerName: callState.callerName || "User",
+              callerAvatar: callState.callerAvatar || null,
+              targetUserId: callState.targetUserId,
+              action: "RING"
+            },
+            callStatus: "RINGING",
+            activeCallRoomId: callState.roomId
+          });
+          soundEngine?.playLoop("call_ringing");
+        } else if (callState.status === "ACTIVE" && (callState.callerId === currentUserId || callState.targetUserId === currentUserId)) {
+          // If the call is already active, we should re-establish activeCallRoomId if not set
+          if (!get().activeCallRoomId) {
+            console.log("[VoiceStore] Active ongoing call recovered:", callState);
+            set({
+              activeCallRoomId: callState.roomId,
+              callStatus: "ACTIVE"
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("[VoiceStore] Failed to check active call status:", err);
     }
   }
 }));

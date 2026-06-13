@@ -2,7 +2,7 @@ import { api } from "./api";
 
 export class WebRTCManager {
   private peers = new Map<string, RTCPeerConnection>();
-  private localStream: MediaStream | null = null;
+  localStream: MediaStream | null = null;
   private iceServers: RTCIceServer[] = [];
   private iceServersFetchedAt = 0;
   private static readonly ICE_CACHE_TTL = 15 * 60 * 1000; // 15 minutes
