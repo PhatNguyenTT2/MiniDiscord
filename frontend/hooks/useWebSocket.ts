@@ -16,6 +16,7 @@ import { clearRoomCache } from "@/stores/roomStore";
 import { useNetworkStore } from "@/stores/networkStore";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { useUIStore } from "@/stores/uiStore";
+import { useInboxStore } from "@/stores/inboxStore";
 import { useVoiceStore } from "@/stores/voiceStore";
 import { soundEngine } from "@/lib/soundEngine";
 
@@ -323,6 +324,10 @@ function handleNotification(msg: IMessage) {
         break;
       case "ROOM_CREATED":
         useRoomStore.getState().fetchMyRooms(true); // Skip cache for new room
+        break;
+      case "INBOX_UPDATE":
+        console.log("[STOMP] INBOX_UPDATE received — refetching notifications");
+        useInboxStore.getState().fetchNotifications();
         break;
       default:
         console.log("[STOMP] Unknown notification type:", type);

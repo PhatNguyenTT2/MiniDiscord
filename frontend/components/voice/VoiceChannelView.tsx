@@ -120,7 +120,7 @@ export function VoiceChannelView({ channelId, roomId, channelName }: VoiceChanne
               {channelName || "Voice Channel"}
             </h2>
             <p className="text-[14px] text-[#949ba4] mb-6 leading-relaxed">
-              Bạn đang xem chi tiết phòng chat thoại. Bấm nút bên dưới để tham gia vào cuộc nói chuyện cùng những thành viên khác.
+              {t("voice.channelIntro")}
             </p>
             <button
               onClick={() => joinVoiceChannel(roomId, channelId)}

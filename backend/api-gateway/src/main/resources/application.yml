@@ -21,7 +21,7 @@ spring:
         - id: group-channel-service
           uri: lb://group-channel-service
           predicates:
-            - Path=/api/rooms/**, /api/channels/**, /api/stickers/**
+            - Path=/api/rooms/**, /api/channels/**, /api/stickers/**, /api/invites/**
 
         - id: chat-history-service
           uri: lb://chat-history-service

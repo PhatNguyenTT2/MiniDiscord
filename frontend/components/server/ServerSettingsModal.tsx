@@ -7,6 +7,9 @@ import { useTranslation } from "@/lib/i18n";
 import { useRoomStore } from "@/stores/roomStore";
 import { ScrollArea } from "../ui/ScrollArea";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
+import { useAuthStore } from "@/stores/authStore";
+import { useFriendStore } from "@/stores/friendStore";
 
 interface ServerSettingsModalProps {
   isOpen: boolean;
@@ -16,28 +19,33 @@ interface ServerSettingsModalProps {
 
 type TabType = "members" | "roles" | "invites";
 
+interface InviteLinkListItem {
+  id: string;
+  code: string;
+  roomId: string;
+  roomName: string;
+  roomIcon: string | null;
+  uses: number;
+  expiresAt: string;
+  createdAt: string;
+}
+
 export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsModalProps) {
   const { t } = useTranslation();
+  const { user } = useAuthStore();
   const { rooms, members, fetchMembers } = useRoomStore();
+  const { friends, fetchFriends } = useFriendStore();
 
   const [activeTab, setActiveTab] = useState<TabType>("members");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const [activeInvites, setActiveInvites] = useState([
-    {
-      id: "1",
-      inviterName: "co doc vuong",
-      channelName: "chung",
-      code: "chJgUK3Y",
-      uses: 0,
-      duration: "06:23:57:42",
-      role: ""
-    }
-  ]);
+  const [activeInvites, setActiveInvites] = useState<InviteLinkListItem[]>([]);
+  const [inviteCode, setInviteCode] = useState("");
   const [showInviteCreator, setShowInviteCreator] = useState(false);
   const [invitedFriends, setInvitedFriends] = useState<string[]>([]);
   const [searchFriendQuery, setSearchFriendQuery] = useState("");
   const [copiedStatus, setCopiedStatus] = useState(false);
+
 
   const MOCK_FRIENDS = [
     { id: "1", username: "kkk", tag: "tulatu#573" },
@@ -51,12 +59,60 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
 
   const currentRoom = rooms.find((r) => r.id === roomId);
   const roomMembers = members[roomId] || [];
+  const isOwner = currentRoom?.ownerId === user?.id;
+
+  const fetchActiveInvites = async () => {
+    try {
+      const res = await api.get(`/rooms/${roomId}/invites`);
+      setActiveInvites(res.data.data || []);
+    } catch (err) {
+      console.error("Failed to fetch active invites", err);
+    }
+  };
+
+  const fetchOrCreateInvite = async () => {
+    try {
+      const res = await api.get(`/rooms/${roomId}/invites`);
+      const active = res.data.data;
+      if (active && active.length > 0) {
+        setInviteCode(active[0].code);
+      } else {
+        const createRes = await api.post(`/rooms/${roomId}/invites`);
+        setInviteCode(createRes.data.data.code);
+      }
+    } catch (err) {
+      console.error("Failed to fetch/create invite link", err);
+    }
+  };
+
+  const handleDeleteInvite = async (inviteId: string) => {
+    try {
+      await api.delete(`/rooms/${roomId}/invites/${inviteId}`);
+      setActiveInvites((prev) => prev.filter((i) => i.id !== inviteId));
+    } catch (err) {
+      console.error("Failed to delete invite label", err);
+    }
+  };
 
   useEffect(() => {
     if (isOpen && roomId) {
       fetchMembers(roomId);
+      fetchFriends();
     }
-  }, [isOpen, roomId, fetchMembers]);
+  }, [isOpen, roomId, fetchMembers, fetchFriends]);
+
+  useEffect(() => {
+    if (isOpen && roomId && activeTab === "invites" && isOwner) {
+      fetchActiveInvites();
+    }
+  }, [isOpen, roomId, activeTab, isOwner]);
+
+  useEffect(() => {
+    if (showInviteCreator && roomId) {
+      fetchOrCreateInvite();
+    }
+  }, [showInviteCreator, roomId]);
+
 
   // Close on ESC
   useEffect(() => {
@@ -112,15 +168,18 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
   };
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText("https://discord.gg/chJgUK3Y");
+    if (!inviteCode) return;
+    const inviteLink = `${window.location.origin}/invite/${inviteCode}`;
+    navigator.clipboard.writeText(inviteLink);
     setCopiedStatus(true);
     setTimeout(() => setCopiedStatus(false), 2000);
   };
 
-  const filteredMockFriends = MOCK_FRIENDS.filter((f) =>
-    f.username.toLowerCase().includes(searchFriendQuery.toLowerCase()) ||
-    f.tag.toLowerCase().includes(searchFriendQuery.toLowerCase())
+  const filteredFriends = friends.filter((f) =>
+    f.user.username.toLowerCase().includes(searchFriendQuery.toLowerCase()) ||
+    (f.user.displayName && f.user.displayName.toLowerCase().includes(searchFriendQuery.toLowerCase()))
   );
+
 
   return createPortal(
     <div className="fixed inset-0 z-[9990] flex bg-[#313338] text-[#dbdee1] animate-in fade-in duration-200">
@@ -575,48 +634,61 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#2b2d31]/40">
-                          {activeInvites.map((invite) => (
-                            <tr key={invite.id} className="hover:bg-[#2b2d31]/25 transition-colors">
-                              <td className="px-4 py-3.5 whitespace-nowrap">
-                                <div className="flex items-center gap-2.5">
-                                  <div className="h-7 w-7 rounded-full bg-[#5865f2]/20 flex items-center justify-center shrink-0">
-                                    <span className="text-[10px] font-bold text-[#5865f2] uppercase">
-                                      {invite.inviterName.substring(0, 2)}
-                                    </span>
+                          {activeInvites.map((invite) => {
+                            const inviterName = user?.displayName || user?.username || "Owner";
+                            const channelName = "general";
+                            const getDurationText = (expiresAtStr: string) => {
+                              const diff = new Date(expiresAtStr).getTime() - Date.now();
+                              if (diff <= 0) return "Expired";
+                              const days = Math.floor(diff / (24 * 3600 * 1000));
+                              const hours = Math.floor((diff % (24 * 3600 * 1000)) / (3600 * 1000));
+                              const mins = Math.floor((diff % (3600 * 1000)) / (60 * 1000));
+                              return `${days}d ${hours}h ${mins}m`;
+                            };
+
+                            return (
+                              <tr key={invite.id} className="hover:bg-[#2b2d31]/25 transition-colors">
+                                <td className="px-4 py-3.5 whitespace-nowrap">
+                                  <div className="flex items-center gap-2.5">
+                                    <div className="h-7 w-7 rounded-full bg-[#5865f2]/20 flex items-center justify-center shrink-0">
+                                      <span className="text-[10px] font-bold text-[#5865f2] uppercase">
+                                        {inviterName.substring(0, 2)}
+                                      </span>
+                                    </div>
+                                    <div className="flex flex-col">
+                                      <span className="font-semibold text-white truncate text-xs">
+                                        {inviterName}
+                                      </span>
+                                      <span className="text-[10px] text-[#949ba4]">
+                                        #{channelName}
+                                      </span>
+                                    </div>
                                   </div>
-                                  <div className="flex flex-col">
-                                    <span className="font-semibold text-white truncate text-xs">
-                                      {invite.inviterName}
-                                    </span>
-                                    <span className="text-[10px] text-[#949ba4]">
-                                      #{invite.channelName}
-                                    </span>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3.5 text-white font-mono whitespace-nowrap">
-                                {invite.code}
-                              </td>
-                              <td className="px-4 py-3.5 text-[#b5bac1] whitespace-nowrap">
-                                {invite.uses}
-                              </td>
-                              <td className="px-4 py-3.5 text-[#b5bac1] font-mono whitespace-nowrap">
-                                {invite.duration}
-                              </td>
-                              <td className="px-4 py-3.5 text-[#949ba4] whitespace-nowrap">
-                                {invite.role || "—"}
-                              </td>
-                              <td className="px-4 py-3.5 text-right whitespace-nowrap">
-                                <button
-                                  onClick={() => setActiveInvites(prev => prev.filter(i => i.id !== invite.id))}
-                                  className="h-6 w-6 rounded flex items-center justify-center text-[#b5bac1] hover:text-white hover:bg-[#f23f43]/20 hover:text-[#f23f43] transition-colors cursor-pointer"
-                                  title={t("common.remove")}
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
+                                </td>
+                                <td className="px-4 py-3.5 text-white font-mono whitespace-nowrap">
+                                  {invite.code}
+                                </td>
+                                <td className="px-4 py-3.5 text-[#b5bac1] whitespace-nowrap">
+                                  {invite.uses}
+                                </td>
+                                <td className="px-4 py-3.5 text-[#b5bac1] font-mono whitespace-nowrap">
+                                  {getDurationText(invite.expiresAt)}
+                                </td>
+                                <td className="px-4 py-3.5 text-[#949ba4] whitespace-nowrap">
+                                  {t("serverSettingsModal.memberRoleName")}
+                                </td>
+                                <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                                  <button
+                                    onClick={() => handleDeleteInvite(invite.id)}
+                                    className="h-6 w-6 rounded flex items-center justify-center text-[#b5bac1] hover:text-white hover:bg-[#f23f43]/20 hover:text-[#f23f43] transition-colors cursor-pointer"
+                                    title={t("common.remove")}
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -625,6 +697,7 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
                       {t("serverSettingsModal.noInvitesFound")}
                     </div>
                   )}
+
                 </div>
               </div>
             ) : null}
@@ -669,31 +742,44 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
               {/* Friends list container */}
               <ScrollArea className="h-[200px] pr-2 -mr-2">
                 <div className="space-y-1 pt-1">
-                  {filteredMockFriends.length > 0 ? (
-                    filteredMockFriends.map((friend) => {
-                      const isInvited = invitedFriends.includes(friend.id);
+                  {filteredFriends.length > 0 ? (
+                    filteredFriends.map((friend) => {
+                      const isInvited = invitedFriends.includes(friend.user.id);
                       return (
-                        <div key={friend.id} className="flex items-center justify-between py-1.5 px-2 hover:bg-[#35373c]/40 rounded transition-colors group">
+                        <div key={friend.user.id} className="flex items-center justify-between py-1.5 px-2 hover:bg-[#35373c]/40 rounded transition-colors group">
                           <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="h-8 w-8 rounded-full bg-[#5865f2]/10 flex items-center justify-center shrink-0">
-                              <span className="text-[10px] font-bold text-[#5865f2] uppercase">
-                                {friend.username.substring(0, 2)}
-                              </span>
-                            </div>
+                            {friend.user.avatarUrl ? (
+                              <img
+                                src={friend.user.avatarUrl}
+                                alt={friend.user.username}
+                                className="h-8 w-8 rounded-full object-cover shrink-0"
+                              />
+                            ) : (
+                              <div className="h-8 w-8 rounded-full bg-[#5865f2]/10 flex items-center justify-center shrink-0">
+                                <span className="text-[10px] font-bold text-[#5865f2] uppercase">
+                                  {friend.user.username.substring(0, 2)}
+                                </span>
+                              </div>
+                            )}
                             <div className="flex flex-col min-w-0">
                               <span className="font-semibold text-white text-xs truncate">
-                                {friend.username}
+                                {friend.user.displayName || friend.user.username}
                               </span>
                               <span className="text-[10px] text-[#949ba4] truncate">
-                                {friend.tag}
+                                @{friend.user.username}
                               </span>
                             </div>
                           </div>
 
                           <button
-                            onClick={() => {
+                            onClick={async () => {
                               if (!isInvited) {
-                                setInvitedFriends(prev => [...prev, friend.id]);
+                                try {
+                                  await api.post(`/rooms/${roomId}/members`, { userId: friend.user.id });
+                                  setInvitedFriends((prev) => [...prev, friend.user.id]);
+                                } catch (err) {
+                                  console.error("Failed to direct invite friend:", err);
+                                }
                               }
                             }}
                             disabled={isInvited}
@@ -714,6 +800,7 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
                       {t("invite.noFriendsFound")}
                     </div>
                   )}
+
                 </div>
               </ScrollArea>
             </div>
@@ -727,7 +814,7 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
                 <input
                   type="text"
                   readOnly
-                  value="https://discord.gg/chJgUK3Y"
+                  value={inviteCode ? `${window.location.origin}/invite/${inviteCode}` : ""}
                   className="flex-1 bg-transparent border-0 outline-none text-xs text-[#dbdee1] pl-2 select-all font-mono"
                 />
                 <button

@@ -100,9 +100,6 @@
     "serverOf": "Server of {serverName}",
     "members": "Members",
     "everyoneDesc": "Notify everyone who has access to this channel.",
-    "memberList": "Member List",
-    "inbox": "Inbox",
-    "threads": "Threads",
     "search": "Search",
     "searchFilters": "Filters",
     "searchFromUserTitle": "From a specific user",
@@ -188,6 +185,17 @@
     "sortRelevant": "Most Relevant",
     "noResults": "No results found",
     "jump": "Jump"
+  },
+  "inbox": {
+    "title": "Inbox",
+    "empty": "Your inbox is completely empty!",
+    "markAllRead": "Mark all as read",
+    "clear": "Clear all",
+    "dm": "direct message",
+    "mention": "mentioned you in channel",
+    "friendAccepted": "accepted your friend request",
+    "serverInvite": "invited you to join server",
+    "incoming": "Inbox"
   },
   "members": {
     "online": "Online",
@@ -407,6 +415,12 @@
     "incomingCall": "Incoming Call",
     "accept": "Accept",
     "decline": "Decline",
+    "recoveringTitle": "You have an ongoing call",
+    "recoveringText": "Click the button below to restore the connection and voice stream.",
+    "reconnect": "Reconnect",
+    "ringing": "Ringing",
+    "connected": "Connected",
+    "channelIntro": "You are viewing the details of this voice channel. Click the button below to join the conversation with other members.",
     "callEnded": "Call ended",
     "startCall": "Start Call",
     "inviteToChannel": "Invite to Voice",
@@ -468,7 +482,13 @@
     "orSendLink": "Or, send an invite link to them",
     "copied": "Copied",
     "copy": "Copy",
-    "linkNote": "Your invite link is active for 7 days. Share this link to invite others!"
+    "linkNote": "Your invite link is active for 7 days. Share this link to invite others!",
+    "accept": "Accept Invite",
+    "invalid": "Invalid or Expired Invite Link",
+    "members": "{count} members",
+    "loading": "Loading invite link...",
+    "joinError": "Could not join server. Please try again later.",
+    "backToApp": "Back to App"
   },
   "serverSettingsModal": {
     "title": "Server Settings",

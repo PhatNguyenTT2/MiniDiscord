@@ -213,10 +213,10 @@ export function DmCallView({ roomId, recipientId, recipientName, recipientAvatar
               incomingCall ? (
                 <span className="text-[#23a55a] animate-pulse">{t("voice.incomingCall")}...</span>
               ) : (
-                <span className="text-[#23a55a] animate-pulse">Ringing...</span>
+                <span className="text-[#23a55a] animate-pulse">{t("voice.ringing")}...</span>
               )
             )}
-            {callStatus === "ACTIVE" && <span className="text-[#5865f2]">Connected</span>}
+            {callStatus === "ACTIVE" && <span className="text-[#5865f2]">{t("voice.connected")}</span>}
             {callStatus === "DECLINED" && <span className="text-[#ed4245]">{t("voice.decline")}</span>}
             {callStatus === "UNAVAILABLE" && <span className="text-[#ed4245]">{t("voice.callUnavailable")}</span>}
           </span>
@@ -241,7 +241,7 @@ export function DmCallView({ roomId, recipientId, recipientName, recipientAvatar
               ? "bg-[#ed4245] text-white hover:bg-[#c93b3e]"
               : "bg-[#313338] text-[#dbdee1] hover:bg-[#3f4147] hover:text-[#f2f3f5]"
           )}
-          title={isMuted ? "Bật Mic" : "Tắt Mic"}
+          title={isMuted ? t("voice.unmute") : t("voice.mute")}
         >
           {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
         </button>

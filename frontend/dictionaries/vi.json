@@ -100,9 +100,6 @@
     "serverOf": "Máy chủ của {serverName}",
     "members": "Thành viên",
     "everyoneDesc": "Thông báo đến tất cả mọi người có quyền xem kênh này.",
-    "memberList": "Danh sách thành viên",
-    "inbox": "Hộp thư",
-    "threads": "Chủ đề",
     "search": "Tìm kiếm",
     "searchFilters": "Bộ lọc",
     "searchFromUserTitle": "Từ một người dùng cụ thể",
@@ -188,6 +185,17 @@
     "sortRelevant": "Phù hợp nhất",
     "noResults": "Không tìm thấy kết quả nào",
     "jump": "Nhảy đến"
+  },
+  "inbox": {
+    "title": "Hộp thư đến",
+    "empty": "Hộp thư của bạn trống trơn!",
+    "markAllRead": "Đánh dấu tất cả là đã đọc",
+    "clear": "Xóa hết",
+    "dm": "tin nhắn trực tiếp",
+    "mention": "đã nhắc đến bạn trong kênh",
+    "friendAccepted": "đã chấp nhận lời mời kết bạn",
+    "serverInvite": "đã mời bạn tham gia máy chủ",
+    "incoming": "Hộp thư đến"
   },
   "members": {
     "online": "Trực tuyến",
@@ -407,6 +415,12 @@
     "incomingCall": "Cuộc gọi đến",
     "accept": "Chấp nhận",
     "decline": "Từ chối",
+    "recoveringTitle": "Bạn đang có cuộc gọi dở dang",
+    "recoveringText": "Bấm nút bên dưới để khôi phục kết nối và luồng âm thanh thoại.",
+    "reconnect": "Kết nối lại",
+    "ringing": "Đang đổ chuông",
+    "connected": "Đã kết nối",
+    "channelIntro": "Bạn đang xem chi tiết phòng chat thoại. Bấm nút bên dưới để tham gia vào cuộc nói chuyện cùng những thành viên khác.",
     "callEnded": "Cuộc gọi kết thúc",
     "startCall": "Bắt đầu cuộc gọi",
     "inviteToChannel": "Mời vào Kênh Thoại",
@@ -468,7 +482,13 @@
     "orSendLink": "Hoặc, gửi link mời cho họ",
     "copied": "Đã sao chép",
     "copy": "Sao chép",
-    "linkNote": "Liên kết mời của bạn có hiệu lực trong 7 ngày. Hãy chia sẻ link này để mời những ai khác tham gia!"
+    "linkNote": "Liên kết mời của bạn có hiệu lực trong 7 ngày. Hãy chia sẻ link này để mời những ai khác tham gia!",
+    "accept": "Chấp nhận lời mời",
+    "invalid": "Liên kết mời không hợp lệ hoặc đã hết hạn",
+    "members": "{count} thành viên",
+    "loading": "Đang tải liên kết mời...",
+    "joinError": "Không thể tham gia máy chủ. Vui lòng thử lại sau.",
+    "backToApp": "Quay lại ứng dụng"
   },
   "serverSettingsModal": {
     "title": "Cài đặt máy chủ",

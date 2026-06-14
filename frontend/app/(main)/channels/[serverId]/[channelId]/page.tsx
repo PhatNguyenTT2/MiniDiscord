@@ -10,6 +10,7 @@ import { ResizeHandle } from "@/components/ui/ResizeHandle";
 import { SlidingPanel } from "@/components/ui/SlidingPanel";
 import { SearchResultsPanel } from "@/components/chat/SearchResultsPanel";
 import { useUIStore } from "@/stores/uiStore";
+import { useInboxStore } from "@/stores/inboxStore";
 import { useChatStore } from "@/stores/chatStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useNotificationStore } from "@/stores/notificationStore";
@@ -56,6 +57,13 @@ export default function ChannelPage() {
       fetchMembers(roomId);
     }
   }, [roomId, fetchMembers]);
+
+  // Auto-dismiss notifications on channel load / navigation
+  useEffect(() => {
+    if (roomId && channelId) {
+      useInboxStore.getState().clearChannel(roomId, channelId);
+    }
+  }, [roomId, channelId]);
 
   // Read messages from in-memory store
   const messages = useChatStore((s) => s.getChannelMessages(channelId));

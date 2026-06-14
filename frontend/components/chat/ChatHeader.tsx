@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { SearchDropdown, type ActiveFilter } from "./SearchDropdown";
 import { PinnedListModal } from "./PinnedListModal";
+import { InboxPopover } from "../inbox/InboxPopover";
+
 import {
   Hash,
   Pin,
@@ -252,6 +254,9 @@ export function ChatHeader({
         >
           <Users className="h-5 w-5" />
         </HeaderIcon>
+
+        <InboxPopover />
+
         <div className="relative mx-1">
           <input
             type="text"

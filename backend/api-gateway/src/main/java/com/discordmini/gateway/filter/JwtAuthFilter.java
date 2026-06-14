@@ -23,8 +23,8 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
     private final List<String> openPaths = List.of(
             "/api/auth/",
             "/actuator/",
-            "/ws/"
-    );
+            "/ws/",
+            "/api/invites/");
 
     public JwtAuthFilter(@Value("${jwt.secret}") String secret) {
         // Expiration is not needed for validation, passing 0
@@ -37,6 +37,22 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
 
         // 1. Check if path is open (no auth needed)
         if (isPathOpen(path)) {
+            // Attempt to extract token anyway if present, to resolve user downstream
+            String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                try {
+                    String token = authHeader.substring(7);
+                    if (!jwtUtil.isTokenExpired(token)) {
+                        String userId = jwtUtil.extractSubject(token);
+                        ServerWebExchange mutatedExchange = exchange.mutate()
+                                .request(r -> r.header("X-User-Id", userId))
+                                .build();
+                        return chain.filter(mutatedExchange);
+                    }
+                } catch (Exception e) {
+                    // Ignore token errors on open paths, let them flow as anonymous guests
+                }
+            }
             return chain.filter(exchange);
         }
 
@@ -44,11 +60,10 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
         String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             return FilterErrorHandler.sendError(
-                    exchange, 
-                    HttpStatus.UNAUTHORIZED, 
-                    "Missing or invalid Authorization header", 
-                    "MISSING_TOKEN"
-            );
+                    exchange,
+                    HttpStatus.UNAUTHORIZED,
+                    "Missing or invalid Authorization header",
+                    "MISSING_TOKEN");
         }
 
         String token = authHeader.substring(7);
@@ -57,11 +72,10 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
             // 3. Validate JWT
             if (jwtUtil.isTokenExpired(token)) {
                 return FilterErrorHandler.sendError(
-                        exchange, 
-                        HttpStatus.UNAUTHORIZED, 
-                        "Token has expired", 
-                        "TOKEN_EXPIRED"
-                );
+                        exchange,
+                        HttpStatus.UNAUTHORIZED,
+                        "Token has expired",
+                        "TOKEN_EXPIRED");
             }
 
             String userId = jwtUtil.extractSubject(token);
@@ -76,11 +90,10 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
 
         } catch (Exception e) {
             return FilterErrorHandler.sendError(
-                    exchange, 
-                    HttpStatus.UNAUTHORIZED, 
-                    "Invalid token", 
-                    "INVALID_TOKEN"
-            );
+                    exchange,
+                    HttpStatus.UNAUTHORIZED,
+                    "Invalid token",
+                    "INVALID_TOKEN");
         }
     }
 
@@ -90,6 +103,7 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
 
     @Override
     public int getOrder() {
-        return -100; // Run before other filters (but after CORS usually, CORS is handled by WebFilter earlier)
+        return -100; // Run before other filters (but after CORS usually, CORS is handled by
+                     // WebFilter earlier)
     }
 }

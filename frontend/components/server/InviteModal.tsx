@@ -8,6 +8,8 @@ import { useFriendStore } from "@/stores/friendStore";
 import { ScrollArea } from "../ui/ScrollArea";
 import { cn } from "@/lib/utils";
 
+import { api } from "@/lib/api";
+
 interface InviteModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -24,16 +26,33 @@ export function InviteModal({ isOpen, onClose, roomId, roomName, channelName = "
   const [searchQuery, setSearchQuery] = useState("");
   const [invitedIds, setInvitedIds] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
+  const [inviteCode, setInviteCode] = useState("");
 
-  // Load friends when open
+  // Load friends and invite when open
   useEffect(() => {
     if (isOpen) {
       fetchFriends();
       setSearchQuery("");
       setInvitedIds([]);
       setCopied(false);
+
+      const loadInvite = async () => {
+        try {
+          const res = await api.get(`/rooms/${roomId}/invites`);
+          const active = res.data.data;
+          if (active && active.length > 0) {
+            setInviteCode(active[0].code);
+          } else {
+            const createRes = await api.post(`/rooms/${roomId}/invites`);
+            setInviteCode(createRes.data.data.code);
+          }
+        } catch (err) {
+          console.error("Failed to load invite link", err);
+        }
+      };
+      loadInvite();
     }
-  }, [isOpen, fetchFriends]);
+  }, [isOpen, roomId, fetchFriends]);
 
   // Close on ESC key
   useEffect(() => {
@@ -64,9 +83,10 @@ export function InviteModal({ isOpen, onClose, roomId, roomName, channelName = "
     f.user.username.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const inviteLink = `https://discord.gg/${roomId.substring(0, 8)}`;
+  const inviteLink = inviteCode ? `${window.location.origin}/invite/${inviteCode}` : "";
 
   const handleCopy = async () => {
+    if (!inviteLink) return;
     try {
       await navigator.clipboard.writeText(inviteLink);
       setCopied(true);
@@ -76,10 +96,16 @@ export function InviteModal({ isOpen, onClose, roomId, roomName, channelName = "
     }
   };
 
-  const handleInvite = (friendId: string) => {
+  const handleInvite = async (friendId: string) => {
     if (invitedIds.includes(friendId)) return;
-    setInvitedIds([...invitedIds, friendId]);
+    try {
+      await api.post(`/rooms/${roomId}/members`, { userId: friendId });
+      setInvitedIds([...invitedIds, friendId]);
+    } catch (err) {
+      console.error("Failed to direct invite friend via modal", err);
+    }
   };
+
 
   return createPortal(
     <div

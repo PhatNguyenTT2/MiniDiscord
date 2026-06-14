@@ -15,6 +15,7 @@ import { Phone, Video, Pin, User, Reply, Server, UserPlus, FileIcon, Search, X }
 import { ResizeHandle } from "@/components/ui/ResizeHandle";
 import { SlidingPanel } from "@/components/ui/SlidingPanel";
 import { useUIStore } from "@/stores/uiStore";
+import { useInboxStore } from "@/stores/inboxStore";
 import { useChatStore } from "@/stores/chatStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useFriendStore } from "@/stores/friendStore";
@@ -232,6 +233,13 @@ export default function DmChatPage() {
       fetchMembers(roomId);
     }
   }, [roomId, fetchMembers]);
+
+  // Auto-dismiss DM notifications on navigation
+  useEffect(() => {
+    if (roomId) {
+      useInboxStore.getState().clearChannel(roomId);
+    }
+  }, [roomId]);
 
   // Resolve friend name from multiple sources
   const friend = friends.find((f) => f.user.id === userId);

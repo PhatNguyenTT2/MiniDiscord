@@ -40,6 +40,10 @@ interface VoiceStoreState {
   activeCallRoomId: string | null;
   callStatus: "RINGING" | "ACTIVE" | "DECLINED" | "UNAVAILABLE" | null;
 
+  isRecoveringCall: boolean;
+  recoveringCallPeerId: string | null;
+  resumeRecoveredCall: () => Promise<void>;
+
   // Voice Channel Actions
   joinVoiceChannel: (roomId: string, channelId: string) => Promise<void>;
   leaveVoiceChannel: () => void;
@@ -74,6 +78,8 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
   incomingCall: null,
   activeCallRoomId: null,
   callStatus: null,
+  isRecoveringCall: false,
+  recoveringCallPeerId: null,
 
   joinVoiceChannel: async (roomId: string, channelId: string) => {
     const activeChannel = get().currentChannel;
@@ -740,18 +746,81 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
           });
           soundEngine?.playLoop("call_ringing");
         } else if (callState.status === "ACTIVE" && (callState.callerId === currentUserId || callState.targetUserId === currentUserId)) {
-          // If the call is already active, we should re-establish activeCallRoomId if not set
+          // If the call is already active, we should set the recovery flags to render a recovery UI
           if (!get().activeCallRoomId) {
-            console.log("[VoiceStore] Active ongoing call recovered:", callState);
+            console.log("[VoiceStore] Active ongoing call recovered. Setting recovery flags:", callState);
+            const otherParty = callState.callerId === currentUserId ? callState.targetUserId : callState.callerId;
             set({
               activeCallRoomId: callState.roomId,
-              callStatus: "ACTIVE"
+              callStatus: "ACTIVE",
+              isRecoveringCall: true,
+              recoveringCallPeerId: otherParty
             });
           }
         }
       }
     } catch (err) {
       console.warn("[VoiceStore] Failed to check active call status:", err);
+    }
+  },
+
+  resumeRecoveredCall: async () => {
+    const roomId = get().activeCallRoomId;
+    const targetUserId = get().recoveringCallPeerId;
+    if (!roomId || !targetUserId) return;
+
+    try {
+      console.log(`[VoiceStore] Resuming recovered active call in room ${roomId} with user ${targetUserId}`);
+
+      // 1. Initialise WebRTC manager stream
+      await resumeAudioContext();
+      const localStream = await webrtcManager.initLocalStream();
+      set({ localStream, isRecoveringCall: false });
+
+      const startingMute = get().isMuted;
+      const startingDeafen = get().isDeafened;
+      const audioTrack = localStream?.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !startingMute && !startingDeafen;
+      }
+
+      // 2. Setup WebRTC callbacks
+      webrtcManager.onRemoteStream = (userId, stream) => {
+        console.log(`[VoiceStore] Wire remote stream callback for peer user ${userId}`);
+        set((state) => ({
+          remoteStreams: { ...state.remoteStreams, [userId]: stream }
+        }));
+      };
+
+      webrtcManager.onIceCandidate = (tid, candidate) => {
+        const token = useAuthStore.getState().token;
+        if (!token) return;
+
+        getStompClient(token).publish({
+          destination: "/app/voice.signal",
+          body: JSON.stringify({
+            roomId,
+            channelId: "dm",
+            targetUserId: tid,
+            type: "ICE",
+            payload: JSON.stringify(candidate)
+          })
+        });
+      };
+
+      webrtcManager.onPeerDisconnected = (userId) => {
+        console.log(`[VoiceStore] Peer user ${userId} disconnected. Ending DM call.`);
+        webrtcManager.disconnectPeer(userId);
+        get().endCall();
+      };
+
+      // 3. Re-negotiate: trigger offer to the peer
+      get().handleSignal({ type: "INITIATE_OFFER", peerId: targetUserId });
+      set({ recoveringCallPeerId: null });
+      soundEngine?.play("voice_join");
+    } catch (e) {
+      console.error("[VoiceStore] Failed to resume recovered call audio/media: ", e);
+      get().endCall();
     }
   }
 }));

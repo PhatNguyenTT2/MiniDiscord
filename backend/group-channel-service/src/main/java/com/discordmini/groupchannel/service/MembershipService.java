@@ -22,12 +22,17 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.UUID;
 
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class MembershipService {
     private final RoomParticipantRepository participantRepository;
     private final RoomRepository roomRepository;
     private final UserServiceClient userServiceClient;
+    private final RabbitTemplate rabbitTemplate;
 
     public void validateAdminOrOwner(UUID roomId, UUID userId) {
         RoomParticipant participant = participantRepository.findByUserIdAndRoomId(userId, roomId)
@@ -75,6 +80,17 @@ public class MembershipService {
                 .build();
 
         participantRepository.save(newMember);
+
+        log.info("Publishing room.member.added event for room {} and user {}", roomId, targetUserId);
+        try {
+            rabbitTemplate.convertAndSend("room.events", "room.member.added", java.util.Map.of(
+                    "roomId", roomId.toString(),
+                    "roomName", room.getName(),
+                    "targetUserId", targetUserId.toString(),
+                    "invitedById", requesterId.toString()));
+        } catch (Exception e) {
+            log.error("Failed to publish member added event", e);
+        }
     }
 
     @Transactional

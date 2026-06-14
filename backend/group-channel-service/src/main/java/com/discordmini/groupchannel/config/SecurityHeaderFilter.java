@@ -35,6 +35,12 @@ public class SecurityHeaderFilter implements Filter {
             return;
         }
 
+        // Skip X-User-Id requirement for public invite preview GET /api/invites/{code}
+        if (uri.matches("/api/invites/[^/]+") && "GET".equalsIgnoreCase(request.getMethod())) {
+            chain.doFilter(req, res);
+            return;
+        }
+
         String userId = request.getHeader("X-User-Id");
 
         if (userId == null || userId.isBlank()) {

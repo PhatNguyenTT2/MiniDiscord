@@ -93,56 +93,9 @@ public class WebSocketEventHandler {
                     if (callState != null && !callState.isEmpty()) {
                         String status = (String) callState.get("status");
                         if ("RINGING".equals(status)) {
-                            String callerId = (String) callState.get("callerId");
-                            String targetUserId = (String) callState.get("targetUserId");
-                            String otherParty = userId.equals(callerId) ? targetUserId : callerId;
-                            String channelId = (String) callState.get("channelId");
-                            String callerName = (String) callState.get("callerName");
-                            String callerAvatar = (String) callState.get("callerAvatar");
-
                             log.info(
-                                    "WebSocket disconnect: Teardown RINGING call in room {} (caller: {}, target: {}) where user {} disconnected",
-                                    roomId, callerId, targetUserId, userId);
-
-                            // Write system log: Missed call
-                            MessageEvent missedLog = MessageEvent.builder()
-                                    .id(new ObjectId().toHexString())
-                                    .messageId(UUID.randomUUID().toString())
-                                    .roomId(roomId)
-                                    .channelId(channelId)
-                                    .senderId(callerId)
-                                    .senderName(callerName != null ? callerName : "User")
-                                    .senderAvatar(callerAvatar)
-                                    .content("voice.callMissedLog")
-                                    .type("SYSTEM")
-                                    .createdAt(Instant.now())
-                                    .build();
-                            messageRouter.publishToHistory(missedLog);
-
-                            ChatMessage chatMsg = ChatMessage.builder()
-                                    .id(missedLog.getId())
-                                    .messageId(missedLog.getMessageId())
-                                    .roomId(missedLog.getRoomId())
-                                    .channelId(missedLog.getChannelId())
-                                    .senderId(missedLog.getSenderId())
-                                    .senderName(missedLog.getSenderName())
-                                    .senderAvatar(missedLog.getSenderAvatar())
-                                    .content(missedLog.getContent())
-                                    .type(missedLog.getType())
-                                    .createdAt(missedLog.getCreatedAt().toString())
-                                    .build();
-                            messageRouter.fanOutToMembers(chatMsg, roomId);
-
-                            voiceStateService.clearCallState(roomId);
-
-                            // Notify the other party to cancel ringing
-                            if (otherParty != null) {
-                                messagingTemplate.convertAndSendToUser(
-                                        otherParty, "/queue/voice",
-                                        Map.of(
-                                                "type", "CALL_DECLINED",
-                                                "roomId", roomId));
-                            }
+                                    "WebSocket disconnect: User {} disconnected during RINGING state in room {}. Preserving state for Redis TTL timeout.",
+                                    userId, roomId);
                         }
                     }
                 }

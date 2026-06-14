@@ -167,6 +167,52 @@ export function VoiceConnectedPanel() {
   // If not in voice channel and not in active call, don't show the panel
   if (!currentChannel && !activeCallRoomId) return null;
 
+  const isRecoveringCall = useVoiceStore.getState().isRecoveringCall;
+  const resumeRecoveredCall = useVoiceStore.getState().resumeRecoveredCall;
+
+  if (isRecoveringCall) {
+    return (
+      <div
+        className="absolute inset-x-0 z-20 px-2 select-none animate-in fade-in slide-in-from-bottom-2 duration-200"
+        style={{
+          bottom: "calc(var(--floating-bar-gap) + var(--floating-user-panel-height) + 8px)",
+        }}
+      >
+        <div
+          className="flex flex-col gap-2.5 p-3.5 shadow-[0_-8px_20px_rgba(0,0,0,0.18)]"
+          style={{
+            borderRadius: "var(--floating-bar-radius)",
+            backgroundColor: "#2b2d31",
+            border: "1px solid #23a55a",
+          }}
+        >
+          <div className="text-[12.5px] font-bold text-white leading-tight">
+            {t("voice.recoveringTitle")}
+          </div>
+          <div className="text-[11px] text-[#949ba4] leading-snug">
+            {t("voice.recoveringText")}
+          </div>
+          <div className="flex gap-2.5 mt-1">
+            <button
+              type="button"
+              onClick={() => resumeRecoveredCall()}
+              className="flex-1 py-2 bg-[#23a55a] hover:bg-[#1a7f47] text-white text-[11px] font-extrabold rounded shadow-md transition duration-150 cursor-pointer border-none outline-none"
+            >
+              {t("voice.reconnect")}
+            </button>
+            <button
+              type="button"
+              onClick={handleDisconnect}
+              className="px-3.5 py-2 bg-[#ed4245] hover:bg-[#c93b3e] text-white text-[11px] font-extrabold rounded shadow-md transition duration-150 cursor-pointer border-none outline-none"
+            >
+              {t("modal.cancel")}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   let title = t("voice.incomingCall");
   let subTitle = "MiniDiscord";
   let targetUrl = "";
@@ -176,13 +222,13 @@ export function VoiceConnectedPanel() {
     const roomChannels = channels[currentChannel.roomId] || [];
     const activeChannelObj = roomChannels.find((c) => c.id === currentChannel.channelId);
 
-    title = activeChannelObj?.name ? `🔊 ${activeChannelObj.name}` : "🔊 Voice Channel";
+    title = activeChannelObj?.name ? activeChannelObj.name : t("channelSettings.voiceChannel");
     subTitle = activeRoom?.name || "Server Room";
     targetUrl = `/channels/${currentChannel.roomId}/${currentChannel.channelId}`;
   } else if (activeCallRoomId) {
     const activeRoom = rooms.find((r) => r.id === activeCallRoomId);
     title = t("voice.connectedStatus");
-    subTitle = activeRoom?.name ? `📞 ${activeRoom.name}` : "Direct DM Call";
+    subTitle = activeRoom?.name ? activeRoom.name : t("voice.voiceCallDetails");
     targetUrl = `/channels/me/${activeCallRoomId}`;
   }
 
@@ -323,7 +369,7 @@ export function VoiceConnectedPanel() {
               {t("voice.connectedStatus")}
             </span>
             <span className="text-[10px] text-[#949ba4] truncate leading-none mt-0.5 font-medium">
-              {title.replace("🔊 ", "")} / {subTitle}
+              {title} / {subTitle}
             </span>
           </div>
         </Link>
@@ -337,7 +383,7 @@ export function VoiceConnectedPanel() {
               setShowMicTestPopup((prev) => !prev);
               if (isTestingMic) stopMicTest();
             }}
-            title="Kiểm tra Mic"
+            title={t("voice.micTest")}
             className={cn(
               "p-2 rounded hover:bg-[#35363c] transition-colors cursor-pointer border-none outline-none flex items-center justify-center",
               showMicTestPopup ? "text-[#23a55a] bg-[#23a55a]/10" : "text-[#b5bac1] hover:text-[#dbdee1]"

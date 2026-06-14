@@ -26,6 +26,12 @@ public class RoomController {
 
     private final RoomService roomService;
     private final MembershipService membershipService;
+    private final com.discordmini.groupchannel.service.InviteLinkService inviteLinkService;
+    private final com.discordmini.groupchannel.model.dto.InviteLinkResponse inviteLinkResponseDummy = null; // for
+                                                                                                            // compilation
+                                                                                                            // confirmation
+                                                                                                            // or we can
+                                                                                                            // import it
 
     @PostMapping
     public ResponseEntity<ApiResponse<RoomResponse>> createRoom(
@@ -105,6 +111,50 @@ public class RoomController {
     public ResponseEntity<ApiResponse<Void>> clearDatabase() {
         roomService.clearDatabase();
         return ResponseEntity.ok(ApiResponse.ok("Database cleared successfully", null));
+    }
+
+    @PostMapping("/{roomId}/invites")
+    public ResponseEntity<ApiResponse<com.discordmini.groupchannel.model.dto.InviteLinkResponse>> createInvite(
+            @RequestHeader("X-User-Id") UUID userId,
+            @PathVariable UUID roomId) {
+        com.discordmini.groupchannel.model.entity.InviteLink inviteLink = inviteLinkService.createInviteLink(roomId,
+                userId);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok("Invite link created successfully", mapToInviteResponse(inviteLink)));
+    }
+
+    @GetMapping("/{roomId}/invites")
+    public ResponseEntity<ApiResponse<List<com.discordmini.groupchannel.model.dto.InviteLinkResponse>>> getActiveInvites(
+            @RequestHeader("X-User-Id") UUID userId,
+            @PathVariable UUID roomId) {
+        List<com.discordmini.groupchannel.model.dto.InviteLinkResponse> responses = inviteLinkService
+                .getActiveInvites(roomId, userId).stream()
+                .map(this::mapToInviteResponse)
+                .toList();
+        return ResponseEntity.ok(ApiResponse.ok("Active invite links fetched", responses));
+    }
+
+    @DeleteMapping("/{roomId}/invites/{inviteId}")
+    public ResponseEntity<ApiResponse<Void>> deleteInvite(
+            @RequestHeader("X-User-Id") UUID userId,
+            @PathVariable UUID roomId,
+            @PathVariable UUID inviteId) {
+        inviteLinkService.deleteInviteLink(roomId, inviteId, userId);
+        return ResponseEntity.ok(ApiResponse.ok("Invite link deleted successfully", null));
+    }
+
+    private com.discordmini.groupchannel.model.dto.InviteLinkResponse mapToInviteResponse(
+            com.discordmini.groupchannel.model.entity.InviteLink inviteLink) {
+        return com.discordmini.groupchannel.model.dto.InviteLinkResponse.builder()
+                .id(inviteLink.getId())
+                .code(inviteLink.getCode())
+                .roomId(inviteLink.getRoom().getId())
+                .roomName(inviteLink.getRoom().getName())
+                .roomIcon(inviteLink.getRoom().getIconUrl())
+                .uses(inviteLink.getUses())
+                .expiresAt(inviteLink.getExpiresAt())
+                .createdAt(inviteLink.getCreatedAt())
+                .build();
     }
 
     private RoomResponse mapToResponse(Room room) {

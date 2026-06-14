@@ -6,6 +6,7 @@ import { StatusAvatar } from "@/components/ui/StatusAvatar";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { ScrollArea } from "@/components/ui/ScrollArea";
+import { InboxPopover } from "../inbox/InboxPopover";
 import {
   Users,
   MessageCircle,
@@ -146,13 +147,9 @@ function FriendsHeader({
       </div>
 
       <div className="ml-auto flex items-center">
-        <button
-          aria-label={t("chat.inbox")}
-          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors duration-150 cursor-pointer"
-        >
-          <Inbox className="h-5 w-5" />
-        </button>
+        <InboxPopover />
       </div>
+
     </div>
   );
 }
