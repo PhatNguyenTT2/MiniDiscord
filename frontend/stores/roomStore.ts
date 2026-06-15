@@ -37,7 +37,7 @@ interface RoomState {
 
   fetchMyRooms: (skipCache?: boolean) => Promise<void>;
   fetchChannels: (roomId: string) => Promise<void>;
-  fetchMembers: (roomId: string, beforeJoinedAt?: string) => Promise<void>;
+  fetchMembers: (roomId: string, beforeJoinedAt?: string, force?: boolean) => Promise<void>;
   createRoom: (name: string, type?: "GROUP" | "DM") => Promise<Room>;
   findOrCreateDmRoom: (userId: string) => Promise<Room>;
   getDmRoomForUser: (userId: string) => { roomId: string, channelId: string } | null;
@@ -87,7 +87,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     }
   },
 
-  
+
 
   fetchChannels: async (roomId: string) => {
     try {
@@ -100,8 +100,8 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     }
   },
 
-  fetchMembers: async (roomId: string, beforeJoinedAt?: string) => {
-    if (!beforeJoinedAt && get().isFetchingMembers[roomId]) {
+  fetchMembers: async (roomId: string, beforeJoinedAt?: string, force?: boolean) => {
+    if (!force && !beforeJoinedAt && get().isFetchingMembers[roomId]) {
       console.log("[roomStore] Duplicated fetchMembers call ignored for", roomId);
       return;
     }

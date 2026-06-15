@@ -42,4 +42,15 @@ export interface MemberDetailResponse {
   role: "OWNER" | "ADMIN" | "MEMBER";
   joinedAt: string;
   displayName?: string;
+  mutedUntil?: string | null;
+  createdAt?: string;
 }
+
+export interface RoleResponse {
+  id: string;
+  name: string;
+  position: number;
+  color: string;
+  permissions: Record<string, boolean>;
+}
+

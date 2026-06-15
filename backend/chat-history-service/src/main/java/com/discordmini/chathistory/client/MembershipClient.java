@@ -57,4 +57,25 @@ public class MembershipClient {
             log.warn("Pin privilege check unavailable, fail-open: {}", e.getMessage());
         }
     }
+
+    public void verifyMessageDeletePrivilege(String userId, String roomId) {
+        try {
+            restClient.get()
+                    .uri("/api/rooms/{roomId}/members/{userId}/delete-message-privilege", roomId, userId)
+                    .retrieve()
+                    .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
+                        int code = res.getStatusCode().value();
+                        if (code == 403 || code == 404) {
+                            throw new ForbiddenException("Requires delete message permission or owner role");
+                        }
+                        log.warn("Unexpected {} from delete message privilege check: room={}, user={}", code, roomId,
+                                userId);
+                    })
+                    .toBodilessEntity();
+        } catch (ForbiddenException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("Delete message privilege check unavailable, fail-open: {}", e.getMessage());
+        }
+    }
 }

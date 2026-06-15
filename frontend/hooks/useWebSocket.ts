@@ -18,6 +18,7 @@ import { useNotificationStore } from "@/stores/notificationStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useInboxStore } from "@/stores/inboxStore";
 import { useVoiceStore } from "@/stores/voiceStore";
+import { usePermissionStore } from "@/stores/permissionStore";
 import { soundEngine } from "@/lib/soundEngine";
 
 /**
@@ -33,6 +34,7 @@ import { soundEngine } from "@/lib/soundEngine";
 export function useWebSocket() {
   const token = useAuthStore((s) => s.token);
   const rooms = useRoomStore((s) => s.rooms);
+  const wsStatus = useNetworkStore((s) => s.wsStatus);
   const subscriptionsRef = useRef<Map<string, StompSubscription>>(new Map());
 
   // ── 1. Connect + subscribe personal notification channel ──────────
@@ -76,6 +78,16 @@ export function useWebSocket() {
       // Check active calls status (e.g. if we just connected/reconnected/reloaded while a call is active/ringing)
       const { useVoiceStore } = require("@/stores/voiceStore");
       useVoiceStore.getState().checkActiveCall();
+
+      // ── Reconcile voice channel participants after reconnect ──
+      const currentVoiceChannel = useVoiceStore.getState().currentChannel;
+      if (currentVoiceChannel) {
+        const roomChannels = useRoomStore.getState().channels[currentVoiceChannel.roomId] || [];
+        const voiceChannelIds = roomChannels.filter((c: any) => c.type === "VOICE").map((c: any) => c.id);
+        if (voiceChannelIds.length > 0) {
+          useVoiceStore.getState().fetchVoiceStates(currentVoiceChannel.roomId, voiceChannelIds);
+        }
+      }
 
       // ── Sync messages for the active channel after reconnection ──
       const activeChannelId = useUIStore.getState().activeChannelId;
@@ -150,7 +162,7 @@ export function useWebSocket() {
       }
     });
 
-  }, [token, rooms, useNetworkStore.getState().wsStatus]); // Re-run if connection status changes or rooms change
+  }, [token, rooms, wsStatus]); // Re-run if connection status changes or rooms change
 }
 
 // ── Room message handler ───────────────────────────────────────────
@@ -218,6 +230,39 @@ function handleRoomMessage(msg: IMessage) {
 
     if (eventType === "MESSAGE_DELETED") {
       useChatStore.getState().removeMessage(data.channelId, data.messageId);
+      return;
+    }
+
+    if (eventType === "PERMISSION_UPDATED") {
+      console.log("[STOMP] PERMISSION_UPDATED received for room:", data.roomId);
+      if (data.roomId) {
+        usePermissionStore.getState().fetchPermissions(data.roomId);
+      }
+      return;
+    }
+
+    if (eventType === "MEMBER_MUTED") {
+      console.log("[STOMP] MEMBER_MUTED received for room:", data.roomId);
+      if (data.roomId) {
+        useRoomStore.getState().fetchMembers(data.roomId, undefined, true);
+      }
+      return;
+    }
+
+    if (eventType === "MEMBER_BANNED") {
+      console.log("[STOMP] MEMBER_BANNED received for room:", data.roomId);
+      if (data.roomId) {
+        useRoomStore.getState().fetchMembers(data.roomId, undefined, true);
+
+        const currentUserId = useAuthStore.getState().user?.id;
+        if (data.userId === currentUserId) {
+          alert("Bạn đã bị cấm khỏi phòng chat này! / You have been banned from this room!");
+          useRoomStore.getState().fetchMyRooms(true);
+          if (typeof window !== "undefined" && window.location.pathname.includes(data.roomId)) {
+            window.location.href = "/channels/me";
+          }
+        }
+      }
       return;
     }
 

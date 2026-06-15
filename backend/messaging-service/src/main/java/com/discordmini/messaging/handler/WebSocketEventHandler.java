@@ -50,8 +50,17 @@ public class WebSocketEventHandler {
     public void handleWebSocketDisconnectListener(SessionDisconnectEvent event) {
         StompHeaderAccessor accessor = StompHeaderAccessor.wrap(event.getMessage());
         Principal user = accessor.getUser();
-        if (user != null) {
-            String userId = user.getName();
+        String userId = user != null ? user.getName() : null;
+
+        // Fallback: read from session attributes if Principal is null
+        if (userId == null) {
+            Map<String, Object> attrs = accessor.getSessionAttributes();
+            if (attrs != null) {
+                userId = (String) attrs.get("userId");
+            }
+        }
+
+        if (userId != null) {
             String sessionId = accessor.getSessionId();
 
             connectionManager.unregisterConnection(userId, sessionId);
@@ -60,10 +69,26 @@ public class WebSocketEventHandler {
             // ── Voice State Auto-cleanup on Disconnect ──
             try {
                 Map<Object, Object> voiceState = voiceStateService.getUserVoiceState(userId);
-                if (voiceState != null && !voiceState.isEmpty()) {
-                    String roomId = (String) voiceState.get("roomId");
-                    String channelId = (String) voiceState.get("channelId");
+                String roomId = null;
+                String channelId = null;
 
+                if (voiceState != null && !voiceState.isEmpty()) {
+                    roomId = (String) voiceState.get("roomId");
+                    channelId = (String) voiceState.get("channelId");
+                }
+
+                // Secondary fallback: session attributes
+                if (roomId == null || channelId == null) {
+                    Map<String, Object> attrs = accessor.getSessionAttributes();
+                    if (attrs != null) {
+                        if (roomId == null)
+                            roomId = (String) attrs.get("voiceRoomId");
+                        if (channelId == null)
+                            channelId = (String) attrs.get("voiceChannelId");
+                    }
+                }
+
+                if (roomId != null && channelId != null) {
                     log.info("WebSocket disconnect: cleaning up user {} voice state from channel {}", userId,
                             channelId);
                     voiceStateService.leaveCurrentChannel(userId);
@@ -79,6 +104,7 @@ public class WebSocketEventHandler {
 
                     messageRouter.fanOutSystemEvent(Map.of(
                             "eventType", "VOICE_STATE_UPDATE",
+                            "roomId", roomId,
                             "data", update), roomId);
                 }
             } catch (Exception e) {

@@ -9,6 +9,7 @@ import { ScrollArea } from "../ui/ScrollArea";
 import { cn } from "@/lib/utils";
 
 import { api } from "@/lib/api";
+import { useHasPermission } from "@/hooks/useHasPermission";
 
 interface InviteModalProps {
   isOpen: boolean;
@@ -25,12 +26,15 @@ export function InviteModal({ isOpen, onClose, roomId, roomName, channelName = "
 
   const [searchQuery, setSearchQuery] = useState("");
   const [invitedIds, setInvitedIds] = useState<string[]>([]);
+  const [invitingIds, setInvitingIds] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
 
+  const canInvite = useHasPermission("INVITE_MEMBER", roomId || undefined);
+
   // Load friends and invite when open
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && canInvite) {
       fetchFriends();
       setSearchQuery("");
       setInvitedIds([]);
@@ -52,7 +56,7 @@ export function InviteModal({ isOpen, onClose, roomId, roomName, channelName = "
       };
       loadInvite();
     }
-  }, [isOpen, roomId, fetchFriends]);
+  }, [isOpen, roomId, fetchFriends, canInvite]);
 
   // Close on ESC key
   useEffect(() => {
@@ -77,6 +81,7 @@ export function InviteModal({ isOpen, onClose, roomId, roomName, channelName = "
   }, [isOpen]);
 
   if (!isOpen) return null;
+  if (!canInvite) return null;
 
   // Filter friends
   const filteredFriends = friends.filter((f) =>
@@ -97,12 +102,18 @@ export function InviteModal({ isOpen, onClose, roomId, roomName, channelName = "
   };
 
   const handleInvite = async (friendId: string) => {
-    if (invitedIds.includes(friendId)) return;
+    if (invitedIds.includes(friendId) || invitingIds.includes(friendId)) return;
+    setInvitingIds((prev) => [...prev, friendId]);
     try {
       await api.post(`/rooms/${roomId}/members`, { userId: friendId });
-      setInvitedIds([...invitedIds, friendId]);
-    } catch (err) {
+      setInvitedIds((prev) => [...prev, friendId]);
+    } catch (err: any) {
       console.error("Failed to direct invite friend via modal", err);
+      if (err.response?.status === 409) {
+        setInvitedIds((prev) => [...prev, friendId]);
+      }
+    } finally {
+      setInvitingIds((prev) => prev.filter((id) => id !== friendId));
     }
   };
 
@@ -190,14 +201,21 @@ export function InviteModal({ isOpen, onClose, roomId, roomName, channelName = "
                       {/* Invite Button */}
                       <button
                         onClick={() => handleInvite(f.user.id)}
+                        disabled={isInvited || invitingIds.includes(f.user.id)}
                         className={cn(
-                          "px-4 py-1.5 text-xs font-semibold rounded transition-all duration-150 cursor-pointer shrink-0 border",
+                          "px-4 py-1.5 text-xs font-semibold rounded transition-all duration-150 shrink-0 border",
                           isInvited
-                            ? "border-[#80848e] text-[#b5bac1] hover:text-[#dbdee1] bg-transparent"
-                            : "bg-[#5865f2] hover:bg-[#4752c4] text-white border-transparent"
+                            ? "border-[#80848e] text-[#b5bac1] hover:text-[#dbdee1] bg-transparent cursor-default"
+                            : invitingIds.includes(f.user.id)
+                              ? "bg-[#5865f2]/50 text-white/50 border-transparent cursor-not-allowed"
+                              : "bg-[#5865f2] hover:bg-[#4752c4] text-white border-transparent cursor-pointer"
                         )}
                       >
-                        {isInvited ? t("invite.invited") : t("invite.sendAction")}
+                        {invitingIds.includes(f.user.id)
+                          ? "..."
+                          : isInvited
+                            ? t("invite.invited")
+                            : t("invite.sendAction")}
                       </button>
                     </div>
                   );

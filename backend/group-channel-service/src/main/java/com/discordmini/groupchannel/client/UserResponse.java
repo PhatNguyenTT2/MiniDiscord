@@ -12,4 +12,5 @@ public class UserResponse {
     private String avatarUrl;
     private String status;
     private String displayName;
+    private java.time.LocalDateTime createdAt;
 }

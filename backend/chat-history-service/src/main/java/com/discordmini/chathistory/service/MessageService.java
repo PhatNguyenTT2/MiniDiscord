@@ -171,7 +171,7 @@ public class MessageService {
         }
 
         if (!userId.equals(message.getSenderId())) {
-            throw new ForbiddenException("Only the sender can delete this message for everyone");
+            membershipClient.verifyMessageDeletePrivilege(userId, message.getRoomId());
         }
 
         message.setDeleted(true);

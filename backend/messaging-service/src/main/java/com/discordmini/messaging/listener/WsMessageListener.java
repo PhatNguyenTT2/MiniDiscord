@@ -40,6 +40,12 @@ public class WsMessageListener {
             if (messageObj instanceof Map) {
                 Map<String, Object> messageMap = (Map<String, Object>) messageObj;
                 roomId = (String) messageMap.get("roomId");
+                if (roomId == null) {
+                    Object dataVal = messageMap.get("data");
+                    if (dataVal instanceof Map) {
+                        roomId = (String) ((Map<?, ?>) dataVal).get("roomId");
+                    }
+                }
             }
 
             if (roomId == null) {

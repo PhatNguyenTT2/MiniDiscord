@@ -4,9 +4,8 @@ import { useVoiceStore } from "@/stores/voiceStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useTranslation } from "@/lib/i18n";
 import { VoiceControlBar } from "./VoiceControlBar";
-import { MicOff, HeadphoneOff, Users } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useAudioActivity } from "@/hooks/useAudioActivity";
+import { Users } from "lucide-react";
+import { VoiceParticipantGrid, type VoiceParticipant } from "./VoiceParticipantGrid";
 
 interface VoiceChannelViewProps {
   channelId: string;
@@ -14,84 +13,8 @@ interface VoiceChannelViewProps {
   channelName: string;
 }
 
-interface VoiceParticipant {
-  userId: string;
-  username: string;
-  displayName?: string | null;
-  avatarUrl?: string | null;
-  muted: boolean;
-  deafened: boolean;
-}
-
 const EMPTY_PARTICIPANTS: VoiceParticipant[] = [];
 
-interface VoiceParticipantCardProps {
-  p: VoiceParticipant;
-  currentUserId: string | undefined;
-  localStream: MediaStream | null;
-  remoteStream: MediaStream | undefined;
-  participantsLength: number;
-}
-
-function VoiceParticipantCard({
-  p,
-  currentUserId,
-  localStream,
-  remoteStream,
-  participantsLength,
-}: VoiceParticipantCardProps) {
-  const isSelf = p.userId === currentUserId;
-  const stream = isSelf ? localStream : remoteStream || null;
-  const isSpeaking = useAudioActivity(stream, p.muted || p.deafened);
-
-  return (
-    <div
-      className={cn(
-        "flex flex-col items-center justify-center bg-[#2b2d31] rounded-xl relative shadow-xl overflow-hidden aspect-video transition-all border-2",
-        isSpeaking ? "border-[#23a55a] shadow-[0_0_15px_rgba(35,165,90,0.15)]" : "border-transparent"
-      )}
-    >
-      {/* User Profile Avatar */}
-      {p.avatarUrl ? (
-        <img
-          src={p.avatarUrl}
-          alt={p.displayName || p.username}
-          className={cn(
-            "rounded-full object-cover shadow-2xl transition-transform duration-350 scale-100 hover:scale-105",
-            participantsLength <= 2 ? "h-20 w-20 md:h-24 md:w-24" : "h-14 w-14 md:h-16 md:w-16"
-          )}
-        />
-      ) : (
-        <div className={cn(
-          "rounded-full bg-[#5865f2] flex items-center justify-center shadow-2xl shrink-0 uppercase",
-          participantsLength <= 2 ? "h-20 w-20 md:h-24 md:w-24 text-2xl" : "h-14 w-14 md:h-16 md:w-16 text-lg",
-          "font-extrabold text-white"
-        )}>
-          {(p.displayName || p.username).substring(0, 2)}
-        </div>
-      )}
-
-      {/* Username text badge */}
-      <div className="absolute bottom-3 left-3 bg-[#111214]/75 backdrop-blur-sm px-2.5 py-1 rounded-md text-[13px] font-bold text-white max-w-[85%] truncate">
-        {p.displayName || p.username}
-      </div>
-
-      {/* State flag indicators overlay */}
-      <div className="absolute top-3 right-3 flex items-center gap-1.5">
-        {p.deafened && (
-          <div className="bg-[#ed4245] text-white p-1.5 rounded-full shadow-lg">
-            <HeadphoneOff className="h-4.5 w-4.5" />
-          </div>
-        )}
-        {p.muted && !p.deafened && (
-          <div className="bg-[#ed4245] text-white p-1.5 rounded-full shadow-lg">
-            <MicOff className="h-4.5 w-4.5" />
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 export function VoiceChannelView({ channelId, roomId, channelName }: VoiceChannelViewProps) {
   const { t } = useTranslation();
@@ -132,23 +55,13 @@ export function VoiceChannelView({ channelId, roomId, channelName }: VoiceChanne
         ) : (
           <div className="w-full h-full max-w-5xl flex flex-col justify-between">
             {/* Grid Layout of video/audio participants */}
-            <div className={cn(
-              "grid gap-4 w-full flex-1 items-center justify-center auto-rows-fr py-4 min-h-0 overflow-y-auto",
-              participants.length <= 1 ? "grid-cols-1 max-w-xl mx-auto" :
-                participants.length === 2 ? "grid-cols-1 md:grid-cols-2 max-w-3xl mx-auto" :
-                  "grid-cols-2 lg:grid-cols-3"
-            )}>
-              {participants.map((p) => (
-                <VoiceParticipantCard
-                  key={p.userId}
-                  p={p}
-                  currentUserId={currentUserId}
-                  localStream={localStream}
-                  remoteStream={remoteStreams[p.userId]}
-                  participantsLength={participants.length}
-                />
-              ))}
-            </div>
+            <VoiceParticipantGrid
+              participants={participants}
+              localStream={localStream}
+              remoteStreams={remoteStreams}
+              currentUserId={currentUserId}
+              roomId={roomId}
+            />
 
             {/* Premium Console Controls at Bottom */}
             <div className="flex items-center justify-center py-4 shrink-0 border-t border-[#35363c]/50 mt-4">

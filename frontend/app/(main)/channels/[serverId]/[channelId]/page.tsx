@@ -17,7 +17,7 @@ import { useNotificationStore } from "@/stores/notificationStore";
 import { useRoomStore } from "@/stores/roomStore";
 import { getStompClient } from "@/lib/websocket";
 import { useParams } from "next/navigation";
-import { useCallback, useRef, useState, useEffect } from "react";
+import { useCallback, useRef, useState, useEffect, useMemo } from "react";
 import { type Message } from "@/types";
 import { VoiceChannelView } from "@/components/voice/VoiceChannelView";
 import { Lock } from "lucide-react";
@@ -71,6 +71,35 @@ export default function ChannelPage() {
   const clearReplyingTo = useChatStore((s) => s.clearReplyingTo);
   const markChannelAsRead = useChatStore((s) => s.markChannelAsRead);
   const token = useAuthStore((s) => s.token);
+  const currentUser = useAuthStore((s) => s.user);
+
+  // Build avatar lookup map for chat messages (covers all members of the server)
+  const memberAvatarMap = useMemo(() => {
+    const map: Record<string, string | null> = {};
+    if (members) {
+      for (const m of members) {
+        map[m.userId] = m.avatarUrl || null;
+      }
+    }
+    if (currentUser?.id) {
+      map[currentUser.id] = currentUser.avatarUrl || null;
+    }
+    return map;
+  }, [members, currentUser]);
+
+  // Build status lookup map for chat messages (covers all members of the server)
+  const memberStatusMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    if (members) {
+      for (const m of members) {
+        map[m.userId] = m.status || "OFFLINE";
+      }
+    }
+    if (currentUser?.id) {
+      map[currentUser.id] = currentUser.status || "OFFLINE";
+    }
+    return map;
+  }, [members, currentUser]);
 
   const handleSend = useCallback(
     (
@@ -234,6 +263,8 @@ export default function ChannelPage() {
             channelId={channelId}
             roomId={roomId}
             onMarkAsReadBackend={markChannelAsRead}
+            memberAvatarMap={memberAvatarMap}
+            memberStatusMap={memberStatusMap}
             onScrollStateChange={handleScrollStateChange}
             welcomeHeader={currentChannelObj?.isPrivate ? (
               <div className="px-4 pt-16 pb-4 select-none">
@@ -280,7 +311,7 @@ export default function ChannelPage() {
 
       {/* Column 4: Search Results Panel */}
       <SlidingPanel show={showSearchPanel} width={400}>
-        <SearchResultsPanel channelId={channelId} />
+        <SearchResultsPanel channelId={channelId} roomId={roomId} />
       </SlidingPanel>
 
       {/* Invite Modal for channel welcome panel action trigger */}

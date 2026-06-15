@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { useEffect } from "react";
+import { useEffect, useCallback } from "react";
 import en from "@/dictionaries/en.json";
 import vi from "@/dictionaries/vi.json";
 
@@ -79,7 +79,7 @@ export function useTranslation() {
   const locale = useI18nStore((s) => s.locale);
   const setLocale = useI18nStore((s) => s.setLocale);
 
-  function t(key: string, vars?: Record<string, string | number>): string {
+  const t = useCallback((key: string, vars?: Record<string, string | number>): string => {
     let value =
       (dictionaries[locale] as Record<string, string>)[key] ??
       (dictionaries.en as Record<string, string>)[key] ??
@@ -92,7 +92,7 @@ export function useTranslation() {
     }
 
     return value;
-  }
+  }, [locale]);
 
   return { t, locale, setLocale };
 }

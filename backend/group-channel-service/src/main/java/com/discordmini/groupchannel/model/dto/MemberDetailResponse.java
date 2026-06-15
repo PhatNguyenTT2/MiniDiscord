@@ -21,4 +21,6 @@ public class MemberDetailResponse {
     private RoomRole role;
     private Instant joinedAt;
     private String displayName;
+    private java.time.LocalDateTime createdAt;
+    private Instant mutedUntil;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { X, ArrowUpDown, SlidersHorizontal, Settings, FileIcon, ShieldAlert } from "lucide-react";
 import { useChatStore } from "@/stores/chatStore";
 import { useTranslation } from "@/lib/i18n";
@@ -9,9 +9,11 @@ import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import type { Message } from "@/types";
 import { useAuthStore } from "@/stores/authStore";
+import { StatusAvatar } from "@/components/ui/StatusAvatar";
 
 interface SearchResultsPanelProps {
   channelId: string;
+  roomId?: string;
 }
 
 const EMPTY_SEARCH_RESULTS: Message[] = [];
@@ -101,7 +103,7 @@ function SearchResultAttachment({ message }: { message: Message }) {
   );
 }
 
-export function SearchResultsPanel({ channelId }: SearchResultsPanelProps) {
+export function SearchResultsPanel({ channelId, roomId }: SearchResultsPanelProps) {
   const { t } = useTranslation();
   const searchResults = useChatStore((s) => s.searchResults[channelId] || EMPTY_SEARCH_RESULTS);
   const isSearching = useChatStore((s) => s.isSearching[channelId] || false);
@@ -113,9 +115,43 @@ export function SearchResultsPanel({ channelId }: SearchResultsPanelProps) {
 
   const [showSortDropdown, setShowSortDropdown] = useState(false);
 
-  const activeRoomId = searchResults?.[0]?.roomId || "";
+  const activeRoomId = roomId || searchResults?.[0]?.roomId || "";
   const members = useRoomStore((s) => s.members[activeRoomId] ?? EMPTY_MEMBERS);
   const currentUserId = useAuthStore((s) => s.user?.id);
+
+  // Build avatar lookup map for search results (covers all members of the active room)
+  const memberAvatarMap = useMemo(() => {
+    const map: Record<string, string | null> = {};
+    if (members) {
+      for (const m of members) {
+        map[m.userId] = m.avatarUrl || null;
+      }
+    }
+    if (currentUserId) {
+      const currentUser = useAuthStore.getState().user;
+      if (currentUser?.id === currentUserId) {
+        map[currentUserId] = currentUser.avatarUrl || null;
+      }
+    }
+    return map;
+  }, [members, currentUserId]);
+
+  // Build status lookup map for search results (covers all members of the active room)
+  const memberStatusMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    if (members) {
+      for (const m of members) {
+        map[m.userId] = m.status || "OFFLINE";
+      }
+    }
+    if (currentUserId) {
+      const currentUser = useAuthStore.getState().user;
+      if (currentUser?.id === currentUserId) {
+        map[currentUserId] = currentUser.status || "OFFLINE";
+      }
+    }
+    return map;
+  }, [members, currentUserId]);
 
   const getMemberUsername = (uid: string) => {
     const m = members.find((member) => member.userId === uid);
@@ -366,6 +402,8 @@ export function SearchResultsPanel({ channelId }: SearchResultsPanelProps) {
                 (msg.mentions?.includes(currentUserId) ||
                   msg.mentions?.includes("everyone"))
               );
+              const avatarSrc = memberAvatarMap[msg.senderId] !== undefined ? memberAvatarMap[msg.senderId] : msg.senderAvatar;
+              const status = memberStatusMap[msg.senderId] as any;
 
               return (
                 <div
@@ -397,17 +435,13 @@ export function SearchResultsPanel({ channelId }: SearchResultsPanelProps) {
 
                   {/* Msg Author & Info */}
                   <div className="flex items-start gap-2.5">
-                    <div className="h-8 w-8 rounded-full bg-[#35363c] flex items-center justify-center text-xs font-bold text-white shrink-0 overflow-hidden">
-                      {msg.senderAvatar ? (
-                        <img
-                          src={msg.senderAvatar}
-                          alt=""
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        msg.senderName.slice(0, 2).toUpperCase()
-                      )}
-                    </div>
+                    <StatusAvatar
+                      src={avatarSrc}
+                      fallback={msg.senderName}
+                      size="md"
+                      status={status}
+                      className="shrink-0"
+                    />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-baseline gap-1.5">
                         <span className="text-sm font-semibold text-foreground truncate">

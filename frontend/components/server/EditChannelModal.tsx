@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { X, Hash, Volume2, Lock, Trash2, ChevronRight } from "lucide-react";
+import { X, Hash, Volume2, Trash2 } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useRoomStore } from "@/stores/roomStore";
@@ -17,7 +17,7 @@ interface EditChannelModalProps {
   channel: Channel;
 }
 
-type SettingsTab = "overview" | "permissions";
+type SettingsTab = "overview";
 
 export function EditChannelModal({ isOpen, onClose, roomId, channel }: EditChannelModalProps) {
   const { t } = useTranslation();
@@ -174,29 +174,11 @@ export function EditChannelModal({ isOpen, onClose, roomId, channel }: EditChann
 
               {/* Links list */}
               <nav className="space-y-0.5">
-                <button
-                  onClick={() => setActiveTab("overview")}
-                  className={cn(
-                    "w-full flex items-center px-2.5 py-1.5 rounded text-sm text-left transition-colors font-medium cursor-pointer",
-                    activeTab === "overview"
-                      ? "bg-[#35373c] text-white"
-                      : "text-[#949ba4] hover:bg-[#35373c]/40 hover:text-[#dbdee1]"
-                  )}
+                <div
+                  className="w-full flex items-center px-2.5 py-1.5 rounded text-sm text-left font-medium bg-[#35373c] text-white select-none"
                 >
                   {t("channelSettings.overview")}
-                </button>
-
-                <button
-                  onClick={() => setActiveTab("permissions")}
-                  className={cn(
-                    "w-full flex items-center px-2.5 py-1.5 rounded text-sm text-left transition-colors font-medium cursor-pointer",
-                    activeTab === "permissions"
-                      ? "bg-[#35373c] text-white"
-                      : "text-[#949ba4] hover:bg-[#35373c]/40 hover:text-[#dbdee1]"
-                  )}
-                >
-                  {t("channelSettings.permissions")}
-                </button>
+                </div>
               </nav>
 
               <div className="border-t border-[#35373c]/60 my-2 mx-2" />
@@ -298,143 +280,7 @@ export function EditChannelModal({ isOpen, onClose, roomId, channel }: EditChann
               </div>
             )}
 
-            {activeTab === "permissions" && (
-              <div className="max-w-[800px] w-full space-y-5 animate-in fade-in duration-300">
-                <div>
-                  <h2 className="text-xl font-bold text-white mb-2">
-                    {t("channelSettings.permissionsTitle")}
-                  </h2>
-                  <p className="text-sm text-[#949ba4]">
-                    {t("channelSettings.permissionsDesc")}
-                  </p>
-                </div>
-
-                {/* Unsynced advisory banner (only active if private is true) */}
-                {isPrivateChannel && (
-                  <div className="flex items-center justify-between rounded bg-[#2b2d31] p-3 border border-[#f0b232]/40 shadow-sm gap-2">
-                    <div className="flex items-center gap-3 text-sm text-[#dbdee1] min-w-0">
-                      <span className="text-base text-[#f0b232] shrink-0 select-none">💡</span>
-                      <span className="truncate">
-                        {t("channelSettings.notSyncedWithCategory").replace("{categoryName}", "")}
-                        <strong className="text-white ml-1 font-semibold">{t("channelSettings.textChannel")}</strong>
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      className="rounded bg-[#4e5058] hover:bg-[#6d6f78] text-white text-[12px] font-semibold px-3 py-1.5 transition-colors cursor-pointer shrink-0"
-                    >
-                      {t("channelSettings.syncNow")}
-                    </button>
-                  </div>
-                )}
-
-                <div className="border-t border-[#35373c]/60 my-2" />
-
-                {/* Private Channel Toggler Card (Matching images) */}
-                <div className="rounded-md bg-[#2b2d31] p-4 flex items-center justify-between gap-4 border border-[#1f2023]/20 shadow">
-                  <div className="flex gap-3 min-w-0">
-                    <Lock className="h-6 w-6 text-[#ef3f43]/80 shrink-0 mt-0.5" />
-                    <div className="flex flex-col min-w-0">
-                      <span className="font-semibold text-white text-sm">
-                        {t("channelSettings.privateChannel")}
-                      </span>
-                      <span className="text-xs text-[#949ba4] leading-relaxed mt-1">
-                        {t("channelSettings.privateDesc")}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* HTML Custom Switch */}
-                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                    <input
-                      type="checkbox"
-                      checked={isPrivateChannel}
-                      onChange={(e) => setIsPrivateChannel(e.target.checked)}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-[#80848e] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#5865f2]"></div>
-                  </label>
-                </div>
-
-                {/* Private members access control (only if private is true) */}
-                {isPrivateChannel && (
-                  <div className="rounded-md bg-[#2b2d31] p-4 border border-[#1f2023]/25 space-y-4 shadow animate-in slide-in-from-top-1 duration-200">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-xs font-bold uppercase tracking-wider text-white">
-                        {t("channelSettings.whoCanAccess")}
-                      </span>
-                      <button
-                        type="button"
-                        className="rounded bg-[#5865f2] hover:bg-[#4752c4] text-white text-[12px] font-semibold px-3 py-1.5 transition-colors cursor-pointer select-none"
-                      >
-                        {t("channelSettings.addMembersOrRoles")}
-                      </button>
-                    </div>
-
-                    <div className="space-y-4">
-                      {/* Roles List Section */}
-                      <div>
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-[#949ba4]">
-                          {t("channelSettings.roles")}
-                        </span>
-                        <div className="mt-2 flex items-center gap-3 py-1 text-sm text-[#949ba4]">
-                          <Lock className="h-4 w-4 shrink-0 text-[#949ba4]/60" />
-                          <span className="font-medium text-xs select-none">
-                            {t("channelSettings.noRoles")}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="border-t border-[#35373c]/40 pt-1" />
-
-                      {/* Members List Section */}
-                      <div>
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-[#949ba4]">
-                          {t("channelSettings.members")}
-                        </span>
-                        <div className="mt-2 flex items-center justify-between py-1 bg-[#1e1f22]/35 rounded px-2.5 border border-[#1e1f22]/5">
-                          <div className="flex items-center gap-3">
-                            <div className="h-6 w-6 rounded-full bg-[#5865f2]/20 flex items-center justify-center text-[10px] font-bold text-[#5865f2] shrink-0 uppercase select-none">
-                              CD
-                            </div>
-                            <div className="flex items-baseline gap-1 select-none">
-                              <span className="font-semibold text-sm text-white">co doc vuong</span>
-                              <span className="text-xs text-[#949ba4]">pat69696</span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-3">
-                            <span className="text-xs text-[#949ba4] select-none font-medium">
-                              {t("channelSettings.serverOwner")}
-                            </span>
-                            <button
-                              type="button"
-                              className="text-[#b5bac1] hover:text-white transition-colors cursor-pointer"
-                              aria-label="Remove access"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Advanced Row section link (only if private is true) */}
-                {isPrivateChannel && (
-                  <div className="pt-2">
-                    <button
-                      type="button"
-                      className="flex items-center text-sm font-semibold text-white/90 hover:text-white transition-colors gap-1.5 cursor-pointer uppercase tracking-wider text-[11px]"
-                    >
-                      {t("channelSettings.advancedPermissions")}
-                      <ChevronRight className="h-4 w-4 text-[#949ba4]" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+            {/* Active Tab screens */}
           </div>
 
           {/* Bottom Floating Sticky Saves Changes Bar */}

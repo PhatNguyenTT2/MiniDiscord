@@ -10,6 +10,11 @@ import com.discordmini.groupchannel.model.enums.RoomRole;
 import com.discordmini.groupchannel.repository.ChannelRepository;
 import com.discordmini.groupchannel.repository.RoomParticipantRepository;
 import com.discordmini.groupchannel.repository.RoomRepository;
+import com.discordmini.groupchannel.repository.RoleRepository;
+import com.discordmini.groupchannel.repository.RolePermissionRepository;
+import com.discordmini.groupchannel.model.entity.Role;
+import com.discordmini.groupchannel.model.entity.RolePermission;
+import com.discordmini.groupchannel.model.enums.PermissionKey;
 import lombok.RequiredArgsConstructor;
 import com.discordmini.groupchannel.client.UserServiceClient;
 import com.discordmini.groupchannel.model.dto.RoomResponse;
@@ -18,6 +23,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.http.HttpStatus;
+import com.discordmini.common.exception.BaseException;
 
 import java.util.List;
 import java.util.UUID;
@@ -33,6 +40,8 @@ public class RoomService {
         private final ApplicationEventPublisher eventPublisher;
         private final UserServiceClient userServiceClient;
         private final MembershipService membershipService;
+        private final RoleRepository roleRepository;
+        private final RolePermissionRepository rolePermissionRepository;
 
         @Value("${app.default-room.name:MiniDiscord General}")
         private String defaultRoomName;
@@ -48,11 +57,46 @@ public class RoomService {
                                 .build();
                 room = roomRepository.save(room);
 
+                // Create Default Roles
+                Role everyoneRole = Role.builder()
+                                .room(room)
+                                .name("@everyone")
+                                .position(0)
+                                .color("#808080")
+                                .build();
+                everyoneRole = roleRepository.save(everyoneRole);
+
+                for (PermissionKey key : PermissionKey.values()) {
+                        boolean allowed = key == PermissionKey.INVITE_MEMBER || key == PermissionKey.ALLOW_MENTION;
+                        rolePermissionRepository.save(RolePermission.builder()
+                                        .role(everyoneRole)
+                                        .permissionKey(key)
+                                        .isAllowed(allowed)
+                                        .build());
+                }
+
+                Role adminRole = Role.builder()
+                                .room(room)
+                                .name("Admin")
+                                .position(1)
+                                .color("#8a2be2")
+                                .build();
+                adminRole = roleRepository.save(adminRole);
+
+                for (PermissionKey key : PermissionKey.values()) {
+                        rolePermissionRepository.save(RolePermission.builder()
+                                        .role(adminRole)
+                                        .permissionKey(key)
+                                        .isAllowed(true)
+                                        .build());
+                }
+
                 // 2. Add Owner as Participant
                 RoomParticipant owner = RoomParticipant.builder()
                                 .room(room)
                                 .userId(ownerId)
                                 .role(RoomRole.OWNER)
+                                .roleEntity(adminRole)
                                 .build();
                 participantRepository.save(owner);
 
@@ -180,11 +224,30 @@ public class RoomService {
                                 .build();
                 room = roomRepository.save(room);
 
+                // Create Default @everyone Role for DM Room
+                Role everyoneRole = Role.builder()
+                                .room(room)
+                                .name("@everyone")
+                                .position(0)
+                                .color("#808080")
+                                .build();
+                everyoneRole = roleRepository.save(everyoneRole);
+
+                for (PermissionKey key : PermissionKey.values()) {
+                        rolePermissionRepository.save(RolePermission.builder()
+                                        .role(everyoneRole)
+                                        .permissionKey(key)
+                                        .isAllowed(key == PermissionKey.ALLOW_MENTION) // Allow sending text in DM by
+                                                                                       // default
+                                        .build());
+                }
+
                 // Add both users as MEMBER roles for equal DM ownership
                 RoomParticipant owner = RoomParticipant.builder()
                                 .room(room)
                                 .userId(ownerId)
                                 .role(RoomRole.MEMBER)
+                                .roleEntity(everyoneRole)
                                 .build();
                 participantRepository.save(owner);
 
@@ -194,6 +257,7 @@ public class RoomService {
                                         .room(room)
                                         .userId(targetUserId)
                                         .role(RoomRole.MEMBER)
+                                        .roleEntity(everyoneRole)
                                         .build();
                         participantRepository.save(target);
                 }
@@ -212,6 +276,36 @@ public class RoomService {
                                                 targetUserId));
 
                 return room;
+        }
+
+        @Transactional
+        public void transferOwnership(UUID roomId, UUID requesterId, UUID newOwnerId) {
+                Room room = roomRepository.findById(roomId)
+                                .orElseThrow(() -> new com.discordmini.groupchannel.exception.RoomNotFoundException(
+                                                "Room not found"));
+
+                if (!room.getOwnerId().equals(requesterId)) {
+                        throw new BaseException("Only the owner can transfer ownership", HttpStatus.FORBIDDEN);
+                }
+
+                RoomParticipant newOwnerParticipant = participantRepository.findByUserIdAndRoomId(newOwnerId, roomId)
+                                .orElseThrow(() -> new BaseException("New owner must be a member of this room",
+                                                HttpStatus.BAD_REQUEST));
+
+                RoomParticipant oldOwnerParticipant = participantRepository.findByUserIdAndRoomId(requesterId, roomId)
+                                .orElseThrow(() -> new BaseException("Old owner participant not found",
+                                                HttpStatus.INTERNAL_SERVER_ERROR));
+
+                // Let's modify ownership
+                room.setOwnerId(newOwnerId);
+                roomRepository.save(room);
+
+                // Update participants roles
+                oldOwnerParticipant.setRole(RoomRole.ADMIN);
+                participantRepository.save(oldOwnerParticipant);
+
+                newOwnerParticipant.setRole(RoomRole.OWNER);
+                participantRepository.save(newOwnerParticipant);
         }
 
         @Transactional

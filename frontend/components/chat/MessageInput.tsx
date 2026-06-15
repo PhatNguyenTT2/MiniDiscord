@@ -1,13 +1,16 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import { FileUp, ImageIcon, Video, AlertTriangle, Smile, Plus, X, Reply, ArrowDown, Sticker as StickerIcon } from "lucide-react";
-import { useTranslation } from "@/lib/i18n";
+import { useTranslation, getDateLocale } from "@/lib/i18n";
 import { ExpressionPicker } from "@/components/ui/ExpressionPicker";
 import { useFileStore } from "@/stores/fileStore";
 import { useChatStore } from "@/stores/chatStore";
 import { cn } from "@/lib/utils";
 import type { MemberDetailResponse } from "@/types/room";
 import { MentionPicker } from "./MentionPicker";
+import { useAuthStore } from "@/stores/authStore";
+import { useHasPermission } from "@/hooks/useHasPermission";
+import { useParams } from "next/navigation";
 
 export type AttachmentData = {
   fileName: string;
@@ -51,6 +54,71 @@ export function MessageInput({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [rateLimitCooldown, setRateLimitCooldown] = useState(0);
+
+  const params = useParams();
+  const roomId = params?.serverId as string;
+  const canMention = useHasPermission("ALLOW_MENTION", roomId || undefined);
+
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const me = members?.find((m) => m.userId === currentUserId);
+  const [timeLeft, setTimeLeft] = useState(0);
+
+  console.log("[E2E DEBUG MessageInput] currentUserId:", currentUserId, "me:", me, "timeLeft:", timeLeft);
+
+  useEffect(() => {
+    if (!me?.mutedUntil) {
+      setTimeLeft(0);
+      return;
+    }
+
+    const targetTime = new Date(me.mutedUntil).getTime();
+    const calcTimeLeft = () => {
+      const diff = Math.max(0, Math.ceil((targetTime - Date.now()) / 1000));
+      setTimeLeft(diff);
+      return diff;
+    };
+
+    const initialDiff = calcTimeLeft();
+    if (initialDiff <= 0) return;
+
+    const interval = setInterval(() => {
+      const diff = calcTimeLeft();
+      if (diff <= 0) {
+        clearInterval(interval);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [me?.mutedUntil]);
+
+  const formatTimeLeft = (secCount: number) => {
+    const h = Math.floor(secCount / 3600);
+    const m = Math.floor((secCount % 3600) / 60);
+    const s = secCount % 60;
+    const pad = (num: number) => String(num).padStart(2, "0");
+    if (h > 0) {
+      return `${pad(h)}:${pad(m)}:${pad(s)}`;
+    }
+    return `${pad(m)}:${pad(s)}`;
+  };
+
+  const getFormattedMutedUntil = () => {
+    if (!me?.mutedUntil) return "";
+    try {
+      const date = new Date(me.mutedUntil);
+      return date.toLocaleString(getDateLocale(), {
+        hour: "2-digit",
+        minute: "2-digit",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric"
+      });
+    } catch {
+      return "";
+    }
+  };
+
+  const isMuted = timeLeft > 0;
 
   // Mention states
   const [showMentionPicker, setShowMentionPicker] = useState(false);
@@ -166,6 +234,12 @@ export function MessageInput({
       });
     }
 
+    const hasEveryoneMention = mentionsList.includes("everyone");
+    if (hasEveryoneMention && !canMention) {
+      alert(t("chat.noMentionPermission") || "You do not have permission to mention @everyone");
+      return;
+    }
+
     onSend?.(content, attachment, mentionsList);
     setMessage("");
     setAttachment(null);
@@ -257,9 +331,11 @@ export function MessageInput({
     { icon: Video, label: t("chat.uploadVideo"), accept: "video/*" },
   ];
 
-  const placeholder = isDm
-    ? t("chat.messagePlaceholderDm", { userName: channelName })
-    : t("chat.messagePlaceholderChannel", { channelName });
+  const placeholder = isMuted
+    ? t("chat.mutedPlaceholder", { time: formatTimeLeft(timeLeft) })
+    : isDm
+      ? t("chat.messagePlaceholderDm", { userName: channelName })
+      : t("chat.messagePlaceholderChannel", { channelName });
 
   return (
     <div
@@ -275,8 +351,8 @@ export function MessageInput({
       >
         <div
           className={`absolute -top-11 left-1/2 -translate-x-1/2 z-30 transition-all duration-300 transform ${showScrollDown
-              ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
-              : "opacity-0 scale-75 translate-y-2 pointer-events-none"
+            ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
+            : "opacity-0 scale-75 translate-y-2 pointer-events-none"
             }`}
         >
           <button
@@ -289,6 +365,14 @@ export function MessageInput({
             <ArrowDown className="h-5 w-5" />
           </button>
         </div>
+        {isMuted && (
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-[#da373c]/10 text-[#f23f43] rounded-t-[var(--floating-bar-radius)] border-b border-[#da373c]/20 leading-tight">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-[#f23f43]" />
+            <span className="text-xs font-semibold">
+              {t("chat.mutedBanner", { time: getFormattedMutedUntil() })}
+            </span>
+          </div>
+        )}
         {replyingTo && (
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#202225]/30 bg-[#2b2d31] rounded-t-[var(--floating-bar-radius)] animate-in slide-in-from-bottom-[6px] duration-150">
             <div className="flex min-w-0 items-center gap-2">
@@ -426,7 +510,7 @@ export function MessageInput({
             <button
               onClick={() => setIsAttachOpen(!isAttachOpen)}
               className="w-6 h-6 flex items-center justify-center text-[#b5bac1] hover:text-[#dbdee1] transition-colors disabled:opacity-50 bg-[#404249] hover:bg-[#4e5058] rounded-full shrink-0 cursor-pointer"
-              disabled={isUploading}
+              disabled={isUploading || isMuted}
               aria-label="Add attachment"
               type="button"
             >
@@ -479,7 +563,7 @@ export function MessageInput({
               }}
               placeholder={placeholder}
               className="w-full bg-transparent text-[#dbdee1] py-[7px] pl-1 pr-[82px] focus:outline-none focus:ring-0 resize-none min-h-[36px] max-h-[50vh] text-[15px] font-medium leading-[22px] placeholder:text-[#6d6f78] self-center"
-              disabled={isUploading}
+              disabled={isUploading || isMuted}
               rows={Math.min(10, Math.max(1, message.split("\n").length))}
             />
 
@@ -494,7 +578,7 @@ export function MessageInput({
               >
                 <button
                   type="button"
-                  disabled={isUploading}
+                  disabled={isUploading || isMuted}
                   className="p-[5px] text-[#b5bac1] hover:text-[#dbdee1] hover:bg-[#4e5058]/40 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-all shrink-0 cursor-pointer flex items-center justify-center"
                   title="Stickers"
                 >
@@ -510,7 +594,7 @@ export function MessageInput({
               >
                 <button
                   type="button"
-                  disabled={isUploading}
+                  disabled={isUploading || isMuted}
                   className="p-[5px] text-[#b5bac1] hover:text-[#dbdee1] hover:bg-[#4e5058]/40 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-all shrink-0 cursor-pointer flex items-center justify-center"
                   title={t("chat.emoji")}
                 >

@@ -2,6 +2,7 @@
 
 import { StatusAvatar } from "@/components/ui/StatusAvatar";
 import { MessageActions } from "@/components/chat/MessageActions";
+import { MemberProfilePopover } from "@/components/chat/MemberProfilePopover";
 import { Reply, FileIcon, Pin, CornerUpRight, AlertCircle, Phone, PhoneOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/stores/chatStore";
@@ -16,6 +17,7 @@ import { useState, useRef, useEffect } from "react";
 import { getStompClient } from "@/lib/websocket";
 import { getResolvedFileUrl } from "@/lib/fileResolver";
 import { StickerPreview } from "@/components/chat/StickerPreview";
+import { useHasPermission } from "@/hooks/useHasPermission";
 
 interface MessageItemProps {
   message: Message;
@@ -57,6 +59,7 @@ export function MessageItem({
 }: MessageItemProps) {
   const { t } = useTranslation();
   const replyingTo = useChatStore((s) => s.replyingTo);
+  const canDeletePermission = useHasPermission("DELETE_ANY_MESSAGE");
   const setReplyingTo = useChatStore((s) => s.setReplyingTo);
   const addReaction = useChatStore((s) => s.addReaction);
   const editMessage = useChatStore((s) => s.editMessage);
@@ -67,6 +70,7 @@ export function MessageItem({
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
   const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
+
   const editInputRef = useRef<HTMLTextAreaElement>(null);
 
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
@@ -190,7 +194,7 @@ export function MessageItem({
 
   function handleDelete() {
     if (channelId) {
-      const type = message.senderId === currentUserId ? "EVERYONE" : "FOR_ME";
+      const type = (message.senderId === currentUserId || canDeletePermission) ? "EVERYONE" : "FOR_ME";
       deleteMessage(channelId, apiId, type);
     }
   }
@@ -347,14 +351,27 @@ export function MessageItem({
         message.status === "FAILED" && "opacity-70 border-l-2 border-red-500 pl-[14px]"
       )}
     >
-      <div className="w-10 shrink-0">
+      <div className="w-10 shrink-0 relative">
         {!isGrouped ? (
-          <StatusAvatar
-            src={avatarSrc}
-            fallback={resolvedSenderName}
-            status={status as "ONLINE" | "OFFLINE" | "IDLE" | "DND"}
-            size="lg"
-          />
+          <MemberProfilePopover
+            userId={message.senderId}
+            username={senderMember?.username || message.senderName}
+            displayName={resolvedSenderName}
+            avatarUrl={avatarSrc}
+            status={status}
+            roomId={message.roomId}
+            side="right"
+            align="start"
+          >
+            <div className="cursor-pointer">
+              <StatusAvatar
+                src={avatarSrc}
+                fallback={resolvedSenderName}
+                status={status as "ONLINE" | "OFFLINE" | "IDLE" | "DND"}
+                size="lg"
+              />
+            </div>
+          </MemberProfilePopover>
         ) : (
           <div className="flex items-center justify-end w-full relative">
             {message.isPinned && (
@@ -370,9 +387,20 @@ export function MessageItem({
       <div className="flex-1 min-w-0">
         {!isGrouped && (
           <div className="flex items-baseline gap-2 flex-wrap">
-            <span className="font-semibold text-foreground text-[15px] hover:underline cursor-pointer">
-              {resolvedSenderName}
-            </span>
+            <MemberProfilePopover
+              userId={message.senderId}
+              username={senderMember?.username || message.senderName}
+              displayName={resolvedSenderName}
+              avatarUrl={avatarSrc}
+              status={status}
+              roomId={message.roomId}
+              side="right"
+              align="start"
+            >
+              <span className="font-semibold text-foreground text-[15px] hover:underline cursor-pointer">
+                {resolvedSenderName}
+              </span>
+            </MemberProfilePopover>
             <time className="text-[12px] text-muted-foreground">
               {formatFullDate(message.createdAt)}
             </time>
@@ -564,7 +592,7 @@ export function MessageItem({
           onEdit={() => { setIsEditing(true); setEditContent(message.content); }}
           onDelete={() => setIsDeleteModalOpen(true)}
           canEdit={isOwnMessage}
-          canDelete={true}
+          canDelete={isOwnMessage || canDeletePermission}
           messageContent={message.content}
           isOwnMessage={isOwnMessage}
           onMarkUnread={onMarkUnread}
@@ -591,13 +619,15 @@ export function MessageItem({
         />
       )}
 
+
+
       {isDeleteModalOpen && (
         <ConfirmModal
-          title={isOwnMessage ? t("chat.deleteMessage") : t("chat.hideMessage")}
+          title={isOwnMessage ? t("chat.deleteMessage") : t("chat.deleteMessageAdmin")}
           description={
             isOwnMessage
               ? t("chat.deleteConfirmPrompt")
-              : t("chat.hideConfirmPrompt")
+              : t("chat.deleteConfirmPrompt")
           }
           confirmText={t("chat.delete")}
           onClose={() => setIsDeleteModalOpen(false)}

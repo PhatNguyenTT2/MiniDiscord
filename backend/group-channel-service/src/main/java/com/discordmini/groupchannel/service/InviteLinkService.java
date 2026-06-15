@@ -88,7 +88,7 @@ public class InviteLinkService {
         .orElseThrow(() -> new BaseException("Invite link not found or expired", HttpStatus.NOT_FOUND));
 
     if (inviteLink.getExpiresAt().isBefore(Instant.now())) {
-      throw new BaseException("Invite link has expired", HttpStatus.GONE);
+      throw new BaseException("Invite link has expired", HttpStatus.BAD_REQUEST, "INVITE_EXPIRED");
     }
 
     return inviteLink;
@@ -100,7 +100,7 @@ public class InviteLinkService {
         .orElseThrow(() -> new BaseException("Invite link not found or expired", HttpStatus.NOT_FOUND));
 
     if (inviteLink.getExpiresAt().isBefore(Instant.now())) {
-      throw new BaseException("Invite link has expired", HttpStatus.GONE);
+      throw new BaseException("Invite link has expired", HttpStatus.BAD_REQUEST, "INVITE_EXPIRED");
     }
 
     Room room = inviteLink.getRoom();

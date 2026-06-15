@@ -12,6 +12,9 @@ import org.springframework.web.client.RestClient;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
+import java.util.Collections;
 
 @Slf4j
 @Component
@@ -23,6 +26,44 @@ public class MembershipClient {
     public MembershipClient(RestClient.Builder builder, StringRedisTemplate redisTemplate) {
         this.restClient = builder.baseUrl("lb://group-channel-service").build();
         this.redisTemplate = redisTemplate;
+    }
+
+    public Set<String> getRoomMembers(String roomId) {
+        String cacheKey = "room:members:" + roomId;
+        Set<String> members = redisTemplate.opsForSet().members(cacheKey);
+        if (members != null && !members.isEmpty()) {
+            return members;
+        }
+
+        // Cache miss — fetch and populate
+        try {
+            var response = restClient.get()
+                    .uri("/api/rooms/{roomId}/members", roomId)
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<Map<String, Object>>() {
+                    });
+
+            if (response != null && response.get("data") instanceof Map<?, ?> dataMap) {
+                if (dataMap.get("members") instanceof List<?> dataList) {
+                    Set<String> memberIds = new HashSet<>();
+                    for (Object item : dataList) {
+                        if (item instanceof Map<?, ?> member) {
+                            Object uid = member.get("userId");
+                            if (uid != null) {
+                                memberIds.add(uid.toString());
+                                redisTemplate.opsForSet().add(cacheKey, uid.toString());
+                            }
+                        }
+                    }
+                    redisTemplate.expire(cacheKey, Duration.ofMinutes(30));
+                    return memberIds;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not fetch room members for {}: {}", roomId, e.getMessage());
+        }
+
+        return Collections.emptySet();
     }
 
     public void verifyMembership(String userId, String roomId) {

@@ -4,6 +4,8 @@ import com.discordmini.common.dto.ApiResponse;
 import com.discordmini.groupchannel.model.dto.AddMemberRequest;
 import com.discordmini.groupchannel.model.dto.CreateRoomRequest;
 import com.discordmini.groupchannel.model.dto.RoomResponse;
+import com.discordmini.groupchannel.model.dto.MuteRequest;
+import com.discordmini.groupchannel.model.dto.BanRequest;
 import com.discordmini.groupchannel.model.entity.Room;
 import com.discordmini.groupchannel.service.MembershipService;
 import com.discordmini.groupchannel.service.RoomService;
@@ -60,6 +62,25 @@ public class RoomController {
         return ResponseEntity.ok(ApiResponse.ok("Member added successfully", null));
     }
 
+    @PostMapping("/{roomId}/members/{memberId}/mute")
+    public ResponseEntity<ApiResponse<Void>> muteMember(
+            @RequestHeader("X-User-Id") UUID requesterId,
+            @PathVariable UUID roomId,
+            @PathVariable UUID memberId,
+            @Valid @RequestBody MuteRequest request) {
+        membershipService.muteMember(roomId, requesterId, memberId, request.getDurationMinutes());
+        return ResponseEntity.ok(ApiResponse.ok("Member muted successfully", null));
+    }
+
+    @PostMapping("/{roomId}/bans")
+    public ResponseEntity<ApiResponse<Void>> banMember(
+            @RequestHeader("X-User-Id") UUID requesterId,
+            @PathVariable UUID roomId,
+            @Valid @RequestBody BanRequest request) {
+        membershipService.banMember(roomId, requesterId, request.getUserId(), request.getReason());
+        return ResponseEntity.ok(ApiResponse.ok("Member banned successfully", null));
+    }
+
     @GetMapping("/my")
     public ResponseEntity<ApiResponse<List<RoomResponse>>> getMyRooms(@RequestHeader("X-User-Id") UUID userId) {
         return ResponseEntity.ok(ApiResponse.ok("My rooms fetched", roomService.getMyRooms(userId)));
@@ -93,6 +114,14 @@ public class RoomController {
             @PathVariable UUID userId) {
         membershipService.checkPinPrivilege(roomId, userId);
         return ResponseEntity.ok(ApiResponse.ok("Pin privilege verified", null));
+    }
+
+    @GetMapping("/{roomId}/members/{userId}/delete-message-privilege")
+    public ResponseEntity<ApiResponse<Void>> checkDeleteMessagePrivilege(
+            @PathVariable UUID roomId,
+            @PathVariable UUID userId) {
+        membershipService.checkDeleteMessagePrivilege(roomId, userId);
+        return ResponseEntity.ok(ApiResponse.ok("Delete message privilege verified", null));
     }
 
     @GetMapping("/root")
@@ -143,6 +172,28 @@ public class RoomController {
         return ResponseEntity.ok(ApiResponse.ok("Invite link deleted successfully", null));
     }
 
+    @PostMapping("/{roomId}/transfer-ownership")
+    public ResponseEntity<ApiResponse<Void>> transferOwnership(
+            @RequestHeader("X-User-Id") UUID ownerId,
+            @PathVariable UUID roomId,
+            @RequestBody Map<String, String> body) {
+        UUID newOwnerId = UUID.fromString(body.get("newOwnerId"));
+        roomService.transferOwnership(roomId, ownerId, newOwnerId);
+        return ResponseEntity.ok(ApiResponse.ok("Server ownership transferred successfully", null));
+    }
+
+    @PostMapping("/{roomId}/members/{memberId}/role")
+    public ResponseEntity<ApiResponse<Void>> updateMemberRole(
+            @RequestHeader("X-User-Id") UUID requesterId,
+            @PathVariable UUID roomId,
+            @PathVariable UUID memberId,
+            @RequestBody Map<String, String> body) {
+        com.discordmini.groupchannel.model.enums.RoomRole role = com.discordmini.groupchannel.model.enums.RoomRole
+                .valueOf(body.get("role").toUpperCase());
+        membershipService.updateMemberRole(roomId, requesterId, memberId, role);
+        return ResponseEntity.ok(ApiResponse.ok("Member role updated successfully", null));
+    }
+
     private com.discordmini.groupchannel.model.dto.InviteLinkResponse mapToInviteResponse(
             com.discordmini.groupchannel.model.entity.InviteLink inviteLink) {
         return com.discordmini.groupchannel.model.dto.InviteLinkResponse.builder()
@@ -154,6 +205,7 @@ public class RoomController {
                 .uses(inviteLink.getUses())
                 .expiresAt(inviteLink.getExpiresAt())
                 .createdAt(inviteLink.getCreatedAt())
+                .creatorId(inviteLink.getCreatorId())
                 .build();
     }
 

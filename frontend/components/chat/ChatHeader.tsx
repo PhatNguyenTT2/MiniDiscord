@@ -255,7 +255,7 @@ export function ChatHeader({
           <Users className="h-5 w-5" />
         </HeaderIcon>
 
-        <InboxPopover />
+        {!roomId && <InboxPopover />}
 
         <div className="relative mx-1">
           <input

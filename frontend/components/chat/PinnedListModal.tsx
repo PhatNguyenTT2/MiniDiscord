@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { X, CornerUpRight, Trash2, FileIcon } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { useChatStore } from "@/stores/chatStore";
 import { getResolvedFileUrl } from "@/lib/fileResolver";
 import { StatusAvatar } from "@/components/ui/StatusAvatar";
+import { useAuthStore } from "@/stores/authStore";
+import { useRoomStore } from "@/stores/roomStore";
+
+const EMPTY_MEMBERS: any[] = [];
 
 interface PinnedListModalProps {
   isOpen: boolean;
@@ -17,11 +21,15 @@ interface PinnedListModalProps {
 
 function PinnedMessageItem({
   msg,
+  avatarSrc,
+  status,
   channelId,
   onJumpToMessage,
   unpinMessage,
 }: {
   msg: any;
+  avatarSrc?: string | null;
+  status?: string | null;
   channelId: string;
   onJumpToMessage: (id: string) => void;
   unpinMessage: (channelId: string, id: string) => void;
@@ -85,9 +93,10 @@ function PinnedMessageItem({
       {/* Msg Author & Info */}
       <div className="flex items-start gap-2.5">
         <StatusAvatar
-          src={msg.senderAvatar}
+          src={avatarSrc}
           fallback={msg.senderName}
           size="md"
+          status={status as any}
           className="shrink-0"
         />
         <div className="flex-1 min-w-0">
@@ -166,6 +175,42 @@ export function PinnedListModal({
   const fetchPinned = useChatStore((s) => s.fetchPinnedMessages);
   const unpinMessage = useChatStore((s) => s.unpinMessage);
 
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const members = useRoomStore((s) => s.members[roomId] ?? EMPTY_MEMBERS);
+
+  // Build avatar lookup map for pinned messages
+  const memberAvatarMap = useMemo(() => {
+    const map: Record<string, string | null> = {};
+    if (members) {
+      for (const m of members) {
+        map[m.userId] = m.avatarUrl || null;
+      }
+    }
+    if (currentUserId) {
+      const currentUser = useAuthStore.getState().user;
+      if (currentUser?.id === currentUserId) {
+        map[currentUserId] = currentUser.avatarUrl || null;
+      }
+    }
+    return map;
+  }, [members, currentUserId]);
+
+  const memberStatusMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    if (members) {
+      for (const m of members) {
+        map[m.userId] = m.status || "OFFLINE";
+      }
+    }
+    if (currentUserId) {
+      const currentUser = useAuthStore.getState().user;
+      if (currentUser?.id === currentUserId) {
+        map[currentUserId] = currentUser.status || "OFFLINE";
+      }
+    }
+    return map;
+  }, [members, currentUserId]);
+
   useEffect(() => {
     if (isOpen && roomId && channelId) {
       fetchPinned(roomId, channelId);
@@ -211,15 +256,21 @@ export function PinnedListModal({
             <p className="text-sm text-[#949ba4]">{t("chat.noPinnedMessages")}</p>
           </div>
         ) : (
-          pinnedMessages.map((msg) => (
-            <PinnedMessageItem
-              key={msg.id}
-              msg={msg}
-              channelId={channelId}
-              onJumpToMessage={onJumpToMessage}
-              unpinMessage={unpinMessage}
-            />
-          ))
+          pinnedMessages.map((msg) => {
+            const avatarSrc = memberAvatarMap[msg.senderId] !== undefined ? memberAvatarMap[msg.senderId] : msg.senderAvatar;
+            const status = memberStatusMap[msg.senderId] as any;
+            return (
+              <PinnedMessageItem
+                key={msg.id}
+                msg={msg}
+                avatarSrc={avatarSrc}
+                status={status}
+                channelId={channelId}
+                onJumpToMessage={onJumpToMessage}
+                unpinMessage={unpinMessage}
+              />
+            );
+          })
         )}
       </div>
     </div>

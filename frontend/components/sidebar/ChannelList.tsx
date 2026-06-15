@@ -16,6 +16,11 @@ import { InviteModal } from "@/components/server/InviteModal";
 import { ServerSettingsModal } from "@/components/server/ServerSettingsModal";
 import { NotificationSettingsModal } from "@/components/server/NotificationSettingsModal";
 import type { Channel } from "@/types";
+import { usePermissionStore } from "@/stores/permissionStore";
+import { useHasPermission } from "@/hooks/useHasPermission";
+import { StatusAvatar } from "@/components/ui/StatusAvatar";
+import { MemberProfilePopover } from "@/components/chat/MemberProfilePopover";
+import type { VoiceParticipant } from "@/components/voice/VoiceParticipantGrid";
 
 
 
@@ -31,6 +36,16 @@ interface ChannelItemProps {
 
 const EMPTY_PARTICIPANTS: unknown[] = [];
 
+const formatConnectionTime = (seconds: number) => {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  const hStr = h > 0 ? `${h}:` : "";
+  const mStr = m < 10 && h > 0 ? `0${m}:` : `${m}:`;
+  const sStr = s < 10 ? `0${s}` : `${s}`;
+  return `${hStr}${mStr}${sStr}`;
+};
+
 function ChannelItem({
   roomId,
   channel,
@@ -45,6 +60,9 @@ function ChannelItem({
   const hasUnread = count > 0 && !isActive;
 
   const participants = useVoiceStore((s) => s.channelParticipants[channel.id] || EMPTY_PARTICIPANTS);
+  const currentChannel = useVoiceStore((s) => s.currentChannel);
+  const connectionDuration = useVoiceStore((s) => s.connectionDuration);
+  const isJoined = currentChannel?.channelId === channel.id;
   const Icon = channel.type === "TEXT" ? Hash : Volume2;
 
   return (
@@ -72,6 +90,12 @@ function ChannelItem({
           <span className="truncate text-[14px]">{channel.name}</span>
         </div>
 
+        {channel.type === "VOICE" && isJoined && (
+          <span className="text-[11px] text-[#23a55a] font-semibold select-none pr-1">
+            {formatConnectionTime(connectionDuration)}
+          </span>
+        )}
+
         {hasUnread && (
           <div className="flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-white leading-none group-hover:hidden">
             {count > 99 ? "99+" : count}
@@ -79,17 +103,19 @@ function ChannelItem({
         )}
 
         <div className="hidden group-hover:flex items-center gap-1.5 ml-2 select-none duration-150">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onInviteClick?.();
-            }}
-            className="text-muted-foreground hover:text-foreground transition-all shrink-0 cursor-pointer"
-            aria-label="Invite to channel"
-          >
-            <UserPlus className="h-3.5 w-3.5" />
-          </button>
+          {onInviteClick && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onInviteClick();
+              }}
+              className="text-muted-foreground hover:text-foreground transition-all shrink-0 cursor-pointer"
+              aria-label="Invite to channel"
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+            </button>
+          )}
 
           {canEdit && (
             <button
@@ -110,33 +136,43 @@ function ChannelItem({
       {/* Voice Participants List */}
       {channel.type === "VOICE" && participants.length > 0 && (
         <div className="space-y-0.5 mt-0.5 mb-1.5 pl-6 pr-2">
-          {participants.map((p) => (
-            <div
-              key={p.userId}
-              className="flex items-center gap-2 py-0.5 rounded transition-colors group/participant cursor-default"
-            >
-              {p.avatarUrl ? (
-                <img
-                  src={p.avatarUrl}
-                  alt={p.displayName || p.username}
-                  className="h-5 w-5 rounded-full shrink-0 object-cover"
-                />
-              ) : (
-                <div className="h-5 w-5 rounded-full bg-[#5865f2]/20 flex items-center justify-center shrink-0">
-                  <span className="text-[10px] font-bold text-[#5865f2] uppercase">
-                    {(p.displayName || p.username).substring(0, 2)}
+          {participants.map((p: VoiceParticipant) => {
+            const member = useRoomStore.getState().members[roomId]?.find((m) => m.userId === p.userId);
+            const displayName = member?.displayName || member?.username || p.displayName || p.username;
+            const avatarUrl = member?.avatarUrl || p.avatarUrl;
+            return (
+              <MemberProfilePopover
+                key={p.userId}
+                userId={p.userId}
+                username={p.username}
+                displayName={displayName}
+                avatarUrl={avatarUrl || null}
+                status="ONLINE"
+                roomId={roomId}
+                side="right"
+                align="center"
+              >
+                <button
+                  type="button"
+                  className="flex items-center gap-2 py-0.5 px-1.5 rounded transition-colors group/participant cursor-pointer w-full text-left outline-none hover:bg-secondary/40"
+                >
+                  <StatusAvatar
+                    src={avatarUrl}
+                    fallback={p.username}
+                    status="ONLINE"
+                    size="sm"
+                  />
+                  <span className="text-[13px] text-[#949ba4] group-hover/participant:text-white font-medium truncate select-none">
+                    {displayName}
                   </span>
-                </div>
-              )}
-              <span className="text-[13px] text-[#949ba4] font-medium truncate select-none">
-                {p.displayName || p.username}
-              </span>
-              <div className="flex items-center gap-0.5 ml-auto shrink-0">
-                {p.deafened && <HeadphoneOff className="h-3.5 w-3.5 text-[#ed4245]" />}
-                {p.muted && !p.deafened && <MicOff className="h-3.5 w-3.5 text-[#ed4245]" />}
-              </div>
-            </div>
-          ))}
+                  <div className="flex items-center gap-0.5 ml-auto shrink-0">
+                    {p.deafened && <HeadphoneOff className="h-3.5 w-3.5 text-[#ed4245]" />}
+                    {p.muted && !p.deafened && <MicOff className="h-3.5 w-3.5 text-[#ed4245]" />}
+                  </div>
+                </button>
+              </MemberProfilePopover>
+            );
+          })}
         </div>
       )}
     </div>
@@ -246,8 +282,14 @@ export function ChannelList() {
   const textChannels = roomChannels.filter((c) => c.type === "TEXT");
   const voiceChannels = roomChannels.filter((c) => c.type === "VOICE");
 
-  const myRole = displayRoomId && currentUserId ? getMyRoleInRoom(displayRoomId, currentUserId) : null;
-  const canEditChannel = myRole === "OWNER" || myRole === "ADMIN";
+  const canEditChannel = useHasPermission("MANAGE_CHANNEL", displayRoomId || undefined);
+  const canInvite = useHasPermission("INVITE_MEMBER", displayRoomId || undefined);
+
+  useEffect(() => {
+    if (displayRoomId) {
+      usePermissionStore.getState().fetchPermissions(displayRoomId);
+    }
+  }, [displayRoomId]);
 
   useEffect(() => {
     if (displayRoomId && voiceChannels.length > 0) {
@@ -257,8 +299,11 @@ export function ChannelList() {
 
   // Load server's channels if absent or on active server change (Lazy Loading support)
   useEffect(() => {
-    if (displayRoomId && !useRoomStore.getState().channels[displayRoomId]) {
-      useRoomStore.getState().fetchChannels(displayRoomId);
+    if (displayRoomId) {
+      if (!useRoomStore.getState().channels[displayRoomId]) {
+        useRoomStore.getState().fetchChannels(displayRoomId);
+      }
+      useRoomStore.getState().fetchMembers(displayRoomId);
     }
   }, [displayRoomId]);
 
@@ -301,39 +346,45 @@ export function ChannelList() {
               className="fixed inset-0 z-40 bg-transparent"
             />
             <div className="absolute top-[48px] left-2 right-2 z-50 rounded-md bg-[#111214] p-1.5 shadow-xl flex flex-col gap-0.5 text-[13px] border border-[#2b2d31]/80 w-[220px] select-none">
-              <button
-                onClick={() => {
-                  setIsDropdownOpen(false);
-                  setIsServerSettingsOpen(true);
-                }}
-                className="w-full flex items-center justify-between rounded px-2 py-1.5 text-[#dbdee1] hover:bg-[#5865f2] hover:text-white transition-colors cursor-pointer text-left font-medium"
-              >
-                <span>{t("serverDropdown.settings")}</span>
-                <Settings className="h-4 w-4 shrink-0 opacity-60" />
-              </button>
+              {canEditChannel && (
+                <button
+                  onClick={() => {
+                    setIsDropdownOpen(false);
+                    setIsServerSettingsOpen(true);
+                  }}
+                  className="w-full flex items-center justify-between rounded px-2 py-1.5 text-[#dbdee1] hover:bg-[#5865f2] hover:text-white transition-colors cursor-pointer text-left font-medium"
+                >
+                  <span>{t("serverDropdown.settings")}</span>
+                  <Settings className="h-4 w-4 shrink-0 opacity-60" />
+                </button>
+              )}
 
-              <button
-                onClick={() => {
-                  setIsDropdownOpen(false);
-                  setInviteChannelName("");
-                  setIsInviteOpen(true);
-                }}
-                className="w-full flex items-center justify-between rounded px-2 py-1.5 text-[#dbdee1] hover:bg-[#5865f2] hover:text-white transition-colors cursor-pointer text-left font-medium"
-              >
-                <span>{t("serverDropdown.invite")}</span>
-                <UserPlus className="h-4 w-4 shrink-0 opacity-60" />
-              </button>
+              {canInvite && (
+                <button
+                  onClick={() => {
+                    setIsDropdownOpen(false);
+                    setInviteChannelName("");
+                    setIsInviteOpen(true);
+                  }}
+                  className="w-full flex items-center justify-between rounded px-2 py-1.5 text-[#dbdee1] hover:bg-[#5865f2] hover:text-white transition-colors cursor-pointer text-left font-medium"
+                >
+                  <span>{t("serverDropdown.invite")}</span>
+                  <UserPlus className="h-4 w-4 shrink-0 opacity-60" />
+                </button>
+              )}
 
-              <button
-                onClick={() => {
-                  setIsDropdownOpen(false);
-                  handleAddChannel("TEXT");
-                }}
-                className="w-full flex items-center justify-between rounded px-2 py-1.5 text-[#dbdee1] hover:bg-[#5865f2] hover:text-white transition-colors cursor-pointer text-left font-medium"
-              >
-                <span>{t("serverDropdown.createChannel")}</span>
-                <Plus className="h-4 w-4 shrink-0 opacity-60" />
-              </button>
+              {canEditChannel && (
+                <button
+                  onClick={() => {
+                    setIsDropdownOpen(false);
+                    handleAddChannel("TEXT");
+                  }}
+                  className="w-full flex items-center justify-between rounded px-2 py-1.5 text-[#dbdee1] hover:bg-[#5865f2] hover:text-white transition-colors cursor-pointer text-left font-medium"
+                >
+                  <span>{t("serverDropdown.createChannel")}</span>
+                  <Plus className="h-4 w-4 shrink-0 opacity-60" />
+                </button>
+              )}
 
               <button
                 onClick={() => {
@@ -360,13 +411,13 @@ export function ChannelList() {
               channels={textChannels}
               activeChannelId={activeChannelId}
               onChannelClick={handleChannelClick}
-              onAddClick={() => handleAddChannel("TEXT")}
-              onSettingsClick={setEditChannel}
-              onInviteClick={(ch) => {
+              onAddClick={canEditChannel ? () => handleAddChannel("TEXT") : undefined}
+              onSettingsClick={canEditChannel ? setEditChannel : undefined}
+              onInviteClick={canInvite ? (ch) => {
                 setInviteChannelName(ch.name);
                 setIsInviteOpen(true);
-              }}
-              canEdit={true}
+              } : undefined}
+              canEdit={canEditChannel}
             />
             <ChannelCategory
               roomId={displayRoomId}
@@ -374,13 +425,13 @@ export function ChannelList() {
               channels={voiceChannels}
               activeChannelId={activeChannelId}
               onChannelClick={handleChannelClick}
-              onAddClick={() => handleAddChannel("VOICE")}
-              onSettingsClick={setEditChannel}
-              onInviteClick={(ch) => {
+              onAddClick={canEditChannel ? () => handleAddChannel("VOICE") : undefined}
+              onSettingsClick={canEditChannel ? setEditChannel : undefined}
+              onInviteClick={canInvite ? (ch) => {
                 setInviteChannelName(ch.name);
                 setIsInviteOpen(true);
-              }}
-              canEdit={true}
+              } : undefined}
+              canEdit={canEditChannel}
             />
           </div>
         )}

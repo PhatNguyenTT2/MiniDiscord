@@ -30,9 +30,17 @@ public class VoiceWebSocketController {
   private final PresenceService presenceService;
 
   @MessageMapping("/voice.join")
-  public void joinVoice(@Payload VoiceJoinRequest request, Principal principal) {
+  public void joinVoice(@Payload VoiceJoinRequest request, Principal principal,
+      org.springframework.messaging.simp.SimpMessageHeaderAccessor headerAccessor) {
     String userId = principal.getName();
     membershipClient.verifyMembership(userId, request.getRoomId());
+
+    // Bind channel to session attributes for disconnect cleanup
+    Map<String, Object> sessionAttrs = headerAccessor.getSessionAttributes();
+    if (sessionAttrs != null) {
+      sessionAttrs.put("voiceChannelId", request.getChannelId());
+      sessionAttrs.put("voiceRoomId", request.getRoomId());
+    }
 
     Set<String> participants = voiceStateService.joinChannel(
         userId, request.getRoomId(), request.getChannelId());
@@ -48,6 +56,7 @@ public class VoiceWebSocketController {
 
     messageRouter.fanOutSystemEvent(Map.of(
         "eventType", "VOICE_STATE_UPDATE",
+        "roomId", request.getRoomId(),
         "data", update), request.getRoomId());
 
     // Send existing participants list back to the joiner
@@ -81,6 +90,7 @@ public class VoiceWebSocketController {
 
     messageRouter.fanOutSystemEvent(Map.of(
         "eventType", "VOICE_STATE_UPDATE",
+        "roomId", request.getRoomId(),
         "data", update), request.getRoomId());
     log.info("User {} left voice in room {}, channel {}. Broadcast sent.",
         userId, request.getRoomId(), request.getChannelId());
@@ -124,6 +134,7 @@ public class VoiceWebSocketController {
 
     messageRouter.fanOutSystemEvent(Map.of(
         "eventType", "VOICE_STATE_UPDATE",
+        "roomId", roomId,
         "data", update), roomId);
     log.info("User {} state updated to action: {}", userId, action);
   }
@@ -284,6 +295,7 @@ public class VoiceWebSocketController {
     // Broadcast to both peers in DM room
     messageRouter.fanOutSystemEvent(Map.of(
         "eventType", "VOICE_CALL",
+        "roomId", roomId,
         "data", Map.of(
             "action", "END",
             "roomId", roomId)),

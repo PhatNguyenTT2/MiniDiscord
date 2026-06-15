@@ -28,9 +28,10 @@ public class SecurityHeaderFilter implements Filter {
             return;
         }
 
-        // Skip for inter-service membership check (called by chat-history-service
+        // Skip for inter-service membership check (called by
+        // chat-history-service/messaging-service
         // via lb://group-channel-service without X-User-Id header)
-        if (uri.matches("/api/rooms/[^/]+/members/[^/]+") && "GET".equalsIgnoreCase(request.getMethod())) {
+        if (uri.matches("/api/rooms/[^/]+/members(/[^/]+)?") && "GET".equalsIgnoreCase(request.getMethod())) {
             chain.doFilter(req, res);
             return;
         }

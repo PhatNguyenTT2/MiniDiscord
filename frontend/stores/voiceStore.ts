@@ -148,11 +148,31 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
       }
 
       // 4. Set state & start duration ticking timer
-      set({
+      const currentUser = useAuthStore.getState().user;
+      const roomMembers = useRoomStore.getState().members[roomId] || [];
+      const selfMember = roomMembers.find((m: any) => m.userId === currentUser?.id);
+
+      set((state) => ({
         currentChannel: { roomId, channelId },
         connectionDuration: 0,
         remoteStreams: {},
-      });
+        channelParticipants: {
+          ...state.channelParticipants,
+          [channelId]: [
+            ...(state.channelParticipants[channelId] || []).filter(
+              (p) => p.userId !== currentUser?.id
+            ),
+            ...(currentUser ? [{
+              userId: currentUser.id,
+              username: currentUser.username,
+              displayName: selfMember?.displayName || currentUser.username,
+              avatarUrl: selfMember?.avatarUrl || currentUser.avatarUrl || null,
+              muted: state.isMuted,
+              deafened: state.isDeafened,
+            }] : []),
+          ],
+        },
+      }));
 
       if (tickerInterval) clearInterval(tickerInterval);
       tickerInterval = setInterval(() => {
@@ -173,6 +193,8 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
 
     console.log(`[VoiceStore] Leaving current channel ${active.channelId}`);
 
+    const currentUserId = useAuthStore.getState().user?.id;
+
     // 1. Inform backend via STOMP
     const token = useAuthStore.getState().token;
     if (token) {
@@ -191,12 +213,19 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
       tickerInterval = null;
     }
 
-    set({
+    // 4. Eagerly remove self from channelParticipants
+    set((state) => ({
       currentChannel: null,
       localStream: null,
       connectionDuration: 0,
       remoteStreams: {},
-    });
+      channelParticipants: {
+        ...state.channelParticipants,
+        [active.channelId]: (state.channelParticipants[active.channelId] || []).filter(
+          (p) => p.userId !== currentUserId
+        ),
+      },
+    }));
 
     soundEngine?.play("voice_disconnect");
   },
@@ -213,7 +242,23 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
       audioTrack.enabled = !nowMuted;
     }
 
-    set({ isMuted: nowMuted });
+    const currentUserId = useAuthStore.getState().user?.id;
+    const activeChannel = get().currentChannel;
+    const channelKey = activeChannel?.channelId || (get().activeCallRoomId ? "dm" : null);
+
+    set((state) => {
+      const updated: Partial<VoiceStoreState> = { isMuted: nowMuted };
+      if (channelKey && currentUserId) {
+        const list = state.channelParticipants[channelKey] || [];
+        updated.channelParticipants = {
+          ...state.channelParticipants,
+          [channelKey]: list.map((p) =>
+            p.userId === currentUserId ? { ...p, muted: nowMuted } : p
+          ),
+        };
+      }
+      return updated;
+    });
 
     // Send mute state event to servers if inside any active calling room
     const active = get().currentChannel || get().activeCallRoomId;
@@ -261,9 +306,22 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
       });
     });
 
-    set({
-      isDeafened: nowDeafened,
-      isMuted: nowMuted
+    const currentUserId2 = useAuthStore.getState().user?.id;
+    const activeChannel2 = get().currentChannel;
+    const channelKey2 = activeChannel2?.channelId || (get().activeCallRoomId ? "dm" : null);
+
+    set((state) => {
+      const updated: Partial<VoiceStoreState> = { isDeafened: nowDeafened, isMuted: nowMuted };
+      if (channelKey2 && currentUserId2) {
+        const list = state.channelParticipants[channelKey2] || [];
+        updated.channelParticipants = {
+          ...state.channelParticipants,
+          [channelKey2]: list.map((p) =>
+            p.userId === currentUserId2 ? { ...p, muted: nowMuted, deafened: nowDeafened } : p
+          ),
+        };
+      }
+      return updated;
     });
 
     // Informs signaling server if inside any active calling room
@@ -473,12 +531,12 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
             }
           }
           const roomMembers = foundRoomId ? (useRoomStore.getState().members[foundRoomId] || []) : [];
-          const details = roomMembers.find((m: { userId: string; username: string; displayName?: string | null }) => m.userId === userId);
+          const details = roomMembers.find((m: any) => m.userId === userId);
           updatedList.push({
             userId,
             username: username || `User-${userId.substring(0, 4)}`,
             displayName: details?.displayName || details?.username || username || `User-${userId.substring(0, 4)}`,
-            avatarUrl: avatarUrl || null,
+            avatarUrl: details?.avatarUrl || avatarUrl || null,
             muted: false,
             deafened: false,
           });
@@ -699,13 +757,14 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
         const list = userIdsList as string[];
         newParticipantsMap[chId] = list.map((uid) => {
           const details = userCachedMap.get(uid);
+          const existingParticipant = (get().channelParticipants[chId] || []).find((p) => p.userId === uid);
           return {
             userId: uid,
             username: details?.username || `User-${uid.substring(0, 4)}`,
             displayName: details?.displayName || details?.username || `User-${uid.substring(0, 4)}`,
             avatarUrl: details?.avatarUrl || null,
-            muted: false, // will update when state sync is done or lazy matching
-            deafened: false,
+            muted: existingParticipant?.muted ?? false,
+            deafened: existingParticipant?.deafened ?? false,
           };
         });
       });

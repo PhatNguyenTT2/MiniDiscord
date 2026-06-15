@@ -32,6 +32,10 @@ public class RoomParticipant {
     @Column(nullable = false, length = 20)
     private RoomRole role;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "role_id")
+    private Role roleEntity;
+
     @CreationTimestamp
     @Column(name = "joined_at", updatable = false)
     private Instant joinedAt;

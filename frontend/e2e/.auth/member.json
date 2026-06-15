@@ -1,0 +1,18 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "http://localhost:3000",
+      "localStorage": [
+        {
+          "name": "token",
+          "value": "eyJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6Im1lbWJlckBleGFtcGxlLmNvbSIsInJvbGUiOiJVU0VSIiwic3ViIjoiZWNmYTU0MGEtOTE5NC00OTU1LWJlOTQtZjU5YjgyNzhmMTdlIiwiaWF0IjoxNzgxNTEzMTQzLCJleHAiOjE3ODE1OTk1NDN9._X6zC9cqKsJjxhHzLVjoqiEamtai-omWUvsyD49IXNE"
+        },
+        {
+          "name": "user_data",
+          "value": "{\"id\":\"ecfa540a-9194-4955-be94-f59b8278f17e\",\"username\":\"member_e2e\",\"displayName\":\"member_e2e\",\"email\":\"member@example.com\",\"avatarUrl\":null,\"status\":\"OFFLINE\",\"role\":\"USER\",\"createdAt\":\"2026-06-14T20:33:53.627962\",\"lastSeenAt\":null}"
+        }
+      ]
+    }
+  ]
+}

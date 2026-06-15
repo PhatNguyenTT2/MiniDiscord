@@ -22,7 +22,7 @@ export default function InviteJoinPage() {
   const params = useParams();
   const router = useRouter();
   const { t } = useTranslation();
-  const { isAuthenticated, isHydrated } = useAuthStore();
+  const { isAuthenticated, isHydrated, hydrate } = useAuthStore();
   const { fetchMyRooms } = useRoomStore();
 
   const code = params?.code as string;
@@ -31,6 +31,10 @@ export default function InviteJoinPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    hydrate();
+  }, [hydrate]);
 
   useEffect(() => {
     if (!code) return;
@@ -69,8 +73,25 @@ export default function InviteJoinPage() {
       // Refresh the user's servers list in room store
       await fetchMyRooms(true);
 
-      // Redirect to the channel list
-      router.push(`/channels/${invite.roomId}`);
+      // Fetch the channels for the room to find a default channel
+      let defaultChannelId = "";
+      try {
+        await useRoomStore.getState().fetchChannels(invite.roomId);
+        const roomChannels = useRoomStore.getState().channels[invite.roomId] || [];
+        if (roomChannels.length > 0) {
+          const defaultChannel = roomChannels.find((c) => c.type === "TEXT") || roomChannels[0];
+          defaultChannelId = defaultChannel.id;
+        }
+      } catch (err) {
+        console.error("Failed to fetch channels for redirect", err);
+      }
+
+      // Redirect to the channel list (e.g. /channels/[roomId]/[channelId])
+      if (defaultChannelId) {
+        router.push(`/channels/${invite.roomId}/${defaultChannelId}`);
+      } else {
+        router.push(`/channels/${invite.roomId}`);
+      }
     } catch (err: any) {
       console.error("Error joining server", err);
       setError(t("invite.joinError"));

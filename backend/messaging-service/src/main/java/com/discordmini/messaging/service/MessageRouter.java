@@ -21,6 +21,7 @@ public class MessageRouter {
     private final RabbitTemplate rabbitTemplate;
     private final ConnectionManager connectionManager;
     private final StringRedisTemplate redisTemplate;
+    private final com.discordmini.messaging.client.MembershipClient membershipClient;
 
     // 1. Publish MessageEvent for chat-history-service to save
     @Async("taskExecutor")
@@ -57,10 +58,7 @@ public class MessageRouter {
     }
 
     private Set<String> getRoomMembers(String roomId) {
-        // Query Redis cache (populated by MembershipClient)
-        // Note: For large rooms, we might want to paginate or use specialized data
-        // structures
-        return redisTemplate.opsForSet().members("room:members:" + roomId);
+        return membershipClient.getRoomMembers(roomId);
     }
 
     // 3. Fan-out system map events (edit, delete)

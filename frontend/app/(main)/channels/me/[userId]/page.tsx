@@ -825,7 +825,7 @@ export default function DmChatPage() {
           {/* Search Results Panel for DM */}
           <div className={cn("shrink-0 bg-[#2b2d31] border-l border-[#1e1f22] overflow-hidden transition-all duration-200 ease-in-out", showSearchPanel ? "w-[400px]" : "w-0")}>
             <div className="w-[400px] h-full">
-              <SearchResultsPanel channelId={channelId} />
+              <SearchResultsPanel channelId={channelId} roomId={roomId} />
             </div>
           </div>
 

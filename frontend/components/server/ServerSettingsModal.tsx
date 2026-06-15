@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { X, ShieldAlert, Users, Trash2, Search, Shield, SlidersHorizontal, ChevronRight, Pencil, MoreHorizontal } from "lucide-react";
+import { X, ShieldAlert, Users, Trash2, Search, Shield, SlidersHorizontal, ChevronRight, Pencil, MoreHorizontal, VolumeX, Crown, Loader2 } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { useRoomStore } from "@/stores/roomStore";
 import { ScrollArea } from "../ui/ScrollArea";
@@ -10,6 +10,10 @@ import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
 import { useFriendStore } from "@/stores/friendStore";
+import type { RoleResponse } from "@/types/room";
+import { PermissionEditor } from "./PermissionEditor";
+import { StatusAvatar } from "@/components/ui/StatusAvatar";
+import { useHasPermission } from "@/hooks/useHasPermission";
 
 interface ServerSettingsModalProps {
   isOpen: boolean;
@@ -28,6 +32,7 @@ interface InviteLinkListItem {
   uses: number;
   expiresAt: string;
   createdAt: string;
+  creatorId: string;
 }
 
 export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsModalProps) {
@@ -38,10 +43,61 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
 
   const [activeTab, setActiveTab] = useState<TabType>("members");
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"name" | "joinedAt" | "createdAt">("joinedAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   const [activeInvites, setActiveInvites] = useState<InviteLinkListItem[]>([]);
   const [inviteCode, setInviteCode] = useState("");
   const [showInviteCreator, setShowInviteCreator] = useState(false);
+
+  const [roles, setRoles] = useState<RoleResponse[]>([]);
+  const [loadingRoles, setLoadingRoles] = useState(false);
+  const [editingRole, setEditingRole] = useState<RoleResponse | null>(null);
+
+  const [actionSearchQuery, setActionSearchQuery] = useState("");
+  const [selectedActionMember, setSelectedActionMember] = useState<{
+    userId: string;
+    username: string;
+    displayName?: string;
+    avatarUrl: string | null;
+    status: string;
+    role: string;
+    joinedAt?: string;
+    createdAt?: string;
+  } | null>(null);
+  const [showMuteActionModal, setShowMuteActionModal] = useState(false);
+  const [muteActionDuration, setMuteActionDuration] = useState(5);
+  const [showBanActionModal, setShowBanActionModal] = useState(false);
+  const [banActionReason, setBanActionReason] = useState("");
+  const [showTransferActionModal, setShowTransferActionModal] = useState(false);
+  const [showRoleActionModal, setShowRoleActionModal] = useState(false);
+  const [targetRole, setTargetRole] = useState<"ADMIN" | "MEMBER" | null>(null);
+  const [loadingAction, setLoadingAction] = useState<string | null>(null);
+
+  const canBan = useHasPermission("BAN_MEMBER", roomId);
+  const canRestrict = useHasPermission("RESTRICT_MEMBER", roomId);
+
+  const [activeDropdownMemberId, setActiveDropdownMemberId] = useState<string | null>(null);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+
+  const fetchRoles = async () => {
+    setLoadingRoles(true);
+    try {
+      const res = await api.get(`/rooms/${roomId}/roles`);
+      setRoles(res.data.data || []);
+    } catch (err) {
+      console.error("Failed to fetch roles", err);
+    } finally {
+      setLoadingRoles(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen && roomId && activeTab === "roles") {
+      fetchRoles();
+      setEditingRole(null);
+    }
+  }, [isOpen, roomId, activeTab]);
   const [invitedFriends, setInvitedFriends] = useState<string[]>([]);
   const [searchFriendQuery, setSearchFriendQuery] = useState("");
   const [copiedStatus, setCopiedStatus] = useState(false);
@@ -142,11 +198,34 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
 
-  const filteredMembers = roomMembers.filter((m) =>
-    m.username.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+
+  const filteredMembers = useMemo(() => {
+    const filtered = roomMembers.filter((m) => {
+      const q = searchQuery.toLowerCase();
+      const matchesUser = m.username.toLowerCase().includes(q);
+      const matchesDisplay = m.displayName ? m.displayName.toLowerCase().includes(q) : false;
+      return matchesUser || matchesDisplay;
+    });
+
+    return filtered.sort((a, b) => {
+      let comparison = 0;
+      if (sortBy === "name") {
+        const nameA = (a.displayName || a.username).toLowerCase();
+        const nameB = (b.displayName || b.username).toLowerCase();
+        comparison = nameA.localeCompare(nameB);
+      } else if (sortBy === "joinedAt") {
+        const dateA = a.joinedAt ? new Date(a.joinedAt).getTime() : 0;
+        const dateB = b.joinedAt ? new Date(b.joinedAt).getTime() : 0;
+        comparison = dateA - dateB;
+      } else if (sortBy === "createdAt") {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        comparison = dateA - dateB;
+      }
+      return sortOrder === "asc" ? comparison : -comparison;
+    });
+  }, [roomMembers, searchQuery, sortBy, sortOrder]);
 
   const adminCount = roomMembers.filter((m) => m.role === "ADMIN" || m.role === "OWNER").length;
   const normalMemberCount = roomMembers.filter((m) => m.role === "MEMBER").length;
@@ -155,6 +234,21 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
     if (role === "OWNER") return "bg-[#ffaa00]/20 text-[#ffaa00] border-[#ffaa00]/30";
     if (role === "ADMIN") return "bg-[#5865f2]/20 text-[#5865f2] border-[#5865f2]/30";
     return "bg-[#80848e]/20 text-[#b5bac1] border-[#80848e]/30";
+  };
+
+  const getLocalizedRoleName = (roleName?: string) => {
+    if (!roleName) return t("serverSettingsModal.memberRoleName");
+    const r = roleName.toUpperCase();
+    if (r === "OWNER") {
+      return t("serverSettingsModal.ownerRoleName");
+    }
+    if (r === "ADMIN") {
+      return t("serverSettingsModal.adminRoleName");
+    }
+    if (r === "MEMBER") {
+      return t("serverSettingsModal.memberRoleName");
+    }
+    return roleName;
   };
 
   const formatDate = (dateString?: string) => {
@@ -175,11 +269,86 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
     setTimeout(() => setCopiedStatus(false), 2000);
   };
 
+  const handleTransferOwnershipAction = async (targetUserId: string) => {
+    try {
+      setLoadingAction("transfer");
+      await api.post(`/rooms/${roomId}/transfer-ownership`, { newOwnerId: targetUserId });
+      alert(t("serverSettingsModal.transferSuccess") || "Ownership transferred successfully!");
+      fetchMembers(roomId);
+      onClose();
+    } catch (err) {
+      console.error("Failed to transfer ownership", err);
+      alert("Failed to transfer ownership");
+    } finally {
+      setLoadingAction(null);
+      setShowTransferActionModal(false);
+      setSelectedActionMember(null);
+    }
+  };
+
+  const handleMuteAction = async (targetUserId: string, minutes: number) => {
+    try {
+      setLoadingAction("mute");
+      await api.post(`/rooms/${roomId}/members/${targetUserId}/mute`, {
+        durationMinutes: minutes,
+      });
+      alert(t("serverSettingsModal.restrictSuccess") || "Member restricted successfully!");
+      fetchMembers(roomId);
+    } catch (err) {
+      console.error("Failed to mute member", err);
+      alert("Failed to mute member");
+    } finally {
+      setLoadingAction(null);
+      setShowMuteActionModal(false);
+      setSelectedActionMember(null);
+    }
+  };
+
+  const handleBanAction = async (targetUserId: string, reason: string) => {
+    try {
+      setLoadingAction("ban");
+      await api.post(`/rooms/${roomId}/bans`, {
+        userId: targetUserId,
+        reason: reason.trim() || undefined,
+      });
+      alert(t("serverSettingsModal.banSuccess") || "Member banned successfully!");
+      fetchMembers(roomId);
+    } catch (err) {
+      console.error("Failed to ban member", err);
+      alert("Failed to ban member");
+    } finally {
+      setLoadingAction(null);
+      setShowBanActionModal(false);
+      setSelectedActionMember(null);
+    }
+  };
+
+  const handleUpdateRoleAction = async (targetUserId: string, newRole: "ADMIN" | "MEMBER") => {
+    try {
+      setLoadingAction("role");
+      await api.post(`/rooms/${roomId}/members/${targetUserId}/role`, {
+        role: newRole,
+      });
+      alert(newRole === "ADMIN"
+        ? (t("serverSettingsModal.promoteSuccess") || "Member promoted successfully!")
+        : (t("serverSettingsModal.demoteSuccess") || "Member demoted successfully!")
+      );
+      fetchMembers(roomId);
+    } catch (err) {
+      console.error("Failed to update role", err);
+      alert("Failed to update role");
+    } finally {
+      setLoadingAction(null);
+      setSelectedActionMember(null);
+    }
+  };
+
   const filteredFriends = friends.filter((f) =>
     f.user.username.toLowerCase().includes(searchFriendQuery.toLowerCase()) ||
     (f.user.displayName && f.user.displayName.toLowerCase().includes(searchFriendQuery.toLowerCase()))
   );
 
+  if (!isOpen) return null;
 
   return createPortal(
     <div className="fixed inset-0 z-[9990] flex bg-[#313338] text-[#dbdee1] animate-in fade-in duration-200">
@@ -288,28 +457,7 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
                   </p>
                 </div>
 
-                {/* Channel member list info switch toggle (Image 2 style) */}
-                <div className="rounded-md bg-[#2b2d31] p-4 flex items-center justify-between gap-4 border border-[#1f2023]/25 shadow-sm">
-                  <div className="flex flex-col min-w-0 pr-2">
-                    <span className="font-semibold text-white text-sm">
-                      {t("serverSettingsModal.showMembersToggle")}
-                    </span>
-                    <span className="text-xs text-[#949ba4] leading-relaxed mt-1">
-                      {t("serverSettingsModal.showMembersToggleDesc")}
-                    </span>
-                  </div>
 
-                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                    <input
-                      type="checkbox"
-                      defaultChecked
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-[#80848e] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#5865f2]"></div>
-                  </label>
-                </div>
-
-                <div className="border-t border-[#35373c]/60 my-2" />
 
                 {/* Sub-header actions */}
                 <div className="flex items-center justify-between gap-4">
@@ -332,9 +480,12 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
                     </div>
 
                     {/* Sort Button */}
-                    <button className="flex items-center gap-1.5 px-3 py-1.5 bg-[#35373c] text-white hover:bg-[#4e5058] rounded text-xs font-semibold overflow-hidden transition cursor-pointer shrink-0">
+                    <button
+                      onClick={() => setSortOrder((p) => (p === "asc" ? "desc" : "asc"))}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-[#35373c] text-white hover:bg-[#4e5058] rounded text-xs font-semibold overflow-hidden transition cursor-pointer shrink-0"
+                    >
                       <SlidersHorizontal className="h-3.5 w-3.5 opacity-80" />
-                      {t("serverSettingsModal.sort")}
+                      {t("serverSettingsModal.sort")}: {sortOrder === "asc" ? "Asc" : "Desc"}
                     </button>
 
                     {/* Prune Button */}
@@ -349,23 +500,66 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
                   <table className="w-full border-collapse text-left text-xs text-[#dbdee1]">
                     <thead>
                       <tr className="bg-[#2b2d31]/60 text-[#b5bac1] font-bold uppercase tracking-wider border-b border-[#2b2d31]">
-                        <th className="px-4 py-3 select-none">{t("serverSettingsModal.tableHeaderName")}</th>
-                        <th className="px-4 py-3 select-none">
+                        <th
+                          className="px-4 py-3 select-none cursor-pointer hover:text-white transition-colors"
+                          onClick={() => {
+                            if (sortBy === "name") {
+                              setSortOrder((p) => (p === "asc" ? "desc" : "asc"));
+                            } else {
+                              setSortBy("name");
+                              setSortOrder("asc");
+                            }
+                          }}
+                        >
+                          <div className="flex items-center gap-1">
+                            {t("serverSettingsModal.tableHeaderName")}
+                            {sortBy === "name" && (
+                              <span className="text-[10px] text-[#5865f2]">
+                                {sortOrder === "asc" ? " ▲" : " ▼"}
+                              </span>
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          className="px-4 py-3 select-none cursor-pointer hover:text-white transition-colors"
+                          onClick={() => {
+                            if (sortBy === "joinedAt") {
+                              setSortOrder((p) => (p === "asc" ? "desc" : "asc"));
+                            } else {
+                              setSortBy("joinedAt");
+                              setSortOrder("desc");
+                            }
+                          }}
+                        >
                           <div className="flex items-center gap-1">
                             {t("serverSettingsModal.tableHeaderJoined")}
                             <SlidersHorizontal className="h-3 w-3 text-[#b5bac1]/60 shrink-0" />
+                            {sortBy === "joinedAt" && (
+                              <span className="text-[10px] text-[#5865f2]">
+                                {sortOrder === "asc" ? " ▲" : " ▼"}
+                              </span>
+                            )}
                           </div>
                         </th>
-                        <th className="px-4 py-3 select-none">
+                        <th
+                          className="px-4 py-3 select-none cursor-pointer hover:text-white transition-colors"
+                          onClick={() => {
+                            if (sortBy === "createdAt") {
+                              setSortOrder((p) => (p === "asc" ? "desc" : "asc"));
+                            } else {
+                              setSortBy("createdAt");
+                              setSortOrder("desc");
+                            }
+                          }}
+                        >
                           <div className="flex items-center gap-1">
                             {t("serverSettingsModal.tableHeaderAge")}
                             <SlidersHorizontal className="h-3 w-3 text-[#b5bac1]/60 shrink-0" />
-                          </div>
-                        </th>
-                        <th className="px-4 py-3 select-none">
-                          <div className="flex items-center gap-1">
-                            {t("serverSettingsModal.tableHeaderMethod")}
-                            <SlidersHorizontal className="h-3 w-3 text-[#b5bac1]/60 shrink-0" />
+                            {sortBy === "createdAt" && (
+                              <span className="text-[10px] text-[#5865f2]">
+                                {sortOrder === "asc" ? " ▲" : " ▼"}
+                              </span>
+                            )}
                           </div>
                         </th>
                         <th className="px-4 py-3 select-none">
@@ -380,6 +574,11 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
                             <SlidersHorizontal className="h-3 w-3 text-[#b5bac1]/60 shrink-0" />
                           </div>
                         </th>
+                        <th className="px-4 py-3 select-none">
+                          <div className="flex items-center gap-1">
+                            {t("serverSettingsModal.actions")}
+                          </div>
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#2b2d31]/40">
@@ -391,23 +590,22 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
                               {/* Name profile */}
                               <td className="px-4 py-3.5 whitespace-nowrap">
                                 <div className="flex items-center gap-2.5">
-                                  {m.avatarUrl ? (
-                                    <img
-                                      src={m.avatarUrl}
-                                      alt={m.username}
-                                      className="h-8 w-8 rounded-full object-cover shrink-0"
-                                    />
-                                  ) : (
-                                    <div className="h-8 w-8 rounded-full bg-[#5865f2]/20 flex items-center justify-center shrink-0">
-                                      <span className="text-[11px] font-bold text-[#5865f2] uppercase">
-                                        {m.username.substring(0, 2)}
-                                      </span>
-                                    </div>
-                                  )}
+                                  <StatusAvatar
+                                    src={m.avatarUrl}
+                                    fallback={m.username}
+                                    size="sm"
+                                    status={m.status as "ONLINE" | "OFFLINE" | "IDLE" | "DND"}
+                                    className="shrink-0"
+                                  />
                                   <div className="flex flex-col min-w-0">
                                     <span className="font-semibold text-white text-[13px] truncate">
-                                      {m.username}
+                                      {m.displayName || m.username}
                                     </span>
+                                    {m.displayName && m.displayName !== m.username && (
+                                      <span className="text-[10px] text-[#949ba4] truncate">
+                                        @{m.username}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               </td>
@@ -418,15 +616,8 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
                               </td>
 
                               {/* Discord Age */}
-                              <td className="px-4 py-3.5 text-[#949ba4] whitespace-nowrap">
-                                {t("serverSettingsModal.yearsAgo")}
-                              </td>
-
-                              {/* Invite Method */}
-                              <td className="px-4 py-3.5 text-[#949ba4] whitespace-nowrap">
-                                <span className="px-1.5 py-0.5 rounded bg-[#1e1f22] text-[10px] font-medium border border-[#3f4147]/10">
-                                  {t("serverSettingsModal.defaultMethod")}
-                                </span>
+                              <td className="px-4 py-3.5 text-[#b5bac1] whitespace-nowrap">
+                                {m.createdAt ? formatDate(m.createdAt) : t("serverSettingsModal.recent")}
                               </td>
 
                               {/* Role Pill Badges */}
@@ -436,7 +627,11 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
                                     "px-2 py-0.5 text-[10px] font-bold border rounded-full flex items-center gap-1 select-none",
                                     getRoleBadgeColor(m.role)
                                   )}>
-                                    {m.role === "OWNER" || m.role === "ADMIN" ? (
+                                    {m.role === "OWNER" ? (
+                                      <span title={getLocalizedRoleName("OWNER")}>
+                                        <Crown className="h-3 w-3 shrink-0 text-[#ffaa00] fill-[#ffaa00]" />
+                                      </span>
+                                    ) : m.role === "ADMIN" ? (
                                       <Shield className="h-3 w-3 shrink-0" />
                                     ) : null}
                                     {m.role}
@@ -456,6 +651,28 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
                                   </span>
                                 </div>
                               </td>
+
+                              {/* ACTIONS */}
+                              <td className="px-4 py-3.5 whitespace-nowrap">
+                                <div className="flex items-center gap-1.5">
+                                  {m.userId !== user?.id && m.role !== "OWNER" && (isOwner || canRestrict || canBan) && (
+                                    <button
+                                      onClick={(e) => {
+                                        const rect = e.currentTarget.getBoundingClientRect();
+                                        setDropdownPosition({
+                                          top: rect.bottom + 5,
+                                          left: rect.right - 176,
+                                        });
+                                        setActiveDropdownMemberId(m.userId);
+                                      }}
+                                      className="p-1 rounded hover:bg-[#35373c]/60 text-[#b5bac1] hover:text-white transition-colors cursor-pointer"
+                                      title={t("serverSettingsModal.actions")}
+                                    >
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
                             </tr>
                           );
                         })
@@ -471,126 +688,164 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
                 </div>
               </div>
             ) : activeTab === "roles" ? (
-              /* Roles Tab Implementation (Image 4 style & requirements) */
-              <div className="space-y-6 animate-in fade-in duration-300">
-                {/* Header */}
-                <div>
-                  <h2 className="text-xl font-bold text-white mb-2">{t("serverSettingsModal.rolesTitle")}</h2>
-                  <p className="text-sm text-[#949ba4] max-w-[800px] leading-relaxed">
-                    {t("serverSettingsModal.rolesDesc")}
-                  </p>
-                </div>
-
-                {/* default permissions card */}
-                <div className="rounded-md bg-[#2b2d31] p-4 flex items-center justify-between cursor-pointer hover:bg-[#35373c] transition-colors border border-[#1f2023]/25 shadow-sm group">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-[#80848e]/20 flex items-center justify-center text-[#b5bac1] shrink-0">
-                      <Users className="h-5 w-5" />
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-white text-sm">
-                        {t("serverSettingsModal.defaultPermissions")}
-                      </span>
-                      <span className="text-xs text-[#949ba4] mt-0.5">
-                        {t("serverSettingsModal.everyoneSubtitle")}
-                      </span>
-                    </div>
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-[#949ba4] group-hover:text-white transition-colors" />
-                </div>
-
-                {/* Actions Row */}
-                <div className="flex items-center justify-between gap-4 mt-6">
-                  {/* Search box */}
-                  <div className="relative flex items-center w-full max-w-[340px]">
-                    <input
-                      type="text"
-                      placeholder={t("serverSettingsModal.searchRolesPlaceholder")}
-                      className="w-full rounded bg-[#1e1f22] pl-3 pr-8 py-1.5 text-xs text-white placeholder-[#80848e] outline-none"
-                    />
-                    <Search className="absolute right-2.5 h-3.5 w-3.5 text-[#80848e] shrink-0 pointer-events-none" />
+              editingRole ? (
+                <PermissionEditor
+                  roomId={roomId}
+                  roleId={editingRole.id}
+                  roleName={editingRole.name}
+                  initialPermissions={editingRole.permissions}
+                  onBack={() => setEditingRole(null)}
+                  onSaveSuccess={() => {
+                    fetchRoles();
+                    setEditingRole(null);
+                  }}
+                />
+              ) : (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  {/* Header */}
+                  <div>
+                    <h2 className="text-xl font-bold text-white mb-2">{t("serverSettingsModal.rolesTitle")}</h2>
+                    <p className="text-sm text-[#949ba4] max-w-[800px] leading-relaxed">
+                      {t("serverSettingsModal.rolesDesc")}
+                    </p>
                   </div>
 
-                  {/* Create Role Button */}
-                  <button className="rounded bg-[#5865f2] hover:bg-[#4752c4] text-white px-4 py-1.5 text-xs font-semibold shadow transition-colors cursor-pointer shrink-0">
-                    {t("serverSettingsModal.createRole")}
-                  </button>
-                </div>
-
-                {/* Roles table/list */}
-                <div className="rounded-md bg-[#2b2d31]/40 border border-[#1f2023]/20 overflow-hidden">
-                  <div className="flex items-center justify-between bg-[#2b2d31]/60 px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-[#b5bac1] border-b border-[#2b2d31]">
-                    <div>{t("serverSettingsModal.rolesCount", { count: 2 })}</div>
-                    <div className="mr-32">{t("serverSettingsModal.membersColumn")}</div>
-                  </div>
-
-                  <div className="divide-y divide-[#2b2d31]/40">
-                    {/* Row 1: Admin */}
-                    <div className="flex items-center justify-between px-4 py-3.5 hover:bg-[#2b2d31]/25 transition-colors group">
-                      <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-full bg-[#5865f2]/15 flex items-center justify-center text-[#5865f2] shrink-0 border border-[#5865f2]/20">
-                          <Shield className="h-4.5 w-4.5" />
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="font-semibold text-white text-sm">
-                            {t("serverSettingsModal.adminRoleName")}
-                          </span>
-                          <span className="text-[11px] text-[#949ba4] mt-0.5">
-                            {t("serverSettingsModal.adminRoleDesc")}
-                          </span>
-                        </div>
+                  {/* default permissions card */}
+                  <div
+                    onClick={() => {
+                      if (!isOwner) return;
+                      const everyone = roles.find((r) => r.name === "@everyone");
+                      if (everyone) setEditingRole(everyone);
+                    }}
+                    className={cn(
+                      "rounded-md bg-[#2b2d31] p-4 flex items-center justify-between border border-[#1f2023]/25 shadow-sm group",
+                      isOwner
+                        ? "cursor-pointer hover:bg-[#35373c] transition-colors"
+                        : "opacity-80 cursor-not-allowed"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-[#80848e]/20 flex items-center justify-center text-[#b5bac1] shrink-0">
+                        <Users className="h-5 w-5" />
                       </div>
-
-                      <div className="flex items-center gap-6">
-                        <span className="flex items-center gap-1.5 text-xs text-[#b5bac1] w-20">
-                          <Users className="h-3.5 w-3.5 shrink-0 opacity-80" />
-                          {adminCount}
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-white text-sm">
+                          {t("serverSettingsModal.defaultPermissions")}
                         </span>
-                        <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button className="h-7 w-7 rounded flex items-center justify-center text-[#b5bac1] hover:text-white hover:bg-[#35373c]/60 cursor-pointer">
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button className="h-7 w-7 rounded flex items-center justify-center text-[#b5bac1] hover:text-white hover:bg-[#35373c]/60 cursor-pointer">
-                            <MoreHorizontal className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
+                        <span className="text-xs text-[#949ba4] mt-0.5">
+                          {t("serverSettingsModal.everyoneSubtitle")}
+                        </span>
                       </div>
                     </div>
+                    {isOwner && <ChevronRight className="h-5 w-5 text-[#949ba4] group-hover:text-white transition-colors" />}
+                  </div>
 
-                    {/* Row 2: Member */}
-                    <div className="flex items-center justify-between px-4 py-3.5 hover:bg-[#2b2d31]/25 transition-colors group">
-                      <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-full bg-[#80848e]/20 flex items-center justify-center text-[#b5bac1] shrink-0 border border-[#80848e]/20">
-                          <Users className="h-4.5 w-4.5" />
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="font-semibold text-white text-sm">
-                            {t("serverSettingsModal.memberRoleName")}
-                          </span>
-                          <span className="text-[11px] text-[#949ba4] mt-0.5">
-                            {t("serverSettingsModal.memberRoleDesc")}
-                          </span>
-                        </div>
-                      </div>
+                  {/* Actions Row */}
+                  <div className="flex items-center justify-between gap-4 mt-6">
+                    {/* Search box */}
+                    <div className="relative flex items-center w-full max-w-[340px]">
+                      <input
+                        type="text"
+                        placeholder={t("serverSettingsModal.searchRolesPlaceholder")}
+                        className="w-full rounded bg-[#1e1f22] pl-3 pr-8 py-1.5 text-xs text-white placeholder-[#80848e] outline-none"
+                      />
+                      <Search className="absolute right-2.5 h-3.5 w-3.5 text-[#80848e] shrink-0 pointer-events-none" />
+                    </div>
 
-                      <div className="flex items-center gap-6">
-                        <span className="flex items-center gap-1.5 text-xs text-[#b5bac1] w-20">
-                          <Users className="h-3.5 w-3.5 shrink-0 opacity-80" />
-                          {normalMemberCount}
-                        </span>
-                        <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button className="h-7 w-7 rounded flex items-center justify-center text-[#b5bac1] hover:text-white hover:bg-[#35373c]/60 cursor-pointer">
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button className="h-7 w-7 rounded flex items-center justify-center text-[#b5bac1] hover:text-white hover:bg-[#35373c]/60 cursor-pointer">
-                            <MoreHorizontal className="h-3.5 w-3.5" />
-                          </button>
+                    {/* Create Role Button */}
+                    <button className="rounded bg-[#5865f2] hover:bg-[#4752c4] text-white px-4 py-1.5 text-xs font-semibold shadow transition-colors cursor-pointer shrink-0 opacity-50 cursor-not-allowed" disabled>
+                      {t("serverSettingsModal.createRole")}
+                    </button>
+                  </div>
+
+                  {/* Roles table/list */}
+                  <div className="rounded-md bg-[#2b2d31]/40 border border-[#1f2023]/20 overflow-hidden">
+                    <div className="flex items-center justify-between bg-[#2b2d31]/60 px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-[#b5bac1] border-b border-[#2b2d31]">
+                      <div>{t("serverSettingsModal.rolesCount", { count: roles.length })}</div>
+                      <div className="mr-32">{t("serverSettingsModal.membersColumn")}</div>
+                    </div>
+
+                    <div className="divide-y divide-[#2b2d31]/40">
+                      {loadingRoles ? (
+                        <div className="py-8 text-center text-xs text-[#949ba4] flex items-center justify-center gap-2">
+                          <span className="w-4 h-4 border-2 border-[#5865f2] border-t-transparent rounded-full animate-spin"></span>
+                          {t("serverSettingsModal.loadingRoles")}
                         </div>
-                      </div>
+                      ) : roles.length > 0 ? (
+                        roles.map((role) => {
+                          const isEveryone = role.name === "@everyone";
+                          const isAdmin = role.name === "Admin";
+                          const isMember = role.name === "Member";
+
+                          const roleDisplayName = isEveryone
+                            ? "@everyone"
+                            : isAdmin
+                              ? t("serverSettingsModal.adminRoleName")
+                              : isMember
+                                ? t("serverSettingsModal.memberRoleName")
+                                : role.name;
+
+                          const roleDescription = isEveryone
+                            ? t("serverSettingsModal.everyoneSubtitle")
+                            : isAdmin
+                              ? t("serverSettingsModal.adminRoleDesc")
+                              : isMember
+                                ? t("serverSettingsModal.memberRoleDesc")
+                                : "";
+
+                          const memberCountForRole = role.name === "Admin" ? adminCount : normalMemberCount;
+                          return (
+                            <div key={role.id} className="flex items-center justify-between px-4 py-3.5 hover:bg-[#2b2d31]/25 transition-colors group">
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className="h-9 w-9 rounded-full flex items-center justify-center shrink-0 border"
+                                  style={{
+                                    backgroundColor: `${role.color}15`,
+                                    color: role.color,
+                                    borderColor: `${role.color}20`
+                                  }}
+                                >
+                                  {isEveryone ? <Users className="h-4.5 w-4.5" /> : <Shield className="h-4.5 w-4.5" />}
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="font-semibold text-white text-sm">
+                                    {roleDisplayName}
+                                  </span>
+                                  <span className="text-[11px] text-[#949ba4] mt-0.5">
+                                    {roleDescription}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-6">
+                                <span className="flex items-center gap-1.5 text-xs text-[#b5bac1] w-20">
+                                  <Users className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                                  {memberCountForRole}
+                                </span>
+                                {isOwner && (
+                                  <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                      onClick={() => setEditingRole(role)}
+                                      className="h-7 w-7 rounded flex items-center justify-center text-[#b5bac1] hover:text-white hover:bg-[#35373c]/60 cursor-pointer"
+                                      title="Edit Role permissions"
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="py-8 text-center text-xs text-[#949ba4]">
+                          {t("serverSettingsModal.noRoles")}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
-              </div>
+              )
             ) : activeTab === "invites" ? (
               /* Invites active list layout (Image 3 details) */
               <div className="space-y-6 animate-in fade-in duration-300">
@@ -635,7 +890,25 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
                         </thead>
                         <tbody className="divide-y divide-[#2b2d31]/40">
                           {activeInvites.map((invite) => {
-                            const inviterName = user?.displayName || user?.username || "Owner";
+                            const inviter = roomMembers.find((m) => m.userId?.toLowerCase() === invite.creatorId?.toLowerCase());
+                            let inviterName = t("serverSettingsModal.unknownCreator") || "Unknown Creator";
+                            let inviterAvatar = null;
+                            let inviterStatus = undefined;
+                            let inviterRole = inviter?.role;
+
+                            if (inviter) {
+                              inviterName = inviter.displayName || inviter.username;
+                              inviterAvatar = inviter.avatarUrl;
+                              inviterStatus = inviter.status;
+                            } else if (user && user.id?.toLowerCase() === invite.creatorId?.toLowerCase()) {
+                              inviterName = user.displayName || user.username || "Owner";
+                              const u = user as unknown as { avatarUrl?: string | null; avatar?: string | null };
+                              inviterAvatar = u.avatarUrl || u.avatar || null;
+                              inviterStatus = "ONLINE";
+                              inviterRole = currentRoom?.ownerId === user.id ? "OWNER" : "MEMBER";
+                            }
+
+
                             const channelName = "general";
                             const getDurationText = (expiresAtStr: string) => {
                               const diff = new Date(expiresAtStr).getTime() - Date.now();
@@ -650,11 +923,13 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
                               <tr key={invite.id} className="hover:bg-[#2b2d31]/25 transition-colors">
                                 <td className="px-4 py-3.5 whitespace-nowrap">
                                   <div className="flex items-center gap-2.5">
-                                    <div className="h-7 w-7 rounded-full bg-[#5865f2]/20 flex items-center justify-center shrink-0">
-                                      <span className="text-[10px] font-bold text-[#5865f2] uppercase">
-                                        {inviterName.substring(0, 2)}
-                                      </span>
-                                    </div>
+                                    <StatusAvatar
+                                      src={inviterAvatar}
+                                      fallback={inviterName}
+                                      status={inviterStatus as "ONLINE" | "OFFLINE" | "IDLE" | "DND"}
+                                      size="sm"
+                                      className="shrink-0"
+                                    />
                                     <div className="flex flex-col">
                                       <span className="font-semibold text-white truncate text-xs">
                                         {inviterName}
@@ -675,7 +950,7 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
                                   {getDurationText(invite.expiresAt)}
                                 </td>
                                 <td className="px-4 py-3.5 text-[#949ba4] whitespace-nowrap">
-                                  {t("serverSettingsModal.memberRoleName")}
+                                  {getLocalizedRoleName(inviterRole)}
                                 </td>
                                 <td className="px-4 py-3.5 text-right whitespace-nowrap">
                                   <button
@@ -748,19 +1023,13 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
                       return (
                         <div key={friend.user.id} className="flex items-center justify-between py-1.5 px-2 hover:bg-[#35373c]/40 rounded transition-colors group">
                           <div className="flex items-center gap-2.5 min-w-0">
-                            {friend.user.avatarUrl ? (
-                              <img
-                                src={friend.user.avatarUrl}
-                                alt={friend.user.username}
-                                className="h-8 w-8 rounded-full object-cover shrink-0"
-                              />
-                            ) : (
-                              <div className="h-8 w-8 rounded-full bg-[#5865f2]/10 flex items-center justify-center shrink-0">
-                                <span className="text-[10px] font-bold text-[#5865f2] uppercase">
-                                  {friend.user.username.substring(0, 2)}
-                                </span>
-                              </div>
-                            )}
+                            <StatusAvatar
+                              src={friend.user.avatarUrl}
+                              fallback={friend.user.username}
+                              size="sm"
+                              status={friend.status as "ONLINE" | "OFFLINE" | "IDLE" | "DND"}
+                              className="shrink-0"
+                            />
                             <div className="flex flex-col min-w-0">
                               <span className="font-semibold text-white text-xs truncate">
                                 {friend.user.displayName || friend.user.username}
@@ -836,6 +1105,293 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
             </div>
           </div>
         </div>
+      )}
+      {/* Ban Reason Inline Modal */}
+      {showBanActionModal && selectedActionMember && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 p-4 transition-opacity animate-in fade-in">
+          <div className="relative w-full max-w-[380px] rounded-lg bg-[#313338] p-5 shadow-2xl animate-in zoom-in-95 duration-150 font-sans">
+            <h3 className="text-[17px] font-bold text-white leading-none">
+              {t("serverSettingsModal.banButton")} {selectedActionMember.displayName || selectedActionMember.username}
+            </h3>
+            <p className="text-sm text-[#b5bac1] mt-2 leading-tight">
+              {t("chat.banConfirm", { username: selectedActionMember.displayName || selectedActionMember.username })}
+            </p>
+            <input
+              type="text"
+              value={banActionReason}
+              onChange={(e) => setBanActionReason(e.target.value)}
+              placeholder={t("chat.banReasonPlaceholder")}
+              className="mt-3.5 w-full bg-[#1e1f22] text-white p-2.5 rounded text-sm outline-none border border-[#1f2023] focus:border-[#5865f2] transition"
+            />
+            <div className="mt-5 flex items-center justify-end gap-2 text-sm font-semibold select-none">
+              <button
+                onClick={() => {
+                  setShowBanActionModal(false);
+                  setSelectedActionMember(null);
+                }}
+                className="px-4 py-2 text-[#dbdee1] hover:underline cursor-pointer transition"
+              >
+                {t("modal.cancel")}
+              </button>
+              <button
+                onClick={() => handleBanAction(selectedActionMember.userId, banActionReason)}
+                disabled={loadingAction === "ban"}
+                className="flex items-center gap-1 bg-[#da373c] text-white px-4 py-2 rounded hover:bg-[#a12828] active:scale-95 transition cursor-pointer disabled:opacity-50"
+              >
+                {loadingAction === "ban" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {t("serverSettingsModal.banButton")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Restrict Member Modal */}
+      {showMuteActionModal && selectedActionMember && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 p-4 transition-opacity animate-in fade-in">
+          <div className="relative w-full max-w-[380px] rounded-lg bg-[#313338] p-5 shadow-2xl animate-in zoom-in-95 duration-150 font-sans">
+            <h3 className="text-[17px] font-bold text-white leading-none">
+              {t("serverSettingsModal.restrictButton")} {selectedActionMember.displayName || selectedActionMember.username}
+            </h3>
+            <p className="text-sm text-[#b5bac1] mt-2 leading-normal">
+              {t("chat.restrictConfirm", { username: selectedActionMember.displayName || selectedActionMember.username })}
+            </p>
+
+            <div className="mt-4">
+              <label className="text-[10px] font-bold text-[#b5bac1] uppercase tracking-wider block mb-1.5">
+                {t("chat.restrictDurationLabel")}
+              </label>
+              <select
+                value={muteActionDuration}
+                onChange={(e) => setMuteActionDuration(Number(e.target.value))}
+                className="w-full bg-[#1e1f22] text-[#dbdee1] p-2.5 rounded text-sm outline-none border border-[#1f2023] focus:border-[#5865f2] transition cursor-pointer"
+              >
+                <option value={5}>{t("chat.mute5m")}</option>
+                <option value={60}>{t("chat.mute1h")}</option>
+                <option value={24 * 60}>{t("chat.mute24h")}</option>
+                <option value={7 * 24 * 60}>{t("chat.mute1w")}</option>
+              </select>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-2 text-sm font-semibold select-none">
+              <button
+                onClick={() => {
+                  setShowMuteActionModal(false);
+                  setSelectedActionMember(null);
+                }}
+                className="px-4 py-2 text-[#dbdee1] hover:underline cursor-pointer transition"
+              >
+                {t("modal.cancel")}
+              </button>
+              <button
+                onClick={() => handleMuteAction(selectedActionMember.userId, muteActionDuration)}
+                disabled={loadingAction === "mute"}
+                className="flex items-center gap-1 bg-[#f59e0b] hover:bg-[#d97706] text-white px-4 py-2 rounded active:scale-95 transition cursor-pointer disabled:opacity-50"
+              >
+                {loadingAction === "mute" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {t("serverSettingsModal.restrictButton")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transfer Ownership Modal */}
+      {showTransferActionModal && selectedActionMember && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 p-4 transition-opacity animate-in fade-in">
+          <div className="relative w-full max-w-[380px] rounded-lg bg-[#313338] p-5 shadow-2xl animate-in zoom-in-95 duration-150 font-sans">
+            <h3 className="text-[17px] font-bold text-white leading-none">
+              {t("serverSettingsModal.transferTitle")}
+            </h3>
+            <p className="text-sm text-[#b5bac1] mt-2 leading-normal">
+              {t("serverSettingsModal.transferConfirmPrompt", { username: selectedActionMember.displayName || selectedActionMember.username })}
+            </p>
+
+            <div className="mt-6 flex items-center justify-end gap-2 text-sm font-semibold select-none">
+              <button
+                onClick={() => {
+                  setShowTransferActionModal(false);
+                  setSelectedActionMember(null);
+                }}
+                className="px-4 py-2 text-[#dbdee1] hover:underline cursor-pointer transition"
+              >
+                {t("modal.cancel")}
+              </button>
+              <button
+                onClick={() => handleTransferOwnershipAction(selectedActionMember.userId)}
+                disabled={loadingAction === "transfer"}
+                className="flex items-center gap-1 bg-[#da373c] text-white px-4 py-2 rounded hover:bg-[#a12828] active:scale-95 transition cursor-pointer disabled:opacity-50"
+              >
+                {loadingAction === "transfer" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {t("serverSettingsModal.transferOwnership")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Promote / Demote Member Role Modal */}
+      {showRoleActionModal && selectedActionMember && targetRole && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 p-4 transition-opacity animate-in fade-in">
+          <div className="relative w-full max-w-[380px] rounded-lg bg-[#313338] p-5 shadow-2xl animate-in zoom-in-95 duration-150 font-sans">
+            <h3 className="text-[17px] font-bold text-white leading-none font-sans">
+              {targetRole === "ADMIN"
+                ? t("serverSettingsModal.promoteConfirmTitle")
+                : t("serverSettingsModal.demoteConfirmTitle")}
+            </h3>
+            <p className="text-sm text-[#b5bac1] mt-2 leading-normal font-sans">
+              {targetRole === "ADMIN"
+                ? t("serverSettingsModal.promoteConfirmDesc", { username: selectedActionMember.displayName || selectedActionMember.username })
+                : t("serverSettingsModal.demoteConfirmDesc", { username: selectedActionMember.displayName || selectedActionMember.username })}
+            </p>
+
+            <div className="mt-6 flex items-center justify-end gap-2 text-sm font-semibold select-none">
+              <button
+                onClick={() => {
+                  setShowRoleActionModal(false);
+                  setSelectedActionMember(null);
+                  setTargetRole(null);
+                }}
+                className="px-4 py-2 text-[#dbdee1] hover:underline cursor-pointer transition"
+              >
+                {t("modal.cancel")}
+              </button>
+              <button
+                onClick={() => {
+                  handleUpdateRoleAction(selectedActionMember.userId, targetRole);
+                  setShowRoleActionModal(false);
+                  setTargetRole(null);
+                }}
+                disabled={loadingAction === "role"}
+                className={cn(
+                  "flex items-center gap-1 text-white px-4 py-2 rounded active:scale-95 transition cursor-pointer disabled:opacity-50 font-sans font-semibold",
+                  targetRole === "ADMIN"
+                    ? "bg-[#5865f2] hover:bg-[#4752c4]"
+                    : "bg-[#da373c] hover:bg-[#a12828]"
+                )}
+              >
+                {loadingAction === "role" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {targetRole === "ADMIN"
+                  ? t("serverSettingsModal.promoteConfirm")
+                  : t("serverSettingsModal.demoteConfirm")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Member actions dropdown menu */}
+      {activeDropdownMemberId && (
+        <>
+          <div
+            className="fixed inset-0 z-[9998] bg-transparent"
+            onClick={() => setActiveDropdownMemberId(null)}
+          />
+          <div
+            style={{
+              position: "fixed",
+              top: dropdownPosition.top,
+              left: dropdownPosition.left,
+              zIndex: 9999,
+            }}
+            className="w-44 rounded-md border border-[#1e1f22] bg-[#111214] py-1.5 shadow-xl animate-in font-sans"
+          >
+            <div className="flex flex-col px-1.5 gap-0.5 select-none text-xs">
+              {/* Transfer Ownership option */}
+              {isOwner && (
+                <button
+                  onClick={() => {
+                    const m = roomMembers.find((item) => item.userId === activeDropdownMemberId);
+                    if (m) {
+                      setSelectedActionMember(m);
+                      setShowTransferActionModal(true);
+                    }
+                    setActiveDropdownMemberId(null);
+                  }}
+                  className="flex items-center gap-2 w-full rounded-[2px] px-2 py-1.5 font-medium text-[#dbdee1] hover:bg-[#5865f2] hover:text-white transition-colors cursor-pointer text-left"
+                >
+                  <Crown className="h-3.5 w-3.5 text-amber-500" />
+                  {t("serverSettingsModal.transferOwnership")}
+                </button>
+              )}
+
+              {/* Promote/Demote to Admin option (OWNER ONLY) */}
+              {isOwner && (() => {
+                const target = roomMembers.find((item) => item.userId === activeDropdownMemberId);
+                if (!target) return null;
+                const isTargetAdmin = target.role === "ADMIN";
+                return (
+                  <button
+                    onClick={() => {
+                      setSelectedActionMember(target);
+                      setTargetRole(isTargetAdmin ? "MEMBER" : "ADMIN");
+                      setShowRoleActionModal(true);
+                      setActiveDropdownMemberId(null);
+                    }}
+                    className="flex items-center gap-2 w-full rounded-[2px] px-2 py-1.5 font-medium text-[#dbdee1] hover:bg-[#5865f2] hover:text-white transition-colors cursor-pointer text-left"
+                  >
+                    <Shield className="h-3.5 w-3.5 text-blue-400" />
+                    {isTargetAdmin
+                      ? t("serverSettingsModal.demoteToMember") || "Demote to Member"
+                      : t("serverSettingsModal.promoteToAdmin") || "Promote to Admin"}
+                  </button>
+                );
+              })()}
+
+              {/* Mute member option */}
+              {(() => {
+                const target = roomMembers.find((item) => item.userId === activeDropdownMemberId);
+                const currentUserMember = roomMembers.find((m) => m.userId === user?.id);
+                const currentUserRole = currentUserMember?.role;
+                const canMuteTarget = isOwner || (canRestrict && (currentUserRole !== "ADMIN" || target?.role === "MEMBER"));
+
+                if (!canMuteTarget) return null;
+
+                return (
+                  <button
+                    onClick={() => {
+                      if (target) {
+                        setSelectedActionMember(target);
+                        setShowMuteActionModal(true);
+                      }
+                      setActiveDropdownMemberId(null);
+                    }}
+                    className="flex items-center gap-2 w-full rounded-[2px] px-2 py-1.5 font-medium text-[#dbdee1] hover:bg-[#5865f2] hover:text-white transition-colors cursor-pointer text-left"
+                  >
+                    <VolumeX className="h-3.5 w-3.5 text-orange-400" />
+                    {t("serverSettingsModal.muteButton")}
+                  </button>
+                );
+              })()}
+
+              {/* Ban member option */}
+              {(() => {
+                const target = roomMembers.find((item) => item.userId === activeDropdownMemberId);
+                const currentUserMember = roomMembers.find((m) => m.userId === user?.id);
+                const currentUserRole = currentUserMember?.role;
+                const canBanTarget = isOwner || (canBan && (currentUserRole !== "ADMIN" || target?.role === "MEMBER"));
+
+                if (!canBanTarget) return null;
+
+                return (
+                  <button
+                    onClick={() => {
+                      if (target) {
+                        setSelectedActionMember(target);
+                        setShowBanActionModal(true);
+                      }
+                      setActiveDropdownMemberId(null);
+                    }}
+                    className="flex items-center gap-2 w-full rounded-[2px] px-2 py-1.5 font-medium text-[#da373c] hover:bg-[#da373c] hover:text-white transition-colors cursor-pointer text-left"
+                  >
+                    <ShieldAlert className="h-3.5 w-3.5" />
+                    {t("serverSettingsModal.banButton")}
+                  </button>
+                );
+              })()}
+            </div>
+          </div>
+        </>
       )}
     </div>,
     document.body

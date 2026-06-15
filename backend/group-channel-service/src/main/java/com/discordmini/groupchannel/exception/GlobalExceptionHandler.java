@@ -20,6 +20,17 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ex.getMessage(), ex.getErrorCode()));
     }
 
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(org.springframework.dao.DataIntegrityViolationException ex) {
+        String msg = ex.getMostSpecificCause() != null ? ex.getMostSpecificCause().getMessage() : ex.getMessage();
+        if (msg != null && (msg.toLowerCase().contains("duplicate") || msg.toLowerCase().contains("unique") || msg.toLowerCase().contains("room_participants"))) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.error("Member already exists or conflict occurred", "CONFLICT"));
+        }
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error("Database integrity violation: " + msg, "INTERNAL_SERVER_ERROR"));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Map<String, String>>> handleValidationException(MethodArgumentNotValidException ex) {
         Map<String, String> errors = new HashMap<>();

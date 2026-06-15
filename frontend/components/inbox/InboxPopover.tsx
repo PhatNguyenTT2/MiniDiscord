@@ -7,6 +7,7 @@ import { useInboxStore } from "@/stores/inboxStore";
 import { useRouter } from "next/navigation";
 import { ScrollArea } from "../ui/ScrollArea";
 import { cn } from "@/lib/utils";
+import { StatusAvatar } from "@/components/ui/StatusAvatar";
 
 export function InboxPopover() {
   const { t } = useTranslation();
@@ -161,17 +162,13 @@ export function InboxPopover() {
                     onClick={() => handleNotificationClick(n)}
                   >
                     {/* Event icon or Avatar */}
-                    {n.senderAvatar ? (
-                      <img
+                    <div className="h-9 w-9 flex items-center justify-center shrink-0 mt-0.5 select-none">
+                      <StatusAvatar
                         src={n.senderAvatar}
-                        alt={n.senderName}
-                        className="h-9 w-9 rounded-full object-cover shrink-0 mt-0.5"
+                        fallback={n.senderName}
+                        size="md"
                       />
-                    ) : (
-                      <div className="h-9 w-9 rounded-full bg-[#5865f2]/10 flex items-center justify-center shrink-0 mt-0.5 text-[#5865f2] font-semibold text-xs uppercase border border-[#5865f2]/15">
-                        {n.senderName.substring(0, 2)}
-                      </div>
-                    )}
+                    </div>
 
                     {/* Metadata Content */}
                     <div className="flex-1 min-w-0 flex flex-col gap-1 pr-12">

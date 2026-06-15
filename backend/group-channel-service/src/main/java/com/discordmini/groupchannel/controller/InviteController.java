@@ -43,8 +43,16 @@ public class InviteController {
   public ResponseEntity<ApiResponse<RoomResponse>> joinRoom(
       @RequestHeader("X-User-Id") UUID userId,
       @PathVariable String code) {
-    Room room = inviteLinkService.joinRoomWithCode(code, userId);
-    return ResponseEntity.ok(ApiResponse.ok("Joined room successfully", mapToResponse(room)));
+    InviteLink inviteLink = inviteLinkService.getInviteDetails(code);
+    Room room = inviteLink.getRoom();
+    
+    boolean isAlreadyMember = participantRepository.existsByUserIdAndRoomId(userId, room.getId());
+    if (isAlreadyMember) {
+      return ResponseEntity.ok(ApiResponse.ok("ALREADY_MEMBER", mapToResponse(room)));
+    }
+
+    Room joinedRoom = inviteLinkService.joinRoomWithCode(code, userId);
+    return ResponseEntity.ok(ApiResponse.ok("Joined room successfully", mapToResponse(joinedRoom)));
   }
 
   private RoomResponse mapToResponse(Room room) {

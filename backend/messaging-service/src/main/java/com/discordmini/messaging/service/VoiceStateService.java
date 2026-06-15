@@ -62,13 +62,26 @@ public class VoiceStateService {
 
   public void leaveCurrentChannel(String userId) {
     String userKey = "voice:user:" + userId;
-    Map<Object, Object> state = redisTemplate.opsForHash().entries(userKey);
-    if (state.isEmpty()) {
+    Map<Object, Object> state;
+    try {
+      state = redisTemplate.opsForHash().entries(userKey);
+    } catch (Exception e) {
+      log.warn("Redis read failed for voice user key {}: {}", userKey, e.getMessage());
+      return;
+    }
+    if (state == null || state.isEmpty()) {
+      log.debug("leaveCurrentChannel: no voice state found for user {}, skipping (idempotent)", userId);
       return;
     }
 
     String roomId = (String) state.get("roomId");
     String channelId = (String) state.get("channelId");
+    if (roomId == null || channelId == null) {
+      log.warn("leaveCurrentChannel: incomplete state found for user {}: {}", userId, state);
+      redisTemplate.delete(userKey);
+      return;
+    }
+
     String channelKey = "voice:channel:" + roomId + ":" + channelId;
 
     // Remove from set and delete hash mapping

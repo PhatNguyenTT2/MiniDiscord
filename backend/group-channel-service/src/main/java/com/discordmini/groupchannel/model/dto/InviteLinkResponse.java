@@ -18,4 +18,5 @@ public class InviteLinkResponse {
   private Integer uses;
   private Instant expiresAt;
   private Instant createdAt;
+  private UUID creatorId;
 }

@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n";
 import type { MemberDetailResponse } from "@/types/room";
 
+import { StatusAvatar } from "@/components/ui/StatusAvatar";
+
 type MentionItem =
   | { type: "everyone" }
   | { type: "member"; member: MemberDetailResponse };
@@ -129,16 +131,14 @@ export function MentionPicker({
           onClickAction = () => onSelect("everyone", "everyone");
         } else {
           const { member } = item;
-          avatarNode = member.avatarUrl ? (
-            <img
+          avatarNode = (
+            <StatusAvatar
               src={member.avatarUrl}
-              alt={member.username}
-              className="w-5 h-5 rounded-full object-cover shrink-0"
+              fallback={member.username}
+              size="sm"
+              status={member.status as any}
+              className="shrink-0 animate-none"
             />
-          ) : (
-            <div className="w-5 h-5 rounded-full bg-[#5865f2] flex items-center justify-center text-[9px] text-white uppercase font-bold shrink-0">
-              {member.username.slice(0, 2)}
-            </div>
           );
           displayName = member.username;
           rightText = member.username.toLowerCase().replace(/\s+/g, "");
