@@ -283,6 +283,7 @@ export default function DmChatPage() {
   }, [roomId, allMembers, friend]);
 
   const [modalType, setModalType] = useState<"REMOVE_FRIEND" | "BLOCK" | null>(null);
+  const [showCallUnavailableModal, setShowCallUnavailableModal] = useState(false);
   const [relationship, setRelationship] = useState<"friend" | "none" | "blocked">("friend");
 
   // Chat store — Read messages from global channel storage
@@ -316,6 +317,14 @@ export default function DmChatPage() {
     handleViewportResize(); // run on mount
     window.addEventListener("resize", handleViewportResize);
     return () => window.removeEventListener("resize", handleViewportResize);
+  }, []);
+
+  useEffect(() => {
+    function handleUnavailable() {
+      setShowCallUnavailableModal(true);
+    }
+    window.addEventListener("voice-call-unavailable", handleUnavailable);
+    return () => window.removeEventListener("voice-call-unavailable", handleUnavailable);
   }, []);
 
   const handleSend = useCallback(
@@ -872,6 +881,18 @@ export default function DmChatPage() {
           />
         )
       }
+
+      {showCallUnavailableModal && (
+        <ConfirmModal
+          title={t("common.error")}
+          description={<p>{t("voice.callUnavailable")}</p>}
+          confirmText="OK"
+          showCancel={false}
+          variant="primary"
+          onClose={() => setShowCallUnavailableModal(false)}
+          onConfirm={() => setShowCallUnavailableModal(false)}
+        />
+      )}
     </>
   );
 }

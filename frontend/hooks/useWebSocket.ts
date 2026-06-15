@@ -245,6 +245,15 @@ function handleRoomMessage(msg: IMessage) {
       console.log("[STOMP] MEMBER_MUTED received for room:", data.roomId);
       if (data.roomId) {
         useRoomStore.getState().fetchMembers(data.roomId, undefined, true);
+
+        const currentUserId = useAuthStore.getState().user?.id;
+        if (data.userId === currentUserId) {
+          // If I was server-restricted, force state to mute
+          const voiceState = useVoiceStore.getState();
+          if (!voiceState.isMuted) {
+            voiceState.toggleMute();
+          }
+        }
       }
       return;
     }
@@ -256,11 +265,31 @@ function handleRoomMessage(msg: IMessage) {
 
         const currentUserId = useAuthStore.getState().user?.id;
         if (data.userId === currentUserId) {
+          // ── Kill Switch: Teardown WebRTC connection before redirecting ──
+          const voiceState = useVoiceStore.getState();
+          if (voiceState.currentChannel?.roomId === data.roomId) {
+            voiceState.leaveVoiceChannel();
+          }
+          if (voiceState.activeCallRoomId === data.roomId) {
+            voiceState.endCall();
+          }
+
           alert("Bạn đã bị cấm khỏi phòng chat này! / You have been banned from this room!");
           useRoomStore.getState().fetchMyRooms(true);
           if (typeof window !== "undefined" && window.location.pathname.includes(data.roomId)) {
-            window.location.href = "/channels/me";
+            window.location.replace("/channels/me");
           }
+        } else {
+          // If another member is banned, trigger state cleanup in the voice store
+          const voiceState = useVoiceStore.getState();
+          const roomChannels = useRoomStore.getState().channels[data.roomId] || [];
+          roomChannels.forEach((ch) => {
+            voiceState.handleVoiceStateUpdate({
+              channelId: ch.id,
+              userId: data.userId,
+              action: "LEAVE",
+            });
+          });
         }
       }
       return;
@@ -303,6 +332,7 @@ function handleRoomMessage(msg: IMessage) {
       createdAt: data.createdAt || new Date().toISOString(),
       replyTo: data.replyTo || null,
       mentions: data.mentions || [],
+      stickerIds: data.stickerIds || [],
     });
 
     // Increment unread count logic — skip own messages

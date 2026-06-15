@@ -190,6 +190,7 @@
     "deleteMessageAdmin": "Delete Message (Moderation)",
     "banMember": "Ban Member",
     "restrictMember": "Mute Member",
+    "unmuteMember": "Unmute Member",
     "banReason": "Reason",
     "banConfirm": "Enter a reason for banning {username} from this server:",
     "banReasonPlaceholder": "Enter reason (optional)",
@@ -268,6 +269,7 @@
   },
   "modal": {
     "cancel": "Cancel",
+    "confirm": "Confirm",
     "removeFriendTitle": "Remove",
     "removeFriendDesc": "Are you sure you want to remove {name} from your friends list? You will need to send a friend request again if you want to reconnect.",
     "removeFriendConfirm": "Remove Friend",
@@ -428,6 +430,7 @@
     "connectedStatus": "Voice Connected",
     "disconnect": "Disconnect",
     "mute": "Mute",
+    "serverMuted": "Mic locked by admin",
     "unmute": "Unmute",
     "deafen": "Deafen",
     "undeafen": "Undeafen",
@@ -441,6 +444,9 @@
     "reconnect": "Reconnect",
     "ringing": "Ringing",
     "connected": "Connected",
+    "participantsConnected": "participants connected",
+    "emptyChannel": "Currently no one in the voice channel",
+    "waiting": "Waiting...",
     "channelIntro": "You are viewing the details of this voice channel. Click the button below to join the conversation with other members.",
     "callEnded": "Call ended",
     "startCall": "Start Call",
@@ -629,5 +635,9 @@
     "unsavedChanges": "You have unsaved changes!",
     "reset": "Reset",
     "save": "Save Changes"
+  },
+  "accessDenied": {
+    "title": "Access Denied",
+    "description": "You do not have permission or have been banned from this server."
   }
 }

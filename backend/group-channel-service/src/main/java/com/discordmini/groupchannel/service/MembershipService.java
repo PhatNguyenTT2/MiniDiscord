@@ -140,6 +140,9 @@ public class MembershipService {
 
     @Transactional
     public void addMemberIfNotExists(UUID roomId, UUID userId) {
+        if (roomBanRepository.existsByRoomIdAndUserId(roomId, userId)) {
+            throw new BaseException("User is banned from this room", HttpStatus.FORBIDDEN, "FORBIDDEN");
+        }
         if (!participantRepository.existsByUserIdAndRoomId(userId, roomId)) {
             Room room = roomRepository.findById(roomId)
                     .orElseThrow(() -> new RoomNotFoundException("Room not found"));
@@ -315,17 +318,19 @@ public class MembershipService {
             }
         }
 
-        if (roomBanRepository.existsByRoomIdAndUserId(roomId, targetUserId)) {
-            throw new BaseException("User is already banned from this room", HttpStatus.CONFLICT, "CONFLICT");
-        }
+        // Idempotent: if already banned, skip creating a new ban record but still
+        // remove participant + broadcast event
+        boolean alreadyBanned = roomBanRepository.existsByRoomIdAndUserId(roomId, targetUserId);
 
-        RoomBan roomBan = RoomBan.builder()
-                .roomId(roomId)
-                .userId(targetUserId)
-                .bannedBy(requesterId)
-                .reason(reason)
-                .build();
-        roomBanRepository.save(roomBan);
+        if (!alreadyBanned) {
+            RoomBan roomBan = RoomBan.builder()
+                    .roomId(roomId)
+                    .userId(targetUserId)
+                    .bannedBy(requesterId)
+                    .reason(reason)
+                    .build();
+            roomBanRepository.save(roomBan);
+        }
 
         participantRepository.findByUserIdAndRoomId(targetUserId, roomId)
                 .ifPresent(participantRepository::delete);

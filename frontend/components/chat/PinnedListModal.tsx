@@ -117,7 +117,7 @@ function PinnedMessageItem({
           {hasAttachment && (
             <div className="mt-2" style={{ overflowAnchor: "none" }}>
               {!resolvedUrl ? (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground bg-secondary/50 p-2 rounded max-w-sm">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground bg-secondary/50 p-2 rounded max-w-[384px]">
                   <div className="h-3.5 w-3.5 rounded-full border border-primary border-t-transparent animate-spin shrink-0" />
                   <span>Loading...</span>
                 </div>

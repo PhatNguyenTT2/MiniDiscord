@@ -64,6 +64,7 @@ function ChannelItem({
   const connectionDuration = useVoiceStore((s) => s.connectionDuration);
   const isJoined = currentChannel?.channelId === channel.id;
   const Icon = channel.type === "TEXT" ? Hash : Volume2;
+  const members = useRoomStore((s) => s.members);
 
   return (
     <div className="flex flex-col">
@@ -137,14 +138,14 @@ function ChannelItem({
       {channel.type === "VOICE" && participants.length > 0 && (
         <div className="space-y-0.5 mt-0.5 mb-1.5 pl-6 pr-2">
           {participants.map((p: VoiceParticipant) => {
-            const member = useRoomStore.getState().members[roomId]?.find((m) => m.userId === p.userId);
+            const member = members[roomId]?.find((m) => m.userId === p.userId);
             const displayName = member?.displayName || member?.username || p.displayName || p.username;
             const avatarUrl = member?.avatarUrl || p.avatarUrl;
             return (
               <MemberProfilePopover
                 key={p.userId}
                 userId={p.userId}
-                username={p.username}
+                username={member?.username || p.username}
                 displayName={displayName}
                 avatarUrl={avatarUrl || null}
                 status="ONLINE"
@@ -292,19 +293,23 @@ export function ChannelList() {
   }, [displayRoomId]);
 
   useEffect(() => {
-    if (displayRoomId && voiceChannels.length > 0) {
-      useVoiceStore.getState().fetchVoiceStates(displayRoomId, voiceChannels.map(c => c.id));
-    }
-  }, [displayRoomId, voiceChannels.length]);
-
-  // Load server's channels if absent or on active server change (Lazy Loading support)
-  useEffect(() => {
-    if (displayRoomId) {
+    if (!displayRoomId) return;
+    const init = async () => {
+      // 1. Fetch channel structure config
       if (!useRoomStore.getState().channels[displayRoomId]) {
-        useRoomStore.getState().fetchChannels(displayRoomId);
+        await useRoomStore.getState().fetchChannels(displayRoomId);
       }
-      useRoomStore.getState().fetchMembers(displayRoomId);
-    }
+      // 2. Load members (async promise resolution) so names exist in cache map first
+      await useRoomStore.getState().fetchMembers(displayRoomId);
+
+      // 3. Scan voice channels and query participants
+      const freshChannels = useRoomStore.getState().channels[displayRoomId] || [];
+      const voiceIds = freshChannels.filter(c => c.type === "VOICE").map(c => c.id);
+      if (voiceIds.length > 0) {
+        await useVoiceStore.getState().fetchVoiceStates(displayRoomId, voiceIds);
+      }
+    };
+    init();
   }, [displayRoomId]);
 
   function handleChannelClick(channelId: string) {

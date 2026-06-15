@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { StatusAvatar } from "@/components/ui/StatusAvatar";
 import { Mic, MicOff, Headphones, HeadphoneOff, Settings } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { useUIStore } from "@/stores/uiStore";
 import { useAuthStore } from "@/stores/authStore";
+import { useRoomStore } from "@/stores/roomStore";
 import { useVoiceStore } from "@/stores/voiceStore";
 import { cn } from "@/lib/utils";
 
@@ -82,6 +83,40 @@ export function UserPanel() {
   const activeCallRoomId = useVoiceStore?.((s) => s.activeCallRoomId);
   const isInVoice = currentChannel || activeCallRoomId;
 
+  // Sync with current user server-mute time
+  const roomId = currentChannel?.roomId;
+  const members = useRoomStore((s) => roomId ? s.members[roomId] : undefined) || [];
+  const me = members.find((m) => m.userId === user?.id);
+  const serverMutedUntil = me?.mutedUntil ? new Date(me.mutedUntil) : null;
+
+  const [timeLeft, setTimeLeft] = useState(0);
+
+  useEffect(() => {
+    if (!serverMutedUntil) {
+      setTimeLeft(0);
+      return;
+    }
+    const calcTimeLeft = () => {
+      const diff = Math.max(0, Math.ceil((serverMutedUntil.getTime() - Date.now()) / 1000));
+      setTimeLeft(diff);
+      return diff;
+    };
+
+    const initialDiff = calcTimeLeft();
+    if (initialDiff <= 0) return;
+
+    const interval = setInterval(() => {
+      const diff = calcTimeLeft();
+      if (diff <= 0) {
+        clearInterval(interval);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [me?.mutedUntil]);
+
+  const isServerMuted = timeLeft > 0;
+
   return (
     <div
       className="absolute inset-x-0 z-20 px-2"
@@ -120,19 +155,23 @@ export function UserPanel() {
 
         <div className="flex items-center gap-0.5">
           <button
-            aria-label={t("userPanel.muteMic")}
-            onClick={toggleMute}
+            aria-label={isServerMuted ? t("voice.serverMuted") : t("userPanel.muteMic")}
+            onClick={isServerMuted ? undefined : toggleMute}
+            disabled={isServerMuted}
+            title={isServerMuted ? t("voice.serverMuted") : undefined}
             className={cn(
-              "flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150 cursor-pointer",
-              micActive
-                ? "text-[#b5bac1] hover:bg-[#3f4147] hover:text-[#dbdee1]"
-                : "text-[#ed4245] bg-[#ed4245]/15 hover:bg-[#ed4245]/25"
+              "flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150",
+              isServerMuted
+                ? "text-[#d97706] bg-[#d97706]/15 cursor-not-allowed opacity-80"
+                : micActive
+                  ? "text-[#b5bac1] hover:bg-[#3f4147] hover:text-[#dbdee1] cursor-pointer"
+                  : "text-[#ed4245] bg-[#ed4245]/15 hover:bg-[#ed4245]/25 cursor-pointer"
             )}
           >
-            {micActive ? (
-              <Mic className="h-[18px] w-[18px]" />
-            ) : (
+            {isServerMuted || !micActive ? (
               <MicOff className="h-[18px] w-[18px]" />
+            ) : (
+              <Mic className="h-[18px] w-[18px]" />
             )}
           </button>
 

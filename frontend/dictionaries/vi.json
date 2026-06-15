@@ -190,6 +190,7 @@
     "deleteMessageAdmin": "Xóa tin nhắn (Kiểm duyệt)",
     "banMember": "Cấm khỏi máy chủ",
     "restrictMember": "Hạn chế nói",
+    "unmuteMember": "Gỡ hạn chế",
     "banReason": "Lý do cấm",
     "banConfirm": "Nhập lý do cấm người dùng {username} khỏi máy chủ:",
     "banReasonPlaceholder": "Nhập lý do (tùy chọn)",
@@ -268,6 +269,7 @@
   },
   "modal": {
     "cancel": "Hủy",
+    "confirm": "Xác nhận",
     "removeFriendTitle": "Xóa",
     "removeFriendDesc": "Bạn có chắc chắn muốn xóa {name} khỏi danh sách bạn bè không? Khi xóa xong, bạn sẽ phải thực hiện lại thao tác gửi lời mời kết bạn nếu muốn liên lạc lại.",
     "removeFriendConfirm": "Xóa Bạn",
@@ -428,6 +430,7 @@
     "connectedStatus": "Đã kết nối giọng nói",
     "disconnect": "Ngắt kết nối",
     "mute": "Tắt tiếng",
+    "serverMuted": "Mic bị khóa bởi quản trị viên",
     "unmute": "Bật tiếng",
     "deafen": "Tắt âm",
     "undeafen": "Bật âm",
@@ -441,6 +444,9 @@
     "reconnect": "Kết nối lại",
     "ringing": "Đang đổ chuông",
     "connected": "Đã kết nối",
+    "participantsConnected": "người tham gia",
+    "emptyChannel": "Hiện tại không có ai trong kênh thoại",
+    "waiting": "Đang chờ...",
     "channelIntro": "Bạn đang xem chi tiết phòng chat thoại. Bấm nút bên dưới để tham gia vào cuộc nói chuyện cùng những thành viên khác.",
     "callEnded": "Cuộc gọi kết thúc",
     "startCall": "Bắt đầu cuộc gọi",
@@ -629,5 +635,9 @@
     "unsavedChanges": "Thay đổi chưa được lưu!",
     "reset": "Đặt lại",
     "save": "Lưu thay đổi"
+  },
+  "accessDenied": {
+    "title": "Truy cập bị từ chối",
+    "description": "Bạn không có quyền truy cập hoặc đã bị cấm khỏi máy chủ này!"
   }
 }

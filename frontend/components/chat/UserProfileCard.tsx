@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "@/lib/i18n";
 import { useFriendStore } from "@/stores/friendStore";
 import { useAuthStore } from "@/stores/authStore";
+import { useRoomStore } from "@/stores/roomStore";
 import { StatusAvatar } from "@/components/ui/StatusAvatar";
 import { useHasPermission } from "@/hooks/useHasPermission";
 import { api } from "@/lib/api";
@@ -64,6 +65,13 @@ export function UserProfileCard({
   // Permissions
   const canBan = useHasPermission("BAN_MEMBER", roomId);
   const canRestrict = useHasPermission("RESTRICT_MEMBER", roomId);
+
+  // Target Member Server Mute state
+  const members = useRoomStore((s) => s.members[roomId]) || [];
+  const targetMember = members.find((m) => m.userId === userId);
+  const isTargetMuted = targetMember?.mutedUntil
+    ? new Date(targetMember.mutedUntil).getTime() > Date.now()
+    : false;
 
   useEffect(() => {
     fetchFriends();
@@ -187,6 +195,23 @@ export function UserProfileCard({
     }
   };
 
+  const handleUnmute = async () => {
+    if (loadingAction) return;
+    setLoadingAction("unmute");
+    try {
+      await api.post(`/rooms/${roomId}/members/${userId}/mute`, {
+        durationMinutes: 0,
+      });
+      setIsActionsDropdownOpen(false);
+      onClose();
+    } catch (err) {
+      console.error("Failed to unmute member:", err);
+      alert("Failed to unmute member");
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
   const resolvedName = displayName || username;
 
   return (
@@ -305,13 +330,17 @@ export function UserProfileCard({
                         {canRestrict && (
                           <button
                             onClick={() => {
-                              setIsMuteModalOpen(true);
                               setIsActionsDropdownOpen(false);
+                              if (isTargetMuted) {
+                                handleUnmute();
+                              } else {
+                                setIsMuteModalOpen(true);
+                              }
                             }}
                             className="flex w-full items-center gap-2 px-2.5 py-1.5 text-xs rounded hover:bg-[#ed4245] text-amber-500 hover:text-white transition cursor-pointer outline-none"
                           >
                             <VolumeX className="h-3.5 w-3.5" />
-                            <span>{t("chat.restrictMember")}</span>
+                            <span>{isTargetMuted ? t("chat.unmuteMember") : t("chat.restrictMember")}</span>
                           </button>
                         )}
 

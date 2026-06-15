@@ -141,10 +141,25 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
       // 3. Inform backend via STOMP broker
       const token = useAuthStore.getState().token;
       if (token) {
-        getStompClient(token).publish({
-          destination: "/app/voice.join",
-          body: JSON.stringify({ roomId, channelId })
-        });
+        const client = getStompClient(token);
+        if (client.connected) {
+          client.publish({
+            destination: "/app/voice.join",
+            body: JSON.stringify({ roomId, channelId })
+          });
+        } else {
+          console.warn("[VoiceStore] STOMP client not connected. Retrying publish in 500ms");
+          const interval = setInterval(() => {
+            if (client.connected) {
+              client.publish({
+                destination: "/app/voice.join",
+                body: JSON.stringify({ roomId, channelId })
+              });
+              clearInterval(interval);
+            }
+          }, 500);
+          setTimeout(() => clearInterval(interval), 10000);
+        }
       }
 
       // 4. Set state & start duration ticking timer
@@ -232,9 +247,22 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
 
   toggleMute: () => {
     resumeAudioContext();
+    const currentUserId = useAuthStore.getState().user?.id;
+    const activeChannel = get().currentChannel;
+
     const isCurrentlyMuted = get().isMuted;
     const isCurrentlyDeafened = get().isDeafened;
     const nowMuted = !isCurrentlyMuted;
+
+    // ── Server-Mute Guard (Only block turning mic on / unmute) ──
+    if (!nowMuted && activeChannel && currentUserId) {
+      const members = useRoomStore.getState().members[activeChannel.roomId] || [];
+      const me = members.find((m) => m.userId === currentUserId);
+      if (me?.mutedUntil && new Date(me.mutedUntil).getTime() > Date.now()) {
+        console.warn("[VoiceStore] toggleMute aborted: user is server-restricted");
+        return; // Block voice activation
+      }
+    }
 
     // Toggle mute locally in media device track if exists
     const audioTrack = webrtcManager.localStream?.getAudioTracks()[0];
@@ -242,8 +270,6 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
       audioTrack.enabled = !nowMuted;
     }
 
-    const currentUserId = useAuthStore.getState().user?.id;
-    const activeChannel = get().currentChannel;
     const channelKey = activeChannel?.channelId || (get().activeCallRoomId ? "dm" : null);
 
     set((state) => {

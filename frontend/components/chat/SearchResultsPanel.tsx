@@ -10,6 +10,7 @@ import { api } from "@/lib/api";
 import type { Message } from "@/types";
 import { useAuthStore } from "@/stores/authStore";
 import { StatusAvatar } from "@/components/ui/StatusAvatar";
+import { StickerPreview } from "@/components/chat/StickerPreview";
 
 interface SearchResultsPanelProps {
   channelId: string;
@@ -456,6 +457,15 @@ export function SearchResultsPanel({ channelId, roomId }: SearchResultsPanelProp
                       <p className="text-sm text-[#dbdee1] mt-1 break-words leading-relaxed whitespace-pre-wrap">
                         {renderMessageContent(msg.content)}
                       </p>
+
+                      {/* Sticker rendering */}
+                      {msg.stickerIds && msg.stickerIds.length > 0 && (
+                        <div className="mt-1 flex flex-col gap-1.5 min-h-[40px]">
+                          {msg.stickerIds.map((sid) => (
+                            <StickerPreview key={sid} stickerId={sid} />
+                          ))}
+                        </div>
+                      )}
 
                       {/* Attachment rendering */}
                       {msg.fileKey && (

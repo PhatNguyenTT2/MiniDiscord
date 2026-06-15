@@ -14,14 +14,16 @@ import { useInboxStore } from "@/stores/inboxStore";
 import { useChatStore } from "@/stores/chatStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useNotificationStore } from "@/stores/notificationStore";
-import { useRoomStore } from "@/stores/roomStore";
+import { useRoomStore, clearRoomCache } from "@/stores/roomStore";
+import { usePermissionStore } from "@/stores/permissionStore";
 import { getStompClient } from "@/lib/websocket";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useRef, useState, useEffect, useMemo } from "react";
 import { type Message } from "@/types";
 import { VoiceChannelView } from "@/components/voice/VoiceChannelView";
 import { Lock } from "lucide-react";
 import { InviteModal } from "@/components/server/InviteModal";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { useTranslation } from "@/lib/i18n";
 
 const EMPTY_MEMBERS: any[] = [];
@@ -29,6 +31,7 @@ const EMPTY_MEMBERS: any[] = [];
 export default function ChannelPage() {
   const { t } = useTranslation();
   const params = useParams();
+  const router = useRouter();
   const channelId = params?.channelId as string;
   const roomId = params?.serverId as string;
   const showMemberList = useUIStore((s) => s.showMemberList);
@@ -36,8 +39,38 @@ export default function ChannelPage() {
   const sidebarWidth = useUIStore((s) => s.sidebarWidth);
   const setSidebarWidth = useUIStore((s) => s.setSidebarWidth);
 
-  const { rooms, channels, fetchMembers } = useRoomStore();
+  const { rooms, channels, fetchMembers, isLoading: isRoomsLoading } = useRoomStore();
   const members = useRoomStore((s) => s.members[roomId] ?? EMPTY_MEMBERS);
+  const permissionError = usePermissionStore((s) => s.error);
+
+  const [showAccessDeniedModal, setShowAccessDeniedModal] = useState(false);
+
+  const handleDeniedModalClose = useCallback(() => {
+    setShowAccessDeniedModal(false);
+    router.replace("/channels/me");
+  }, [router]);
+
+  // Guard: Redirect user if they are banned or not a member of this server (not in the rooms list)
+  useEffect(() => {
+    if (!isRoomsLoading) {
+      const exists = rooms.some((r) => r.id === roomId);
+      if (!exists && roomId && roomId !== "me") {
+        console.warn(`[ChannelPage] Room ${roomId} not found in user rooms list. Redirecting...`);
+        setShowAccessDeniedModal(true);
+      }
+    }
+  }, [roomId, rooms, isRoomsLoading]);
+
+  // Guard: If permissions fetching returns 403 (Forbidden), they were kicked/banned
+  useEffect(() => {
+    if (permissionError && permissionError.includes("403")) {
+      console.warn("[ChannelPage] Permission fetch returned 403. Redirecting...");
+      usePermissionStore.setState({ error: null }); // Clear error
+      clearRoomCache();
+      useRoomStore.getState().fetchMyRooms(true); // Refetch fresh server list
+      setShowAccessDeniedModal(true);
+    }
+  }, [permissionError]);
 
   const [isInviteOpen, setIsInviteOpen] = useState(false);
 
@@ -235,6 +268,26 @@ export default function ChannelPage() {
   const roomChannels = roomId ? (channels[roomId] || []) : [];
   const currentChannelObj = roomChannels.find((c) => c.id === channelId);
   const isVoiceChannel = currentChannelObj?.type === "VOICE";
+
+  const isRoomMember = rooms.some((r) => r.id === roomId) || !roomId || roomId === "me";
+
+  if ((!isRoomsLoading && !isRoomMember) || (permissionError && permissionError.includes("403")) || showAccessDeniedModal) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-[#313338] text-white select-none">
+        {showAccessDeniedModal && (
+          <ConfirmModal
+            title={t("accessDenied.title")}
+            description={t("accessDenied.description")}
+            confirmText={t("modal.confirm")}
+            showCancel={false}
+            variant="primary"
+            onClose={handleDeniedModalClose}
+            onConfirm={handleDeniedModalClose}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <>

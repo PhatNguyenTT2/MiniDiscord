@@ -79,10 +79,6 @@ function ParticipantCard({
     };
   }, [src, isB2]);
 
-  const sizeClasses = participantsLength <= 2
-    ? "h-28 w-28 md:h-36 md:w-36 text-4xl"
-    : "h-20 w-20 md:h-24 md:w-24 text-2xl";
-
   return (
     <div
       className={cn(
@@ -90,7 +86,7 @@ function ParticipantCard({
         isSpeaking ? "border-[#23a55a] shadow-[0_0_15px_rgba(35,165,90,0.15)]" : "border-transparent"
       )}
     >
-      <div className="relative flex items-center justify-center shrink-0">
+      <div className="relative flex items-center justify-center shrink-0 w-full">
         {/* Ringing pulse wave animation */}
         {isRinging && (
           <div className="absolute inset-0 rounded-full border-2 border-[#23a55a] animate-ping opacity-60" style={{ margin: "-4px" }} />
@@ -98,7 +94,7 @@ function ParticipantCard({
 
         <MemberProfilePopover
           userId={p.userId}
-          username={p.username}
+          username={member?.username || p.username}
           displayName={displayName}
           avatarUrl={avatarUrl || null}
           status="ONLINE"
@@ -109,9 +105,8 @@ function ParticipantCard({
           <button
             type="button"
             className={cn(
-              "rounded-full flex items-center justify-center bg-[#1e1f22] relative overflow-hidden transition-all duration-150 border-2 border-transparent scale-100 hover:scale-105 cursor-pointer outline-none shrink-0 ring-offset-background",
-              isSpeaking ? "ring-2 ring-green-500 ring-offset-2" : "",
-              sizeClasses
+              "rounded-full flex items-center justify-center bg-[#1e1f22] relative overflow-hidden transition-all duration-150 border-2 border-transparent scale-100 hover:scale-105 cursor-pointer outline-none shrink-0 ring-offset-background w-1/3 aspect-square text-3xl",
+              isSpeaking ? "ring-2 ring-green-500 ring-offset-2" : ""
             )}
             title={displayName}
           >
@@ -178,7 +173,7 @@ export function VoiceParticipantGrid({
   return (
     <div
       className={cn(
-        "grid gap-4 w-full flex-1 items-center justify-center py-4 min-h-0 overflow-y-auto",
+        "grid gap-4 w-full h-full flex-1 items-center justify-center py-4 min-h-0 overflow-y-auto",
         participants.length <= 1
           ? "grid-cols-1 max-w-xl mx-auto"
           : participants.length === 2
