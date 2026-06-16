@@ -1,0 +1,7 @@
+﻿id,name,type
+32915d0c-2f1d-4100-bf5a-69d901b13ef9,MiniDiscord General,GROUP
+f8ac40f7-3c6b-49e6-b80c-173ea7a04fb8,MiniDiscord General,GROUP
+a1469409-7852-481b-b563-17c1139d9b9a,DM,DM
+cf64c30c-e554-43a4-9070-c6cb8b7459d5,My Gaming,GROUP
+f39f62ef-bb49-4600-965b-2b747c57dd80,Topping,GROUP
+96c302d9-0193-4916-bf72-447c51f6f093,DM,DM

@@ -163,35 +163,36 @@ public class RoomService {
 
         @Transactional
         public Room getOrCreateRootGroup() {
-                return roomRepository.findByNameAndType(defaultRoomName, RoomType.GROUP)
-                                .orElseGet(() -> {
-                                        Room newRoom = Room.builder()
-                                                        .name(defaultRoomName)
-                                                        .type(RoomType.GROUP)
-                                                        .ownerId(UUID.fromString(
-                                                                        "00000000-0000-0000-0000-000000000000")) // System
-                                                                                                                 // owner
-                                                        .build();
-                                        roomRepository.save(newRoom);
+                List<Room> rooms = roomRepository.findByNameAndType(defaultRoomName, RoomType.GROUP);
+                if (!rooms.isEmpty()) {
+                        return rooms.get(0);
+                }
 
-                                        Channel generalChannel = Channel.builder()
-                                                        .room(newRoom)
-                                                        .name("general")
-                                                        .type(ChannelType.TEXT)
-                                                        .position(0)
-                                                        .build();
-                                        channelRepository.save(generalChannel);
+                Room newRoom = Room.builder()
+                                .name(defaultRoomName)
+                                .type(RoomType.GROUP)
+                                .ownerId(UUID.fromString(
+                                                "00000000-0000-0000-0000-000000000000")) // System owner
+                                .build();
+                newRoom = roomRepository.save(newRoom);
 
-                                        Channel announcementChannel = Channel.builder()
-                                                        .room(newRoom)
-                                                        .name("announcements")
-                                                        .type(ChannelType.TEXT)
-                                                        .position(1)
-                                                        .build();
-                                        channelRepository.save(announcementChannel);
+                Channel generalChannel = Channel.builder()
+                                .room(newRoom)
+                                .name("general")
+                                .type(ChannelType.TEXT)
+                                .position(0)
+                                .build();
+                channelRepository.save(generalChannel);
 
-                                        return newRoom;
-                                });
+                Channel announcementChannel = Channel.builder()
+                                .room(newRoom)
+                                .name("announcements")
+                                .type(ChannelType.TEXT)
+                                .position(1)
+                                .build();
+                channelRepository.save(announcementChannel);
+
+                return newRoom;
         }
 
         @Transactional

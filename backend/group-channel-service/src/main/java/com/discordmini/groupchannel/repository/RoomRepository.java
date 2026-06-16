@@ -6,7 +6,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.Query;
@@ -14,7 +13,7 @@ import org.springframework.data.repository.query.Param;
 
 @Repository
 public interface RoomRepository extends JpaRepository<Room, UUID> {
-    Optional<Room> findByNameAndType(String name, RoomType type);
+    List<Room> findByNameAndType(String name, RoomType type);
 
     List<Room> findByIdIn(List<UUID> ids);
 

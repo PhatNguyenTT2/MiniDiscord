@@ -1,7 +1,0 @@
-﻿NAMES                       PORTS
-minidiscord-group-channel   8082/tcp
-minidiscord-chat-history    8083/tcp
-minidiscord-postgres        5432/tcp
-minidiscord-rabbitmq        0.0.0.0:15672->15672/tcp, [::]:15672->15672/tcp
-minidiscord-eureka          0.0.0.0:8761->8761/tcp, [::]:8761->8761/tcp
-minidiscord-mongodb         27017/tcp

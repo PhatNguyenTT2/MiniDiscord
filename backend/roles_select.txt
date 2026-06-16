@@ -1,0 +1,3 @@
+﻿id,name,room_id
+7db14fbf-eb5a-4e6a-bb20-6fcffd196b15,@everyone,ca1f4fe2-133d-4a61-bc98-2a9fc082c460
+e53ccf01-2d35-4603-8634-873f5e52998d,Admin,ca1f4fe2-133d-4a61-bc98-2a9fc082c460
