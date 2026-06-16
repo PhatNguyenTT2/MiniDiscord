@@ -17,6 +17,7 @@ YDL_OPTS = {
     "no_warnings": True,
     "extract_flat": False,
     "noplaylist": True,
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 }
 
 # Determine if we should use writeable cookies.txt
