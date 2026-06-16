@@ -11,3 +11,4 @@ COPY music-extractor/ .
 EXPOSE 3001
 
 CMD ["npm", "start"]
+
