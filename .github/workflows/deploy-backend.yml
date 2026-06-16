@@ -27,6 +27,7 @@ jobs:
       chat-history: ${{ steps.filter.outputs.chat-history }}
       messaging: ${{ steps.filter.outputs.messaging }}
       file: ${{ steps.filter.outputs.file }}
+      music-extractor: ${{ steps.filter.outputs.music-extractor }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -61,6 +62,8 @@ jobs:
               - 'backend/file-service/**'
               - 'backend/common-lib/**'
               - 'backend/pom.xml'
+            music-extractor:
+              - 'backend/music-extractor/**'
 
   build-and-push:
     runs-on: ubuntu-latest
@@ -92,6 +95,9 @@ jobs:
           - service: file-service
             image: minidiscord-file
             filter: file
+          - service: music-extractor
+            image: minidiscord-music-extractor
+            filter: music-extractor
     
     steps:
       - name: Checkout repository
@@ -152,7 +158,8 @@ jobs:
             echo "=== Restarting business services ==="
             docker compose -f docker-compose.prod.yml up -d \
               api-gateway user-service group-channel-service \
-              chat-history-service messaging-service file-service
+              chat-history-service messaging-service file-service \
+              music-extractor
             
             echo "⏳ Waiting for services to stabilize..."
             sleep 20
