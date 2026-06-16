@@ -217,6 +217,10 @@
     "mention": "mentioned you in channel",
     "friendAccepted": "accepted your friend request",
     "serverInvite": "invited you to join server",
+    "join": "Join",
+    "joined": "Joined",
+    "inviteTitle": "Join Server?",
+    "inviteDesc": "You have been invited to join the server {serverName}. Would you like to join?",
     "incoming": "Inbox"
   },
   "members": {
@@ -427,6 +431,8 @@
     "remove": "Remove"
   },
   "voice": {
+    "videoCallFeatureLockedTitle": "Video Call Mode Locked",
+    "videoCallFeatureLockedDesc": "The Video Call feature is currently under active construction and will be fully available in the next release stage! Thank you for your patience.",
     "connectedStatus": "Voice Connected",
     "disconnect": "Disconnect",
     "mute": "Mute",
@@ -493,7 +499,18 @@
     "notificationSettings": "Notification Settings",
     "privacySettings": "Privacy Settings",
     "editProfile": "Edit Server Profile",
-    "hideMuted": "Hide Muted Channels"
+    "hideMuted": "Hide Muted Channels",
+    "leaveServer": "Leave Server"
+  },
+  "leaveServerModal": {
+    "title": "Leave '{serverName}'?",
+    "description": "Are you sure you want to leave this server? You won't be able to rejoin unless you are re-invited.",
+    "confirm": "Leave Server",
+    "cancel": "Cancel",
+    "ownerWarningTitle": "You are the owner of this server",
+    "ownerWarningDesc": "You cannot leave this server because you are the owner. You must transfer ownership to another member or delete the server entirely before leaving.",
+    "ownerWarningConfirm": "Okay",
+    "successAlert": "Successfully left the server."
   },
   "invite": {
     "title": "Invite friends to Server {serverName}",
@@ -510,6 +527,7 @@
     "copied": "Copied",
     "copy": "Copy",
     "linkNote": "Your invite link is active for 7 days. Share this link to invite others!",
+    "noActiveLink": "No active invite link. Ask a server admin to create one in Server Settings.",
     "accept": "Accept Invite",
     "invalid": "Invalid or Expired Invite Link",
     "members": "{count} members",
@@ -639,5 +657,23 @@
   "accessDenied": {
     "title": "Access Denied",
     "description": "You do not have permission or have been banned from this server."
+  },
+  "music": {
+    "nowPlaying": "Now Playing",
+    "orderedBy": "Ordered by {name}",
+    "botName": "Music Bot",
+    "volume": "Volume",
+    "muteMember": "Mute this member",
+    "unmuteMember": "Unmute this member",
+    "memberVolume": "Member Volume",
+    "noTrack": "No track is currently playing",
+    "queueEmpty": "Queue is empty",
+    "addedToQueue": "Added to queue: {title}",
+    "skipped": "Skipped current track",
+    "stopped": "Music playback stopped",
+    "slashPlay": "Use /play <url or keyword> to play music",
+    "slashStop": "Use /stop to stop playback",
+    "slashSkip": "Use /skip to skip to next track",
+    "slashQueue": "Use /queue to view the queue"
   }
 }

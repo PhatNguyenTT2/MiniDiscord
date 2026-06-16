@@ -3,6 +3,7 @@ package com.discordmini.user.model.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -51,8 +52,13 @@ public class Notification {
   @Column(name = "content", length = 1000)
   private String content;
 
+  @JsonProperty("isRead")
   @Column(name = "is_read", nullable = false)
   private boolean isRead;
+
+  @JsonProperty("isProcessed")
+  @Column(name = "is_processed", nullable = false)
+  private boolean isProcessed = false;
 
   @CreationTimestamp
   @Column(name = "created_at", updatable = false)

@@ -132,7 +132,14 @@ public class MessageService {
                     break;
                 case "file":
                 case "tệp":
-                    query.addCriteria(Criteria.where("fileKey").exists(true).ne(null).ne(""));
+                    query.addCriteria(new Criteria().andOperator(
+                            Criteria.where("fileKey").exists(true).ne(null).ne(""),
+                            Criteria.where("type").nin("IMAGE", "VIDEO", "AUDIO", "STICKER"),
+                            new Criteria().orOperator(
+                                    Criteria.where("fileName").exists(false),
+                                    Criteria.where("fileName").is(null),
+                                    Criteria.where("fileName").not().regex(
+                                            "\\.(jpeg|jpg|gif|png|webp|svg|mp4|webm|mov|mp3|wav|ogg)($|\\?)", "i"))));
                     break;
                 case "audio":
                 case "âm thanh":
@@ -141,7 +148,9 @@ public class MessageService {
                             Criteria.where("fileName").regex("\\.(mp3|wav|ogg)($|\\?)", "i")));
                     break;
                 case "sticker":
-                    query.addCriteria(Criteria.where("type").is("STICKER"));
+                    query.addCriteria(new Criteria().orOperator(
+                            Criteria.where("type").is("STICKER"),
+                            Criteria.where("stickerIds.0").exists(true)));
                     break;
             }
         }

@@ -134,6 +134,7 @@ services:
       - EUREKA_URL=http://discovery-server:8761/eureka/
       - METERED_DOMAIN=${METERED_DOMAIN:-}
       - METERED_SECRET_KEY=${METERED_SECRET_KEY:-}
+      - MUSIC_EXTRACTOR_URL=http://music-extractor:3001
     deploy:
       resources:
         limits:
@@ -149,6 +150,19 @@ services:
       timeout: 5s
       retries: 5
       start_period: 50s
+
+  music-extractor:
+    image: ghcr.io/phatnguyentt2/minidiscord-music-extractor:latest
+    container_name: minidiscord-music-extractor
+    restart: "on-failure:5"
+    expose:
+      - "3001"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    networks:
+      - minidiscord-net
 
   file-service:
     image: ghcr.io/phatnguyentt2/minidiscord-file:latest

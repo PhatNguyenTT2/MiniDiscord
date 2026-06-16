@@ -760,9 +760,10 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
 
                   {/* Roles table/list */}
                   <div className="rounded-md bg-[#2b2d31]/40 border border-[#1f2023]/20 overflow-hidden">
-                    <div className="flex items-center justify-between bg-[#2b2d31]/60 px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-[#b5bac1] border-b border-[#2b2d31]">
+                    <div className="grid grid-cols-[1fr_120px_40px] items-center bg-[#2b2d31]/60 px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-[#b5bac1] border-b border-[#2b2d31]">
                       <div>{t("serverSettingsModal.rolesCount", { count: roles.length })}</div>
-                      <div className="mr-32">{t("serverSettingsModal.membersColumn")}</div>
+                      <div>{t("serverSettingsModal.membersColumn")}</div>
+                      <div></div>
                     </div>
 
                     <div className="divide-y divide-[#2b2d31]/40">
@@ -795,8 +796,8 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
 
                           const memberCountForRole = role.name === "Admin" ? adminCount : normalMemberCount;
                           return (
-                            <div key={role.id} className="flex items-center justify-between px-4 py-3.5 hover:bg-[#2b2d31]/25 transition-colors group">
-                              <div className="flex items-center gap-3">
+                            <div key={role.id} className="grid grid-cols-[1fr_120px_40px] items-center px-4 py-3.5 hover:bg-[#2b2d31]/25 transition-colors group">
+                              <div className="flex items-center gap-3 min-w-0 pr-4">
                                 <div
                                   className="h-9 w-9 rounded-full flex items-center justify-center shrink-0 border"
                                   style={{
@@ -807,23 +808,26 @@ export function ServerSettingsModal({ isOpen, onClose, roomId }: ServerSettingsM
                                 >
                                   {isEveryone ? <Users className="h-4.5 w-4.5" /> : <Shield className="h-4.5 w-4.5" />}
                                 </div>
-                                <div className="flex flex-col">
-                                  <span className="font-semibold text-white text-sm">
+                                <div className="flex flex-col min-w-0">
+                                  <span className="font-semibold text-white text-sm truncate">
                                     {roleDisplayName}
                                   </span>
-                                  <span className="text-[11px] text-[#949ba4] mt-0.5">
+                                  <span className="text-[11px] text-[#949ba4] mt-0.5 truncate">
                                     {roleDescription}
                                   </span>
                                 </div>
                               </div>
 
-                              <div className="flex items-center gap-6">
-                                <span className="flex items-center gap-1.5 text-xs text-[#b5bac1] w-20">
+                              <div className="flex items-center">
+                                <span className="flex items-center gap-1.5 text-xs text-[#b5bac1]">
                                   <Users className="h-3.5 w-3.5 shrink-0 opacity-80" />
                                   {memberCountForRole}
                                 </span>
+                              </div>
+
+                              <div className="flex justify-end">
                                 {isOwner && (
-                                  <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button
                                       onClick={() => setEditingRole(role)}
                                       className="h-7 w-7 rounded flex items-center justify-center text-[#b5bac1] hover:text-white hover:bg-[#35373c]/60 cursor-pointer"

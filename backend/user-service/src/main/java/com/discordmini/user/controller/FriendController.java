@@ -1,5 +1,6 @@
 package com.discordmini.user.controller;
 
+import com.discordmini.common.dto.ApiResponse;
 import com.discordmini.user.model.dto.FriendRequestDTO;
 import com.discordmini.user.model.dto.FriendResponse;
 import com.discordmini.user.model.dto.PendingFriendResponse;
@@ -21,15 +22,15 @@ public class FriendController {
     private final FriendService friendService;
 
     @GetMapping
-    public ResponseEntity<List<FriendResponse>> getFriends(Authentication authentication) {
+    public ResponseEntity<ApiResponse<List<FriendResponse>>> getFriends(Authentication authentication) {
         UUID userId = extractUserId(authentication);
-        return ResponseEntity.ok(friendService.getFriends(userId));
+        return ResponseEntity.ok(ApiResponse.ok("Friends fetched", friendService.getFriends(userId)));
     }
 
     @GetMapping("/pending")
-    public ResponseEntity<List<PendingFriendResponse>> getPendingRequests(Authentication authentication) {
+    public ResponseEntity<ApiResponse<List<PendingFriendResponse>>> getPendingRequests(Authentication authentication) {
         UUID userId = extractUserId(authentication);
-        return ResponseEntity.ok(friendService.getPendingRequests(userId));
+        return ResponseEntity.ok(ApiResponse.ok("Pending requests fetched", friendService.getPendingRequests(userId)));
     }
 
     @PostMapping("/request")

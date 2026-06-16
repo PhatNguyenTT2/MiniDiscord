@@ -215,6 +215,7 @@ export function MessageItem({
     const payload = {
       id: retriedMsg.id,
       messageId: retriedMsg.messageId || retriedMsg.id,
+      nonce: retriedMsg.nonce || retriedMsg.messageId || retriedMsg.id,
       roomId: retriedMsg.roomId,
       channelId: retriedMsg.channelId,
       senderId: retriedMsg.senderId,
@@ -227,6 +228,7 @@ export function MessageItem({
       fileSize: retriedMsg.fileSize,
       replyTo: retriedMsg.replyTo,
       mentions: retriedMsg.mentions,
+      stickerIds: retriedMsg.stickerIds,
     };
 
     client.publish({

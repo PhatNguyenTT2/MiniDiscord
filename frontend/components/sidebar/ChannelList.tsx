@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { ScrollArea } from "@/components/ui/ScrollArea";
-import { Hash, Volume2, ChevronDown, ChevronRight, Plus, Settings, MicOff, HeadphoneOff, UserPlus, Sparkles, FolderPlus, Calendar, Compass, Shield, Pencil, EyeOff, Bell } from "lucide-react";
+import { Hash, Volume2, ChevronDown, ChevronRight, Plus, Settings, MicOff, HeadphoneOff, UserPlus, Sparkles, FolderPlus, Calendar, Compass, Shield, Pencil, EyeOff, Bell, LogOut } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/uiStore";
@@ -15,6 +15,7 @@ import { EditChannelModal } from "@/components/server/EditChannelModal";
 import { InviteModal } from "@/components/server/InviteModal";
 import { ServerSettingsModal } from "@/components/server/ServerSettingsModal";
 import { NotificationSettingsModal } from "@/components/server/NotificationSettingsModal";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import type { Channel } from "@/types";
 import { usePermissionStore } from "@/stores/permissionStore";
 import { useHasPermission } from "@/hooks/useHasPermission";
@@ -159,7 +160,7 @@ function ChannelItem({
                 >
                   <StatusAvatar
                     src={avatarUrl}
-                    fallback={p.username}
+                    fallback={displayName}
                     status="ONLINE"
                     size="sm"
                   />
@@ -259,7 +260,7 @@ export function ChannelList() {
   const params = useParams();
   const sidebarWidth = useUIStore((s) => s.sidebarWidth);
 
-  const { rooms, channels, getMyRoleInRoom } = useRoomStore();
+  const { rooms, channels, getMyRoleInRoom, leaveRoom } = useRoomStore();
   const currentUserId = useAuthStore((s) => s.user?.id);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -270,6 +271,8 @@ export function ChannelList() {
   const [inviteChannelName, setInviteChannelName] = useState("");
   const [isServerSettingsOpen, setIsServerSettingsOpen] = useState(false);
   const [isNotificationSettingsOpen, setIsNotificationSettingsOpen] = useState(false);
+  const [isLeaveOpen, setIsLeaveOpen] = useState(false);
+  const [isOwnerWarningOpen, setIsOwnerWarningOpen] = useState(false);
 
   // Derive active channel and room from URL params
   const activeChannelId = (params?.channelId as string) || null;
@@ -401,6 +404,24 @@ export function ChannelList() {
                 <span>{t("serverDropdown.notificationSettings")}</span>
                 <Bell className="h-4 w-4 shrink-0 opacity-60" />
               </button>
+
+              <div className="my-1 border-t border-[#2b2d31]" />
+
+              <button
+                onClick={() => {
+                  setIsDropdownOpen(false);
+                  const isOwner = room?.ownerId === currentUserId;
+                  if (isOwner) {
+                    setIsOwnerWarningOpen(true);
+                  } else {
+                    setIsLeaveOpen(true);
+                  }
+                }}
+                className="w-full flex items-center justify-between rounded px-2 py-1.5 text-rose-500 hover:bg-rose-500 hover:text-white transition-colors cursor-pointer text-left font-medium"
+              >
+                <span>{t("serverDropdown.leaveServer")}</span>
+                <LogOut className="h-4 w-4 shrink-0 opacity-60" />
+              </button>
             </div>
           </>
         )}
@@ -484,6 +505,37 @@ export function ChannelList() {
           onClose={() => setIsNotificationSettingsOpen(false)}
           roomId={displayRoomId}
           roomName={room?.name || "Server"}
+        />
+      )}
+
+      {isLeaveOpen && displayRoomId && (
+        <ConfirmModal
+          title={t("leaveServerModal.title").replace("{serverName}", room?.name || "")}
+          description={t("leaveServerModal.description")}
+          confirmText={t("leaveServerModal.confirm")}
+          onClose={() => setIsLeaveOpen(false)}
+          onConfirm={async () => {
+            try {
+              await leaveRoom(displayRoomId);
+              alert(t("leaveServerModal.successAlert"));
+              router.push("/channels/me");
+            } catch (err: any) {
+              console.error("Failed to leave server:", err);
+            }
+          }}
+          variant="danger"
+        />
+      )}
+
+      {isOwnerWarningOpen && (
+        <ConfirmModal
+          title={t("leaveServerModal.ownerWarningTitle")}
+          description={t("leaveServerModal.ownerWarningDesc")}
+          confirmText={t("leaveServerModal.ownerWarningConfirm")}
+          showCancel={false}
+          onClose={() => setIsOwnerWarningOpen(false)}
+          onConfirm={() => setIsOwnerWarningOpen(false)}
+          variant="danger"
         />
       )}
     </div>

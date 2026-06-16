@@ -55,6 +55,12 @@ public class PresenceService {
         // Refresh valid local connections' TTL
         connectionManager.refreshLocalConnections();
 
+        // Refresh presence key TTL in Redis for all active local users
+        for (String userId : connectionManager.getLocalUserIds()) {
+            String presenceKey = PRESENCE_KEY_PREFIX + userId;
+            redisTemplate.expire(presenceKey, Duration.ofMinutes(10));
+        }
+
         // Note: Full zombie cleanup across all users requires scanning Redis keys,
         // which might be expensive. Since this is just for local connections,
         // we rely on the 5-min TTL for `conn:user` and 10-min for `presence`.

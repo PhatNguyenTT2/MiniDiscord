@@ -296,7 +296,6 @@ export function SearchDropdown({
     const dataTypes = [
       { key: "image", local: t("chat.searchHasImage"), icon: Image },
       { key: "video", local: t("chat.searchHasVideo"), icon: Video },
-      { key: "link", local: t("chat.searchHasLink"), icon: LinkIcon },
       { key: "file", local: t("chat.searchHasFile"), icon: FileIcon },
       { key: "audio", local: t("chat.searchHasAudio"), icon: Music },
       { key: "sticker", local: t("chat.searchHasSticker"), icon: Smile },

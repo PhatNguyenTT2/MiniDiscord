@@ -4,6 +4,10 @@ import com.discordmini.common.event.MessageEvent;
 import com.discordmini.messaging.client.MembershipClient;
 import com.discordmini.messaging.model.dto.*;
 import com.discordmini.messaging.service.MessageRouter;
+import com.discordmini.messaging.model.dto.MusicCommandDTO;
+import com.discordmini.messaging.model.dto.MusicTrack;
+import com.discordmini.messaging.service.MusicExtractionService;
+import com.discordmini.messaging.service.MusicQueueService;
 import com.discordmini.messaging.service.VoiceStateService;
 import com.discordmini.messaging.service.PresenceService;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +32,139 @@ public class VoiceWebSocketController {
   private final MessageRouter messageRouter;
   private final SimpMessagingTemplate messagingTemplate;
   private final PresenceService presenceService;
+  private final MusicQueueService musicQueueService;
+  private final MusicExtractionService musicExtractionService;
+
+  @MessageMapping("/voice.music.command")
+  public void handleMusicCommand(@Payload MusicCommandDTO dto, Principal principal) {
+    String userId = principal.getName();
+    String roomId = dto.getRoomId();
+    String channelId = dto.getChannelId();
+    String command = dto.getCommand();
+
+    log.info("Received music command: {} with args: {} from user: {} in room: {}", command, dto.getArgs(), userId,
+        roomId);
+
+    membershipClient.verifyMembership(userId, roomId);
+
+    try {
+      if ("play".equalsIgnoreCase(command)) {
+        String query = dto.getArgs();
+        if (query == null || query.trim().isEmpty()) {
+          return;
+        }
+
+        // 1. Resolve direct stream URL via ExtractionService
+        MusicTrack track = musicExtractionService.extractTrack(query, userId, userId);
+        if (track == null) {
+          log.error("Failed to query/extract url metadata for: {}", query);
+          sendBotFeedback(roomId, channelId, "❌ Could not find or extract music for query: " + query);
+          return;
+        }
+
+        // 2. Add to Playlist Queue
+        musicQueueService.addToQueue(roomId, track);
+
+        // 3. Check if Bot is already playing, if not -> start playing immediately
+        Map<String, Object> state = musicQueueService.getState(roomId);
+        boolean active = state != null && Boolean.TRUE.equals(state.get("isBotActive"));
+
+        if (!active) {
+          MusicTrack nextTrack = musicQueueService.popNext(roomId);
+          if (nextTrack != null) {
+            musicQueueService.setPlaying(roomId, nextTrack);
+
+            // Broadcast MUSIC_PLAY to room members
+            messageRouter.fanOutSystemEvent(Map.of(
+                "eventType", "MUSIC_PLAY",
+                "roomId", roomId,
+                "channelId", channelId,
+                "data", nextTrack), roomId);
+
+            sendBotFeedback(roomId, channelId, "🎵 Now playing: **" + nextTrack.getTitle() + "**");
+          }
+        } else {
+          // Retrieve current track to include in update payload
+          List<MusicTrack> queue = musicQueueService.getQueue(roomId);
+          messagingTemplate.convertAndSendToUser(userId, "/queue/voice", Map.of(
+              "type", "MUSIC_QUEUE_REPLY",
+              "queue", queue));
+
+          sendBotFeedback(roomId, channelId,
+              "🎵 Added to queue: **" + track.getTitle() + "** (Position: #" + queue.size() + ")");
+        }
+
+      } else if ("skip".equalsIgnoreCase(command)) {
+        log.info("Skipping current track in room: {}", roomId);
+        MusicTrack nextTrack = musicQueueService.popNext(roomId);
+        if (nextTrack != null) {
+          musicQueueService.setPlaying(roomId, nextTrack);
+
+          messageRouter.fanOutSystemEvent(Map.of(
+              "eventType", "MUSIC_PLAY",
+              "roomId", roomId,
+              "channelId", channelId,
+              "data", nextTrack), roomId);
+
+          sendBotFeedback(roomId, channelId,
+              "⏭️ Skipped current track. Now playing: **" + nextTrack.getTitle() + "**");
+        } else {
+          musicQueueService.clearState(roomId);
+          messageRouter.fanOutSystemEvent(Map.of(
+              "eventType", "MUSIC_STOP",
+              "roomId", roomId,
+              "channelId", channelId), roomId);
+
+          sendBotFeedback(roomId, channelId, "⏹️ Skipped current track. Queue is empty, stopping playback.");
+        }
+
+      } else if ("stop".equalsIgnoreCase(command)) {
+        log.info("Stopping music playback in room: {}", roomId);
+        musicQueueService.clearState(roomId);
+        messageRouter.fanOutSystemEvent(Map.of(
+            "eventType", "MUSIC_STOP",
+            "roomId", roomId,
+            "channelId", channelId), roomId);
+
+        sendBotFeedback(roomId, channelId, "⏹️ Music playback stopped. Queue cleared, Bot leaving the room.");
+      } else if ("queue".equalsIgnoreCase(command)) {
+        List<MusicTrack> queue = musicQueueService.getQueue(roomId);
+        messagingTemplate.convertAndSendToUser(userId, "/queue/voice", Map.of(
+            "type", "MUSIC_QUEUE_REPLY",
+            "queue", queue));
+      }
+    } catch (Exception e) {
+      log.error("Error executing music command: " + command, e);
+    }
+  }
+
+  @MessageMapping("/voice.music.trackEnded")
+  public void handleTrackEnded(@Payload Map<String, String> payload, Principal principal) {
+    String roomId = payload.get("roomId");
+    String channelId = payload.get("channelId");
+    log.info("Track ended naturally in room: {}, popping next", roomId);
+
+    try {
+      MusicTrack nextTrack = musicQueueService.popNext(roomId);
+      if (nextTrack != null) {
+        musicQueueService.setPlaying(roomId, nextTrack);
+
+        messageRouter.fanOutSystemEvent(Map.of(
+            "eventType", "MUSIC_PLAY",
+            "roomId", roomId,
+            "channelId", channelId,
+            "data", nextTrack), roomId);
+      } else {
+        musicQueueService.clearState(roomId);
+        messageRouter.fanOutSystemEvent(Map.of(
+            "eventType", "MUSIC_STOP",
+            "roomId", roomId,
+            "channelId", channelId), roomId);
+      }
+    } catch (Exception e) {
+      log.error("Error handling track end auto-next", e);
+    }
+  }
 
   @MessageMapping("/voice.join")
   public void joinVoice(@Payload VoiceJoinRequest request, Principal principal,
@@ -137,6 +274,32 @@ public class VoiceWebSocketController {
         "roomId", roomId,
         "data", update), roomId);
     log.info("User {} state updated to action: {}", userId, action);
+  }
+
+  @MessageMapping("/voice.camera")
+  public void toggleCamera(@Payload Map<String, Object> payload, Principal principal) {
+    String userId = principal.getName();
+    boolean cameraOn = (boolean) payload.getOrDefault("cameraOn", false);
+    String roomId = (String) payload.get("roomId");
+    String channelId = (String) payload.get("channelId");
+
+    voiceStateService.updateCameraState(userId, cameraOn);
+
+    String action = cameraOn ? "VIDEO_ON" : "VIDEO_OFF";
+
+    VoiceStateUpdate update = VoiceStateUpdate.builder()
+        .eventType("VOICE_STATE_UPDATE")
+        .roomId(roomId)
+        .channelId(channelId)
+        .userId(userId)
+        .action(action)
+        .build();
+
+    messageRouter.fanOutSystemEvent(Map.of(
+        "eventType", "VOICE_STATE_UPDATE",
+        "roomId", roomId,
+        "data", update), roomId);
+    log.info("User {} camera state updated to: {}", userId, action);
   }
 
   // ── Transient DM Call Endpoints ──
@@ -353,6 +516,43 @@ public class VoiceWebSocketController {
 
       log.info("DM call ended in room {} with status: {}. System event logged.", roomId,
           isRinging ? "MISSED" : "COMPLETED");
+    }
+  }
+
+  private void sendBotFeedback(String roomId, String channelId, String content) {
+    if (channelId == null || channelId.isEmpty())
+      return;
+
+    MessageEvent event = MessageEvent.builder()
+        .id(new org.bson.types.ObjectId().toHexString())
+        .messageId(UUID.randomUUID().toString())
+        .roomId(roomId)
+        .channelId(channelId)
+        .senderId("music-bot")
+        .senderName("Music Bot")
+        .senderAvatar("music-bot")
+        .content(content)
+        .type("USER")
+        .createdAt(Instant.now())
+        .build();
+    try {
+      messageRouter.publishToHistory(event);
+
+      ChatMessage chatMsg = ChatMessage.builder()
+          .id(event.getId())
+          .messageId(event.getMessageId())
+          .roomId(event.getRoomId())
+          .channelId(event.getChannelId())
+          .senderId(event.getSenderId())
+          .senderName(event.getSenderName())
+          .senderAvatar(event.getSenderAvatar())
+          .content(event.getContent())
+          .type(event.getType())
+          .createdAt(event.getCreatedAt().toString())
+          .build();
+      messageRouter.fanOutToMembers(chatMsg, roomId);
+    } catch (Exception e) {
+      log.error("Failed to send bot chat feedback", e);
     }
   }
 

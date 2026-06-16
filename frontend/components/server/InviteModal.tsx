@@ -8,6 +8,7 @@ import { useFriendStore } from "@/stores/friendStore";
 import { ScrollArea } from "../ui/ScrollArea";
 import { cn } from "@/lib/utils";
 
+import { StatusAvatar } from "../ui/StatusAvatar";
 import { api } from "@/lib/api";
 import { useHasPermission } from "@/hooks/useHasPermission";
 
@@ -47,11 +48,11 @@ export function InviteModal({ isOpen, onClose, roomId, roomName, channelName = "
           if (active && active.length > 0) {
             setInviteCode(active[0].code);
           } else {
-            const createRes = await api.post(`/rooms/${roomId}/invites`);
-            setInviteCode(createRes.data.data.code);
+            setInviteCode("");
           }
         } catch (err) {
           console.error("Failed to load invite link", err);
+          setInviteCode("");
         }
       };
       loadInvite();
@@ -83,10 +84,12 @@ export function InviteModal({ isOpen, onClose, roomId, roomName, channelName = "
   if (!isOpen) return null;
   if (!canInvite) return null;
 
-  // Filter friends
-  const filteredFriends = friends.filter((f) =>
-    f.user.username.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filter friends (search username and displayName)
+  const filteredFriends = friends.filter((f) => {
+    const usernameMatch = f.user.username.toLowerCase().includes(searchQuery.toLowerCase());
+    const displayNameMatch = f.user.displayName?.toLowerCase().includes(searchQuery.toLowerCase());
+    return usernameMatch || displayNameMatch;
+  });
 
   const inviteLink = inviteCode ? `${window.location.origin}/invite/${inviteCode}` : "";
 
@@ -167,6 +170,7 @@ export function InviteModal({ isOpen, onClose, roomId, roomName, channelName = "
                 {filteredFriends.map((f) => {
                   const isInvited = invitedIds.includes(f.user.id);
                   const isOnline = f.user.status === "ONLINE" || f.user.status === "IDLE" || f.user.status === "DND";
+                  const displayName = f.user.displayName || f.user.username;
                   return (
                     <div
                       key={f.user.id}
@@ -174,23 +178,17 @@ export function InviteModal({ isOpen, onClose, roomId, roomName, channelName = "
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         {/* Avatar */}
-                        {f.user.avatarUrl ? (
-                          <img
-                            src={f.user.avatarUrl}
-                            alt={f.user.username}
-                            className="h-8 w-8 rounded-full object-cover shrink-0"
-                          />
-                        ) : (
-                          <div className="h-8 w-8 rounded-full bg-[#5865f2]/20 flex items-center justify-center shrink-0">
-                            <span className="text-xs font-bold text-[#5865f2] uppercase">
-                              {f.user.username.substring(0, 2)}
-                            </span>
-                          </div>
-                        )}
+                        <StatusAvatar
+                          src={f.user.avatarUrl}
+                          fallback={displayName}
+                          status={f.user.status as any}
+                          size="md"
+                          className="shrink-0"
+                        />
                         {/* User details */}
                         <div className="flex flex-col min-w-0">
                           <span className="font-semibold text-white text-[14px] truncate leading-tight">
-                            {f.user.username}
+                            {displayName}
                           </span>
                           <span className="text-[11px] text-[#949ba4] mt-0.5">
                             {isOnline ? t("invite.statusOnline") : t("invite.statusOffline")}
@@ -234,26 +232,34 @@ export function InviteModal({ isOpen, onClose, roomId, roomName, channelName = "
           <span className="text-[11px] font-bold uppercase tracking-wider text-[#b5bac1] block">
             {t("invite.orSendLink")}
           </span>
-          <div className="mt-2 flex items-center md:gap-2 bg-[#1e1f22] p-1 rounded">
-            <input
-              type="text"
-              readOnly
-              value={inviteLink}
-              className="flex-1 bg-transparent px-2.5 py-1 text-sm text-[#dbdee1] outline-none"
-            />
-            <button
-              onClick={handleCopy}
-              className={cn(
-                "px-4 py-1.5 rounded text-xs font-semibold text-white transition-colors cursor-pointer shrink-0 ml-1",
-                copied ? "bg-[#23a55a] hover:bg-[#23a55a]" : "bg-[#5865f2] hover:bg-[#4752c4]"
-              )}
-            >
-              {copied ? t("invite.copied") : t("invite.copy")}
-            </button>
-          </div>
-          <p className="mt-3 text-[10.5px] text-[#949ba4] leading-relaxed">
-            {t("invite.linkNote")}
-          </p>
+          {inviteLink ? (
+            <>
+              <div className="mt-2 flex items-center md:gap-2 bg-[#1e1f22] p-1 rounded">
+                <input
+                  type="text"
+                  readOnly
+                  value={inviteLink}
+                  className="flex-1 bg-transparent px-2.5 py-1 text-sm text-[#dbdee1] outline-none"
+                />
+                <button
+                  onClick={handleCopy}
+                  className={cn(
+                    "px-4 py-1.5 rounded text-xs font-semibold text-white transition-colors cursor-pointer shrink-0 ml-1",
+                    copied ? "bg-[#23a55a] hover:bg-[#23a55a]" : "bg-[#5865f2] hover:bg-[#4752c4]"
+                  )}
+                >
+                  {copied ? t("invite.copied") : t("invite.copy")}
+                </button>
+              </div>
+              <p className="mt-3 text-[10.5px] text-[#949ba4] leading-relaxed">
+                {t("invite.linkNote")}
+              </p>
+            </>
+          ) : (
+            <p className="mt-2 text-xs text-[#949ba4] leading-relaxed">
+              {t("invite.noActiveLink") || "Chưa có link mời nào được tạo. Hãy liên hệ quản trị viên để tạo link mời trong phần Cài đặt Server."}
+            </p>
+          )}
         </div>
       </div>
     </div>,

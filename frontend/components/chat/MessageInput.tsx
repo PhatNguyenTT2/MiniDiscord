@@ -8,9 +8,11 @@ import { useChatStore } from "@/stores/chatStore";
 import { cn } from "@/lib/utils";
 import type { MemberDetailResponse } from "@/types/room";
 import { MentionPicker } from "./MentionPicker";
+import { CommandPicker } from "./CommandPicker";
 import { useAuthStore } from "@/stores/authStore";
 import { useHasPermission } from "@/hooks/useHasPermission";
 import { useParams } from "next/navigation";
+import { getStompClient } from "@/lib/websocket";
 
 export type AttachmentData = {
   fileName: string;
@@ -125,6 +127,10 @@ export function MessageInput({
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionTriggerIndex, setMentionTriggerIndex] = useState(-1);
 
+  // Command picker states
+  const [showCommandPicker, setShowCommandPicker] = useState(false);
+  const [commandQuery, setCommandQuery] = useState("");
+
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachRef = useRef<HTMLDivElement>(null);
@@ -148,8 +154,24 @@ export function MessageInput({
     // Trigger pattern detection
     const cursor = e.target.selectionStart || 0;
     const textBeforeCursor = value.slice(0, cursor);
-    const lastTriggerIndex = textBeforeCursor.lastIndexOf("@");
 
+    // 1. Slash Command detection: triggers if message starts with "/" and has no spaces before arguments
+    if (textBeforeCursor.startsWith("/")) {
+      const queryText = textBeforeCursor.slice(1);
+      if (!/\s/.test(queryText)) {
+        setShowCommandPicker(true);
+        setCommandQuery(queryText);
+        setShowMentionPicker(false);
+        setMentionQuery("");
+        setMentionTriggerIndex(-1);
+        return;
+      }
+    }
+    setShowCommandPicker(false);
+    setCommandQuery("");
+
+    // 2. Mention pattern detection
+    const lastTriggerIndex = textBeforeCursor.lastIndexOf("@");
     if (lastTriggerIndex !== -1) {
       const charBeforeTrigger = lastTriggerIndex > 0 ? textBeforeCursor[lastTriggerIndex - 1] : "";
       const isWordStart = charBeforeTrigger === "" || /\s/.test(charBeforeTrigger);
@@ -167,6 +189,20 @@ export function MessageInput({
     setShowMentionPicker(false);
     setMentionQuery("");
     setMentionTriggerIndex(-1);
+  };
+
+  const handleCommandSelect = (commandName: string) => {
+    const replacement = `/${commandName} `;
+    setMessage(replacement);
+    setShowCommandPicker(false);
+    setCommandQuery("");
+
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+        inputRef.current.setSelectionRange(replacement.length, replacement.length);
+      }
+    }, 10);
   };
 
   const handleMentionSelect = (userId: string, username: string) => {
@@ -196,6 +232,36 @@ export function MessageInput({
     if (isUploading) return;
     if (rateLimitCooldown > 0) return;
     if (message.trim().length === 0 && !attachment) return;
+
+    // Intercept music bot commands
+    const trimmed = message.trim();
+    if (/^\/(play|skip|stop|queue)\b/.test(trimmed)) {
+      const match = trimmed.match(/^\/(\w+)(?:\s+(.*))?$/);
+      if (match) {
+        const command = match[1];
+        const args = match[2] || "";
+        const token = useAuthStore.getState().token;
+        if (token) {
+          console.log(`[MessageInput] Intercepted slash command: /${command} inside channel ${channelId}`);
+          getStompClient(token).publish({
+            destination: "/app/voice.music.command",
+            body: JSON.stringify({
+              roomId,
+              channelId,
+              command,
+              args
+            })
+          });
+        }
+      }
+      setMessage("");
+      setAttachment(null);
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+        setPreviewUrl(null);
+      }
+      return;
+    }
 
     if (message.length > 2000) {
       setRateLimitCooldown(3);
@@ -412,6 +478,17 @@ export function MessageInput({
           />
         )}
 
+        {showCommandPicker && (
+          <CommandPicker
+            query={commandQuery}
+            onSelect={handleCommandSelect}
+            onClose={() => {
+              setShowCommandPicker(false);
+              setCommandQuery("");
+            }}
+          />
+        )}
+
         {rateLimitCooldown > 0 && (
           <div className="flex items-center gap-2 px-4 py-2 text-sm text-warning bg-warning/10 rounded-t-[var(--floating-bar-radius)]">
             <AlertTriangle className="h-4 w-4 shrink-0" />
@@ -558,6 +635,7 @@ export function MessageInput({
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   if (showMentionPicker) return;
+                  if (showCommandPicker) return;
                   submitMessage();
                 }
               }}

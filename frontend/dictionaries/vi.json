@@ -217,6 +217,10 @@
     "mention": "đã nhắc đến bạn trong kênh",
     "friendAccepted": "đã chấp nhận lời mời kết bạn",
     "serverInvite": "đã mời bạn tham gia máy chủ",
+    "join": "Tham gia",
+    "joined": "Đã tham gia",
+    "inviteTitle": "Tham gia máy chủ?",
+    "inviteDesc": "Bạn nhận được lời mời tham gia máy chủ {serverName}. Bạn có muốn tham gia ngay không?",
     "incoming": "Hộp thư đến"
   },
   "members": {
@@ -427,6 +431,8 @@
     "remove": "Xóa"
   },
   "voice": {
+    "videoCallFeatureLockedTitle": "Tính năng Video Call đã khóa",
+    "videoCallFeatureLockedDesc": "Tính năng Video Call đang được xây dựng và sẽ khả dụng ở giai đoạn phát triển tiếp theo! Cảm ơn sự kiên nhẫn của bạn.",
     "connectedStatus": "Đã kết nối giọng nói",
     "disconnect": "Ngắt kết nối",
     "mute": "Tắt tiếng",
@@ -493,7 +499,18 @@
     "notificationSettings": "Cài đặt thông báo",
     "privacySettings": "Cài Đặt Bảo Mật",
     "editProfile": "Chỉnh Sửa Hồ Sơ Theo Máy Chủ",
-    "hideMuted": "Ẩn Các Kênh Bị Tắt Âm"
+    "hideMuted": "Ẩn Các Kênh Bị Tắt Âm",
+    "leaveServer": "Rời Máy Chủ"
+  },
+  "leaveServerModal": {
+    "title": "Rời khỏi '{serverName}'?",
+    "description": "Bạn có chắc chắn muốn rời khỏi máy chủ này không? Bạn sẽ không thể tham gia lại trừ khi có lời mời mới.",
+    "confirm": "Rời máy chủ",
+    "cancel": "Hủy",
+    "ownerWarningTitle": "Bạn là chủ sở hữu máy chủ",
+    "ownerWarningDesc": "Bạn không thể rời khỏi máy chủ này vì bạn là chủ sở hữu. Bạn phải chuyển giao quyền sở hữu cho thành viên khác hoặc xóa máy chủ trước khi rời đi.",
+    "ownerWarningConfirm": "Đồng ý",
+    "successAlert": "Rời phòng thành công!"
   },
   "invite": {
     "title": "Mời bạn bè vào Máy chủ {serverName}",
@@ -510,6 +527,7 @@
     "copied": "Đã sao chép",
     "copy": "Sao chép",
     "linkNote": "Liên kết mời của bạn có hiệu lực trong 7 ngày. Hãy chia sẻ link này để mời những ai khác tham gia!",
+    "noActiveLink": "Chưa có link mời nào. Hãy liên hệ quản trị viên để tạo link mời trong Cài đặt Server.",
     "accept": "Chấp nhận lời mời",
     "invalid": "Liên kết mời không hợp lệ hoặc đã hết hạn",
     "members": "{count} thành viên",
@@ -639,5 +657,23 @@
   "accessDenied": {
     "title": "Truy cập bị từ chối",
     "description": "Bạn không có quyền truy cập hoặc đã bị cấm khỏi máy chủ này!"
+  },
+  "music": {
+    "nowPlaying": "Đang phát",
+    "orderedBy": "Yêu cầu bởi {name}",
+    "botName": "Music Bot",
+    "volume": "Âm lượng",
+    "muteMember": "Tắt tiếng thành viên",
+    "unmuteMember": "Bật tiếng thành viên",
+    "memberVolume": "Âm lượng thành viên",
+    "noTrack": "Không có bài hát nào đang phát",
+    "queueEmpty": "Hàng đợi trống",
+    "addedToQueue": "Đã thêm vào hàng đợi: {title}",
+    "skipped": "Đã bỏ qua bài hát hiện tại",
+    "stopped": "Đã dừng phát nhạc",
+    "slashPlay": "Dùng lệnh /play <link hoặc từ khóa> để phát nhạc",
+    "slashStop": "Dùng lệnh /stop để dừng phát nhạc",
+    "slashSkip": "Dùng lệnh /skip để bỏ qua bài hát",
+    "slashQueue": "Dùng lệnh /queue để xem hàng đợi"
   }
 }

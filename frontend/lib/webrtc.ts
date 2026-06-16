@@ -11,6 +11,7 @@ export class WebRTCManager {
   onRemoteStream: ((userId: string, stream: MediaStream) => void) | null = null;
   onIceCandidate: ((targetUserId: string, candidate: any) => void) | null = null;
   onPeerDisconnected: ((userId: string) => void) | null = null;
+  onNegotiationNeeded: ((userId: string, sdpOffer: string) => void) | null = null;
 
   /**
    * Fetch one-time STUN/TURN configurations from Backend key-mask endpoints.
@@ -32,7 +33,7 @@ export class WebRTCManager {
     }
   }
 
-  async initLocalStream(): Promise<MediaStream> {
+  async initLocalStream(requestVideo: boolean = false): Promise<MediaStream> {
     // Fetch ICE servers right before generating RTCPeerConnection instances
     await this.fetchIceServers();
 
@@ -42,24 +43,43 @@ export class WebRTCManager {
         noiseSuppression: true,
         autoGainControl: true,
       },
-      video: false, // Phase 7: Audio-only core
+      video: requestVideo ? {
+        width: { ideal: 640 },
+        height: { ideal: 480 },
+        frameRate: { ideal: 15 }
+      } : false,
     });
+
+    // Disable video track by default, enabling it only upon user explicitly toggling camera
+    const videoTrack = this.localStream.getVideoTracks()[0];
+    if (videoTrack) {
+      videoTrack.enabled = false;
+    }
+
     return this.localStream;
   }
 
   private createPeerConnection(userId: string): RTCPeerConnection {
     const pc = new RTCPeerConnection({ iceServers: this.iceServers });
 
-    // Stream out local tracks to the target peer
-    this.localStream?.getTracks().forEach((track) => {
-      pc.addTrack(track, this.localStream!);
-    });
+    // Always add audio track first, then video track second to guarantee consistent m-line order!
+    const audioTrack = this.localStream?.getAudioTracks()[0];
+    if (audioTrack) {
+      pc.addTrack(audioTrack, this.localStream!);
+    }
+    const videoTrack = this.localStream?.getVideoTracks()[0];
+    if (videoTrack) {
+      pc.addTrack(videoTrack, this.localStream!);
+    }
 
     // Handle receiving tracks from target peer
     pc.ontrack = (event) => {
       console.log(`[WebRTC] Received remote stream from peer user ${userId}`);
       if (event.streams && event.streams[0]) {
-        this.onRemoteStream?.(userId, event.streams[0]);
+        // Create a new MediaStream instance containing all active tracks.
+        // This ensures the reference changes and triggers React/Zustand updates.
+        const combinedStream = new MediaStream(event.streams[0].getTracks());
+        this.onRemoteStream?.(userId, combinedStream);
       }
     };
 
@@ -82,6 +102,22 @@ export class WebRTCManager {
       }
     };
 
+    // Handle renegotiation needed triggers (e.g. when track enabled/disabled changes configuration)
+    pc.onnegotiationneeded = async () => {
+      try {
+        if (pc.signalingState !== "stable") {
+          console.log(`[WebRTC] renegotiationneeded ignored for peer ${userId} because signalingState is: ${pc.signalingState}`);
+          return;
+        }
+        console.log(`[WebRTC] onnegotiationneeded triggered for peer user: ${userId}`);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        this.onNegotiationNeeded?.(userId, JSON.stringify(offer));
+      } catch (error) {
+        console.error(`[WebRTC] Failed to handle negotiationneeded event for peer ${userId}:`, error);
+      }
+    };
+
     this.peers.set(userId, pc);
     return pc;
   }
@@ -96,8 +132,20 @@ export class WebRTCManager {
 
   async handleOffer(fromUserId: string, sdpJson: string): Promise<string> {
     console.log(`[WebRTC] Received input Offer from sender user ${fromUserId}, returning Answer`);
-    const pc = this.createPeerConnection(fromUserId);
-    await pc.setRemoteDescription(JSON.parse(sdpJson));
+    let pc = this.peers.get(fromUserId);
+    if (!pc) {
+      pc = this.createPeerConnection(fromUserId);
+    }
+
+    const offer = new RTCSessionDescription(JSON.parse(sdpJson));
+
+    // Handle glare condition (Perfect Negotiation)
+    if (pc.signalingState === "have-local-offer") {
+      console.log(`[WebRTC] Glare detected on peer ${fromUserId}: signalingState is have-local-offer. Rolling back local offer...`);
+      await pc.setLocalDescription({ type: "rollback" });
+    }
+
+    await pc.setRemoteDescription(offer);
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     return JSON.stringify(answer);
@@ -107,7 +155,7 @@ export class WebRTCManager {
     console.log(`[WebRTC] Processing incoming Answer from peer user ${fromUserId}`);
     const pc = this.peers.get(fromUserId);
     if (pc) {
-      await pc.setRemoteDescription(JSON.parse(sdpJson));
+      await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(sdpJson)));
     } else {
       console.warn(`[WebRTC] Peer connection for user ${fromUserId} not found when applying Answer`);
     }
@@ -117,7 +165,7 @@ export class WebRTCManager {
     const pc = this.peers.get(fromUserId);
     if (pc) {
       try {
-        await pc.addIceCandidate(JSON.parse(candidateJson));
+        await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(candidateJson)));
       } catch (error) {
         console.error(`[WebRTC] Failed to register ICE candidate from user ${fromUserId}:`, error);
       }
@@ -132,6 +180,84 @@ export class WebRTCManager {
       audioTrack.enabled = !audioTrack.enabled;
       return !audioTrack.enabled; // returns true if muted
     }
+    return false;
+  }
+
+  async toggleCamera(enable: boolean): Promise<boolean> {
+    if (!this.localStream) {
+      console.warn("[WebRTC] Cannot toggle camera: No local stream.");
+      return false;
+    }
+
+    let videoTrack = this.localStream.getVideoTracks()[0];
+
+    // If enabling camera but no track exists, acquire it dynamically!
+    if (enable && !videoTrack) {
+      try {
+        console.log("[WebRTC] Acquiring local video track dynamically...");
+        const media = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { ideal: 15 }
+          }
+        });
+        const track = media.getVideoTracks()[0];
+        if (track) {
+          this.localStream.addTrack(track);
+          videoTrack = track;
+          // Add this new track to all existing RTCPeerConnection instances, reusing transceivers if possible
+          this.peers.forEach(async (pc) => {
+            const transceiver = pc.getTransceivers().find(
+              (t) => t.receiver.track.kind === "video" || t.sender.track?.kind === "video"
+            );
+            if (transceiver) {
+              transceiver.direction = "sendrecv";
+              await transceiver.sender.replaceTrack(track);
+            } else {
+              pc.addTrack(track, this.localStream!);
+            }
+          });
+        }
+      } catch (error) {
+        console.error("[WebRTC] Failed to acquire video track dynamically:", error);
+        return false;
+      }
+    }
+
+    if (videoTrack) {
+      videoTrack.enabled = enable;
+
+      // If we are disabling, stop the track to release the hardware camera sensor and turn check light OFF!
+      if (!enable) {
+        videoTrack.stop();
+        this.localStream.removeTrack(videoTrack);
+
+        // Remove track from all peers to trigger clean renegotiation
+        this.peers.forEach(async (pc) => {
+          const senders = pc.getSenders();
+          const sender = senders.find((s) => s.track?.id === videoTrack.id || s.track?.kind === "video");
+          if (sender) {
+            pc.removeTrack(sender);
+          }
+        });
+      } else {
+        // If enabling and track already exists, ensure it is set on all peers
+        this.peers.forEach(async (pc) => {
+          const transceiver = pc.getTransceivers().find(
+            (t) => t.receiver.track.kind === "video" || t.sender.track?.kind === "video"
+          );
+          if (transceiver) {
+            transceiver.direction = "sendrecv";
+            await transceiver.sender.replaceTrack(videoTrack);
+          } else {
+            pc.addTrack(videoTrack, this.localStream!);
+          }
+        });
+      }
+      return enable;
+    }
+
     return false;
   }
 

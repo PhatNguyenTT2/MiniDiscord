@@ -4,11 +4,13 @@ import { useVoiceStore } from "@/stores/voiceStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useTranslation } from "@/lib/i18n";
 import { useRoomStore } from "@/stores/roomStore";
-import { Volume2, VolumeX, Mic, MicOff, PhoneOff, Users } from "lucide-react";
+import { Volume2, VolumeX, Mic, MicOff, PhoneOff, Users, Video, VideoOff, Disc } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAudioActivity } from "@/hooks/useAudioActivity";
-import { useState, useEffect } from "react";
+import { useAudioActivity, useAudioVolume } from "@/hooks/useAudioActivity";
+import { useState, useEffect, useRef } from "react";
 import { getResolvedFileUrl } from "@/lib/fileResolver";
+import { MemberVolumePopover } from "./MemberVolumePopover";
+import { MusicPlayerBar } from "./MusicPlayerBar";
 
 interface VoiceChannelViewProps {
   channelId: string;
@@ -23,6 +25,7 @@ export interface VoiceParticipant {
   avatarUrl?: string | null;
   muted: boolean;
   deafened: boolean;
+  cameraOn?: boolean;
 }
 
 // Subcomponent for square participant card
@@ -31,11 +34,13 @@ function SquareParticipantCard({
   isSelf,
   isSpeaking,
   roomId,
+  stream,
 }: {
   p: VoiceParticipant;
   isSelf: boolean;
   isSpeaking: boolean;
   roomId: string;
+  stream: MediaStream | null;
 }) {
   const { t } = useTranslation();
 
@@ -44,6 +49,9 @@ function SquareParticipantCard({
   const member = members.find((m) => m.userId === p.userId);
   const name = member?.displayName || member?.username || p.displayName || p.username;
   const avatarUrl = member?.avatarUrl || p.avatarUrl;
+
+  const isMusicBot = p.userId === "music-bot";
+  const isSpeakingBotState = useVoiceStore((s) => s.musicBotActive);
 
   const isB2 = !!avatarUrl && !(
     avatarUrl.startsWith("http://") ||
@@ -76,28 +84,78 @@ function SquareParticipantCard({
     : (p.muted || isMemberServerMuted);
   const isDeafenedState = isSelf ? isDeafened : p.deafened;
 
+  const isSpeakingNode = isMusicBot ? isSpeakingBotState : isSpeaking;
+
+  const volume = useAudioVolume(stream, isMutedState || isDeafenedState);
+  const showGlow = isSpeakingNode && (isMusicBot || volume > 5);
+  const glowStyle = showGlow ? {
+    borderColor: "#23a55a",
+    boxShadow: isMusicBot ? "0 0 16px rgba(35, 165, 90, 0.5)" : `0 0 ${8 + (volume / 100) * 16}px rgba(35, 165, 90, ${0.35 + (volume / 100) * 0.45})`,
+  } : {
+    borderColor: "transparent",
+    boxShadow: "none",
+  };
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hasVideoTrack = stream?.getVideoTracks().some((t) => t.enabled) ?? false;
+  const showVideo = p.cameraOn && hasVideoTrack;
+
+  useEffect(() => {
+    if (videoRef.current && stream && showVideo) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream, showVideo]);
+
   return (
     <div
-      className={cn(
-        "flex flex-col justify-between bg-[#2b2d31] rounded-lg relative shadow-md overflow-hidden aspect-video transition-all border-2 w-full max-w-[280px] min-w-[200px] select-none",
-        isSpeaking ? "border-[#23a55a] shadow-[0_0_12px_rgba(35,165,90,0.35)]" : "border-transparent"
-      )}
+      className="flex flex-col justify-between bg-[#2b2d31] rounded-lg relative shadow-md overflow-hidden aspect-video transition-all border-2 w-full max-w-[280px] min-w-[200px] select-none"
+      style={glowStyle}
     >
-      {/* Centered Discord Logo or Profile Circle */}
-      <div className="flex-1 flex items-center justify-center p-4">
-        {resolvedAvatar ? (
-          <div className="w-16 h-16 rounded-full overflow-hidden border border-[#1f2023]/40">
-            <img src={resolvedAvatar} alt={name} className="w-full h-full object-cover" />
-          </div>
+      {/* Centered Video Stream or Profile Circle */}
+      <div className="flex-1 flex items-center justify-center relative min-h-0 w-full animate-in fade-in duration-200">
+        {showVideo ? (
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted={isSelf}
+            className={cn(
+              "w-full h-full object-cover rounded-t-lg absolute inset-0 z-0",
+              isSelf && "scale-x-[-1]"
+            )}
+          />
         ) : (
-          <svg className="w-12 h-12 text-[#dbdee1] opacity-80" fill="currentColor" viewBox="0 0 127.14 96.36">
-            <path d="M107.7,8.07c-9.56-4.42-19.82-7.75-30.6-9.74a.43.43,0,0,0-.46.21C75,1.44,73,5.69,71.59,9c-11.66-1.74-23.23-1.74-34.69,0C35.49,5.69,33.56,1.44,31.83.54a.48.48,0,0,0-.46-.21C20.6,2.32,10.32,5.65.76,10.07a.46.46,0,0,0-.2.18C-12.76,38.25-1.92,65.65,11,83.91a.57.57,0,0,0,.26.24c13.79,10.14,27.18,16.34,40.35,20.47a.5.5,0,0,0,.52-.17c3.15-4.3,5.92-8.87,8.27-13.68a.49.49,0,0,0-.27-.68c-4.36-1.66-8.52-3.7-12.48-6.1a.49.49,0,0,1-.05-.81c.84-.63,1.68-1.28,2.48-1.94a.48.48,0,0,1,.5-.07c26.5,12.11,55.22,12.11,81.42,0a.53.53,0,0,1,.51.06c.8.67,1.64,1.32,2.49,1.95a.49.49,0,0,1-.05.81c-3.95,2.41-8.12,4.45-12.48,6.1a.49.49,0,0,0-.27.68c2.37,4.81,5.14,9.38,8.27,13.68a.49.49,0,0,0,.52.17c13.2-4.13,26.62-10.33,40.42-20.47a.47.47,0,0,0,.26-.24c14.28-22,6.46-49,1.2-73.66A.4.4,0,0,0,107.7,8.07ZM42.45,65.69C34.73,65.69,28.32,58.6,28.32,50s6.41-15.69,14.13-15.69,14.22,7.1,14.13,15.69S50.17,65.69,42.45,65.69Zm42.24,0C77,65.69,70.57,58.6,70.57,50s6.41-15.69,14.12-15.69,14.23,7.1,14.13,15.69S92.38,65.69,84.69,65.69Z" />
-          </svg>
+          <div className="flex items-center justify-center p-4">
+            {isMusicBot ? (
+              <div className="w-16 h-16 rounded-full overflow-hidden border border-[#23a55a]/60 bg-[#111214] flex items-center justify-center text-[#23a55a] shadow-inner transition-transform scale-102">
+                <Disc className="w-10 h-10 animate-[spin_8s_linear_infinite]" />
+              </div>
+            ) : resolvedAvatar ? (
+              <div className="w-16 h-16 rounded-full overflow-hidden border border-[#1f2023]/40">
+                <img src={resolvedAvatar} alt={name} className="w-full h-full object-cover" />
+              </div>
+            ) : (
+              <svg className="w-12 h-12 text-[#dbdee1] opacity-80" fill="currentColor" viewBox="0 0 127.14 96.36">
+                <path d="M107.7,8.07c-9.56-4.42-19.82-7.75-30.6-9.74a.43.43,0,0,0-.46.21C75,1.44,73,5.69,71.59,9c-11.66-1.74-23.23-1.74-34.69,0C35.49,5.69,33.56,1.44,31.83.54a.48.48,0,0,0-.46-.21C20.6,2.32,10.32,5.65.76,10.07a.46.46,0,0,0-.2.18C-12.76,38.25-1.92,65.65,11,83.91a.57.57,0,0,0,.26.24c13.79,10.14,27.18,16.34,40.35,20.47a.5.5,0,0,0,.52-.17c3.15-4.3,5.92-8.87,8.27-13.68a.49.49,0,0,0-.27-.68c-4.36-1.66-8.52-3.7-12.48-6.1a.49.49,0,0,1-.05-.81c.84-.63,1.68-1.28,2.48-1.94a.48.48,0,0,1,.5-.07c26.5,12.11,55.22,12.11,81.42,0a.53.53,0,0,1,.51.06c.8.67,1.64,1.32,2.49,1.95a.49.49,0,0,1-.05.81c-3.95,2.41-8.12,4.45-12.48,6.1a.49.49,0,0,0-.27.68c2.37,4.81,5.14,9.38,8.27,13.68a.49.49,0,0,0,.52.17c13.2-4.13,26.62-10.33,40.42-20.47a.47.47,0,0,0,.26-.24c14.28-22,6.46-49,1.2-73.66A.4.4,0,0,0,107.7,8.07ZM42.45,65.69C34.73,65.69,28.32,58.6,28.32,50s6.41-15.69,14.13-15.69,14.22,7.1,14.13,15.69S50.17,65.69,42.45,65.69Zm42.24,0C77,65.69,70.57,58.6,70.57,50s6.41-15.69,14.12-15.69,14.23,7.1,14.13,15.69S92.38,65.69,84.69,65.69Z" />
+              </svg>
+            )}
+          </div>
         )}
       </div>
 
       {/* Mic status & Display name Overlay tag at bottom-left */}
       <div className="absolute bottom-2 left-2 flex items-center gap-1.5 px-2 py-0.5 rounded bg-[rgba(17,18,20,0.7)] text-xs text-white max-w-[85%] select-none z-10 transition-all font-semibold">
+        {!isSelf && (
+          <MemberVolumePopover userId={p.userId} username={member?.username || p.username} displayName={name}>
+            <button
+              type="button"
+              className="hover:bg-white/10 text-white rounded p-0.5 transition cursor-pointer border-none outline-none flex items-center justify-center shrink-0"
+              title="Volume Settings"
+            >
+              <Volume2 className="h-3 w-3" />
+            </button>
+          </MemberVolumePopover>
+        )}
         {isDeafenedState ? (
           <VolumeX className="h-3.5 w-3.5 text-[#ed4245] shrink-0" />
         ) : isMutedState ? (
@@ -132,6 +190,7 @@ function CircularSpeakingWrapper({
       isSelf={isSelf}
       isSpeaking={isSpeaking}
       roomId={roomId}
+      stream={stream}
     />
   );
 }
@@ -215,9 +274,12 @@ export function VoiceChannelView({ channelId, roomId, channelName }: VoiceChanne
   // Sound and mute options for voice connected users
   const isMuted = useVoiceStore((s) => s.isMuted);
   const isDeafened = useVoiceStore((s) => s.isDeafened);
+  const isVideoOn = useVoiceStore((s) => s.isVideoOn);
   const toggleMute = useVoiceStore((s) => s.toggleMute);
   const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
+  const toggleVideo = useVoiceStore((s) => s.toggleVideo);
   const leaveVoiceChannel = useVoiceStore((s) => s.leaveVoiceChannel);
+  const musicBotActive = useVoiceStore((s) => s.musicBotActive);
 
   return (
     <div className="flex flex-1 min-w-0 flex-col bg-[#111214] h-full relative font-sans">
@@ -284,36 +346,52 @@ export function VoiceChannelView({ channelId, roomId, channelName }: VoiceChanne
           </div>
 
           {/* Connected Console Controls - rounded-xl buttons */}
-          <div className="flex items-center justify-center gap-4 py-3 shrink-0 border-t border-[#1f2023]/60 mt-4 select-none">
-            <button
-              onClick={toggleMute}
-              className={cn(
-                "w-11 h-11 rounded-xl flex items-center justify-center transition-all border-none outline-none cursor-pointer shadow-md",
-                isMuted ? "bg-[#ed4245] text-white hover:bg-[#c93b3e]" : "bg-[#2b2d31] hover:bg-[#3f4147] text-[#dbdee1]"
-              )}
-              title={isMuted ? t("voice.unmute") : t("voice.mute")}
-            >
-              {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-            </button>
+          <div className="flex flex-col gap-3 w-full max-w-[480px] mx-auto select-none mt-4">
+            {musicBotActive && (
+              <MusicPlayerBar roomId={roomId} channelId={channelId} />
+            )}
+            <div className="flex items-center justify-center gap-4 py-3 shrink-0 border-t border-[#1f2023]/60 w-full">
+              <button
+                onClick={toggleVideo}
+                className={cn(
+                  "w-11 h-11 rounded-xl flex items-center justify-center transition-all border-none outline-none cursor-pointer shadow-md",
+                  isVideoOn ? "bg-[#23a55a] text-[#dbdee1]" : "bg-[#ed4245] hover:bg-[#c93b3e] text-white"
+                )}
+                title={isVideoOn ? t("voice.cameraOff") || "Tắt Camera" : t("voice.cameraOn") || "Bật Camera"}
+              >
+                {isVideoOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
+              </button>
 
-            <button
-              onClick={toggleDeafen}
-              className={cn(
-                "w-11 h-11 rounded-xl flex items-center justify-center transition-all border-none outline-none cursor-pointer shadow-md",
-                isDeafened ? "bg-[#ed4245] text-white hover:bg-[#c93b3e]" : "bg-[#2b2d31] hover:bg-[#3f4147] text-[#dbdee1]"
-              )}
-              title={isDeafened ? t("voice.undeafen") : t("voice.deafen")}
-            >
-              {isDeafened ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-            </button>
+              <button
+                onClick={toggleMute}
+                className={cn(
+                  "w-11 h-11 rounded-xl flex items-center justify-center transition-all border-none outline-none cursor-pointer shadow-md",
+                  isMuted ? "bg-[#ed4245] text-white hover:bg-[#c93b3e]" : "bg-[#2b2d31] hover:bg-[#3f4147] text-[#dbdee1]"
+                )}
+                title={isMuted ? t("voice.unmute") : t("voice.mute")}
+              >
+                {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+              </button>
 
-            <button
-              onClick={leaveVoiceChannel}
-              className="w-11 h-11 rounded-xl flex items-center justify-center bg-[#ed4245] hover:bg-[#c93b3e] text-white transition-all cursor-pointer border-none outline-none shadow-md"
-              title={t("voice.disconnect")}
-            >
-              <PhoneOff className="h-5 w-5" fill="currentColor" stroke="none" />
-            </button>
+              <button
+                onClick={toggleDeafen}
+                className={cn(
+                  "w-11 h-11 rounded-xl flex items-center justify-center transition-all border-none outline-none cursor-pointer shadow-md",
+                  isDeafened ? "bg-[#ed4245] text-white hover:bg-[#c93b3e]" : "bg-[#2b2d31] hover:bg-[#3f4147] text-[#dbdee1]"
+                )}
+                title={isDeafened ? t("voice.undeafen") : t("voice.deafen")}
+              >
+                {isDeafened ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+              </button>
+
+              <button
+                onClick={leaveVoiceChannel}
+                className="w-11 h-11 rounded-xl flex items-center justify-center bg-[#ed4245] hover:bg-[#c93b3e] text-white transition-all cursor-pointer border-none outline-none shadow-md"
+                title={t("voice.disconnect")}
+              >
+                <PhoneOff className="h-5 w-5" fill="currentColor" stroke="none" />
+              </button>
+            </div>
           </div>
         </div>
       )}

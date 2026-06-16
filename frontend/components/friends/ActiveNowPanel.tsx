@@ -44,7 +44,7 @@ export function ActiveNowPanel() {
                 />
                 <div className="flex-1 overflow-hidden">
                   <p className="truncate font-semibold text-foreground">
-                    {friend.user.username}
+                    {friend.user.displayName || friend.user.username}
                   </p>
                   <p className="truncate text-[13px] text-muted-foreground">
                     {t(`status.${friend.user.status.toLowerCase()}`)}

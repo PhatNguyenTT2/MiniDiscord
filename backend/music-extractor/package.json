@@ -1,0 +1,14 @@
+{
+  "name": "music-extractor",
+  "version": "1.0.0",
+  "description": "YouTube Audio Extractor service using play-dl",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "play-dl": "^1.9.7",
+    "uuid": "^9.0.1"
+  }
+}

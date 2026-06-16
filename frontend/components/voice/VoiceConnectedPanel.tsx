@@ -406,18 +406,28 @@ export function VoiceConnectedPanel() {
 
       {/* 4. Global hidden audio playback elements for active remote streams */}
       {Object.entries(remoteStreams).map(([userId, stream]) => (
-        <audio
-          key={userId}
-          ref={(el) => {
-            if (el) {
-              el.srcObject = stream;
-            }
-          }}
-          autoPlay
-          playsInline
-          className="hidden"
-        />
+        <RemoteAudio key={userId} userId={userId} stream={stream} />
       ))}
     </div>
   );
+}
+
+function RemoteAudio({ userId, stream }: { userId: string; stream: MediaStream }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const volume = useVoiceStore((s) => s.memberVolumes[userId] ?? 100);
+  const isMuted = useVoiceStore((s) => s.memberMuted[userId] ?? false);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.srcObject = stream;
+    }
+  }, [stream]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = isMuted ? 0 : Math.min(1.0, volume / 100);
+    }
+  }, [volume, isMuted]);
+
+  return <audio ref={audioRef} autoPlay playsInline className="hidden" />;
 }

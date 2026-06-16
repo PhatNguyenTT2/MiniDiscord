@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -19,6 +20,7 @@ import java.util.Set;
 public class VoiceController {
 
   private final VoiceStateService voiceStateService;
+  private final com.discordmini.messaging.service.MusicQueueService musicQueueService;
   private final RestTemplate restTemplate = new RestTemplate();
 
   @Value("${voice.metered.domain:}")
@@ -54,6 +56,12 @@ public class VoiceController {
     return List.of(Map.of("urls", "stun:stun.l.google.com:19302"));
   }
 
+  @GetMapping("/rooms/{roomId}/music")
+  public ApiResponse<Map<String, Object>> getMusicState(@PathVariable String roomId) {
+    log.info("GET music state for room: {}", roomId);
+    return ApiResponse.ok("Music state loaded", musicQueueService.getState(roomId));
+  }
+
   /**
    * Expose participants list for active voice connections inside custom
    * room/channels list.
@@ -63,7 +71,30 @@ public class VoiceController {
       @PathVariable String roomId,
       @RequestParam List<String> channelIds) {
     log.debug("GET local voice states in room: {} paths: {}", roomId, channelIds);
-    return ApiResponse.ok("Voice states loaded", voiceStateService.getAllVoiceStates(roomId, channelIds));
+    Map<String, Set<String>> states = voiceStateService.getAllVoiceStates(roomId, channelIds);
+
+    // Inject phantom music-bot into response participants set if active in room
+    Map<String, Object> musicState = musicQueueService.getState(roomId);
+    if (musicState != null && Boolean.TRUE.equals(musicState.get("isBotActive"))) {
+      // Find which channel of this room the music is playing (or since we play
+      // per-room in voice state,
+      // we can inject it into whichever active voice channel has participants in this
+      // room,
+      // or we can query voiceStateService to see where the users are).
+      // Let's find the first channel that has active users and inject the music-bot
+      // there!
+      for (String chId : channelIds) {
+        Set<String> participants = states.get(chId);
+        if (participants != null && !participants.isEmpty()) {
+          // Clone the set to avoid Immutable / unmodifiable set issues
+          Set<String> mutableParticipants = new HashSet<>(participants);
+          mutableParticipants.add("music-bot");
+          states.put(chId, mutableParticipants);
+          break;
+        }
+      }
+    }
+    return ApiResponse.ok("Voice states loaded", states);
   }
 
   /**

@@ -28,6 +28,43 @@ export function UserPanel() {
   const toggleMuteStore = useVoiceStore((s) => s.toggleMute);
   const toggleDeafenStore = useVoiceStore((s) => s.toggleDeafen);
 
+  // Read voice presence
+  const currentChannel = useVoiceStore?.((s) => s.currentChannel);
+  const activeCallRoomId = useVoiceStore?.((s) => s.activeCallRoomId);
+  const isInVoice = currentChannel || activeCallRoomId;
+
+  // Sync with current user server-mute time
+  const roomId = currentChannel?.roomId;
+  const members = useRoomStore((s) => roomId ? s.members[roomId] : undefined) || [];
+  const me = members.find((m) => m.userId === user?.id);
+  const serverMutedUntil = me?.mutedUntil ? new Date(me.mutedUntil) : null;
+
+  const [timeLeft, setTimeLeft] = useState(0);
+
+  useEffect(() => {
+    if (!serverMutedUntil) {
+      setTimeLeft(0);
+      return;
+    }
+    const calcTimeLeft = () => {
+      const diff = Math.max(0, Math.ceil((serverMutedUntil.getTime() - Date.now()) / 1000));
+      setTimeLeft(diff);
+      return diff;
+    };
+
+    const initialDiff = calcTimeLeft();
+    if (initialDiff <= 0) return;
+
+    const interval = setInterval(() => {
+      const diff = calcTimeLeft();
+      if (diff <= 0) {
+        clearInterval(interval);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [me?.mutedUntil]);
+
   if (!user) {
     return (
       <div
@@ -77,44 +114,6 @@ export function UserPanel() {
 
   const micActive = !isMuted;
   const headphoneActive = !isDeafened;
-
-  // Read voice presence
-  const currentChannel = useVoiceStore?.((s) => s.currentChannel);
-  const activeCallRoomId = useVoiceStore?.((s) => s.activeCallRoomId);
-  const isInVoice = currentChannel || activeCallRoomId;
-
-  // Sync with current user server-mute time
-  const roomId = currentChannel?.roomId;
-  const members = useRoomStore((s) => roomId ? s.members[roomId] : undefined) || [];
-  const me = members.find((m) => m.userId === user?.id);
-  const serverMutedUntil = me?.mutedUntil ? new Date(me.mutedUntil) : null;
-
-  const [timeLeft, setTimeLeft] = useState(0);
-
-  useEffect(() => {
-    if (!serverMutedUntil) {
-      setTimeLeft(0);
-      return;
-    }
-    const calcTimeLeft = () => {
-      const diff = Math.max(0, Math.ceil((serverMutedUntil.getTime() - Date.now()) / 1000));
-      setTimeLeft(diff);
-      return diff;
-    };
-
-    const initialDiff = calcTimeLeft();
-    if (initialDiff <= 0) return;
-
-    const interval = setInterval(() => {
-      const diff = calcTimeLeft();
-      if (diff <= 0) {
-        clearInterval(interval);
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [me?.mutedUntil]);
-
   const isServerMuted = timeLeft > 0;
 
   return (

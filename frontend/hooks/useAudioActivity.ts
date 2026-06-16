@@ -134,3 +134,92 @@ export function useAudioActivity(stream: MediaStream | null, isDisabled: boolean
 
   return isSpeaking;
 }
+
+/**
+ * useAudioVolume Hook
+ * 
+ * Extracts real-time amplitude/volume metrics (0 to 100) from a MediaStream using AnalyserNode.
+ * Uses the same singleton AudioContext as useAudioActivity.
+ */
+export function useAudioVolume(stream: MediaStream | null, isDisabled: boolean = false): number {
+  const [volume, setVolume] = useState(0);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const animationRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!stream || isDisabled) {
+      if (isMounted) setVolume(0);
+      return;
+    }
+
+    const audioTracks = stream.getAudioTracks();
+    if (audioTracks.length === 0 || !audioTracks.some((t) => t.enabled)) {
+      if (isMounted) setVolume(0);
+      return;
+    }
+
+    try {
+      const audioCtx = getSharedAudioContext();
+      if (audioCtx.state === "suspended") {
+        audioCtx.resume().catch(console.error);
+      }
+
+      const source = audioCtx.createMediaStreamSource(stream);
+      sourceRef.current = source;
+
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.3; // slightly faster smoothing for visuals
+      source.connect(analyser);
+      analyserRef.current = analyser;
+
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+
+      const checkVolume = () => {
+        if (!isMounted || !analyserRef.current) return;
+        analyserRef.current.getByteFrequencyData(dataArray);
+
+        let sum = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          sum += dataArray[i];
+        }
+        const average = sum / bufferLength;
+        // Map average (approx 0..80 for normal speech) to 0..100 scale
+        const currentVolume = Math.min(100, Math.round((average / 80) * 100));
+
+        if (isMounted) {
+          setVolume(currentVolume);
+        }
+
+        animationRef.current = requestAnimationFrame(checkVolume);
+      };
+
+      checkVolume();
+    } catch (e) {
+      console.warn("[AudioActivity] Failed to hook audio volume visualizer:", e);
+    }
+
+    return () => {
+      isMounted = false;
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+      if (sourceRef.current) {
+        try {
+          sourceRef.current.disconnect();
+        } catch (err) {
+          // ignore
+        }
+        sourceRef.current = null;
+      }
+      analyserRef.current = null;
+    };
+  }, [stream, isDisabled]);
+
+  return volume;
+}

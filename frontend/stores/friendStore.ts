@@ -79,9 +79,12 @@ export const useFriendStore = create<FriendState>((set, get) => ({
     try {
       if (!cache?.friends) set({ isLoading: true, error: null });
       friendsFetchPromise = (async () => {
-        const res = await api.get<FriendResponse[]>("/users/friends");
-        set({ friends: res.data, isLoading: false });
-        saveFriendCache(res.data, get().pendingRequests);
+        const res = await api.get<any>("/users/friends");
+        const data = Array.isArray(res.data)
+          ? res.data
+          : (res.data && Array.isArray(res.data.data) ? res.data.data : []);
+        set({ friends: data, isLoading: false });
+        saveFriendCache(data, get().pendingRequests);
       })();
       await friendsFetchPromise;
     } catch (error: any) {
@@ -102,9 +105,12 @@ export const useFriendStore = create<FriendState>((set, get) => ({
     try {
       if (!cache?.pendingRequests) set({ isLoading: true, error: null });
       pendingFetchPromise = (async () => {
-        const res = await api.get<PendingFriendResponse[]>("/users/friends/pending");
-        set({ pendingRequests: res.data, isLoading: false });
-        saveFriendCache(get().friends, res.data);
+        const res = await api.get<any>("/users/friends/pending");
+        const data = Array.isArray(res.data)
+          ? res.data
+          : (res.data && Array.isArray(res.data.data) ? res.data.data : []);
+        set({ pendingRequests: data, isLoading: false });
+        saveFriendCache(get().friends, data);
       })();
       await pendingFetchPromise;
     } catch (error: any) {

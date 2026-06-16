@@ -48,7 +48,8 @@ public class VoiceStateService {
         "roomId", roomId,
         "channelId", channelId,
         "muted", "false",
-        "deafened", "false");
+        "deafened", "false",
+        "cameraOn", "false");
     redisTemplate.opsForHash().putAll(userKey, userState);
     // Set TTL to 1 day as safe fallback, though disconnect events clean it up
     redisTemplate.expire(userKey, Duration.ofDays(1));
@@ -103,6 +104,14 @@ public class VoiceStateService {
       redisTemplate.opsForHash().put(userKey, "muted", String.valueOf(muted));
       redisTemplate.opsForHash().put(userKey, "deafened", String.valueOf(deafened));
       log.debug("Updated mute state for user {}: muted={}, deafened={}", userId, muted, deafened);
+    }
+  }
+
+  public void updateCameraState(String userId, boolean cameraOn) {
+    String userKey = "voice:user:" + userId;
+    if (Boolean.TRUE.equals(redisTemplate.hasKey(userKey))) {
+      redisTemplate.opsForHash().put(userKey, "cameraOn", String.valueOf(cameraOn));
+      log.debug("Updated camera state for user {}: cameraOn={}", userId, cameraOn);
     }
   }
 

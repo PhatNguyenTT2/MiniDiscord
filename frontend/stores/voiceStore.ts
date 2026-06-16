@@ -4,6 +4,7 @@ import { webrtcManager } from "@/lib/webrtc";
 import { getStompClient } from "@/lib/websocket";
 import { useAuthStore } from "./authStore";
 import { useRoomStore } from "./roomStore";
+import { useFriendStore } from "./friendStore";
 import { soundEngine } from "@/lib/soundEngine";
 import { resumeAudioContext } from "@/hooks/useAudioActivity";
 
@@ -14,6 +15,7 @@ export interface VoiceParticipant {
   muted: boolean;
   deafened: boolean;
   displayName?: string;
+  cameraOn?: boolean;
 }
 
 export interface VoiceCallEvent {
@@ -26,11 +28,23 @@ export interface VoiceCallEvent {
   action: "RING" | "ACCEPT" | "DECLINE" | "END" | "MISSED" | "UNAVAILABLE";
 }
 
+export interface MusicTrackInfo {
+  trackId: string;
+  title: string;
+  directUrl: string;
+  duration: number;
+  thumbnail: string;
+  requestedBy: string;
+  requestedByName: string;
+  startTime: number; // UTC ms
+}
+
 interface VoiceStoreState {
   currentChannel: { roomId: string; channelId: string } | null;
   localStream: MediaStream | null;
   isMuted: boolean;
   isDeafened: boolean;
+  isVideoOn: boolean;
   connectionDuration: number; // in seconds
 
   remoteStreams: Record<string, MediaStream>; // userId -> MediaStream
@@ -44,11 +58,24 @@ interface VoiceStoreState {
   recoveringCallPeerId: string | null;
   resumeRecoveredCall: () => Promise<void>;
 
+  // Music Bot and Per-Member Volume States
+  currentMusicTrack: MusicTrackInfo | null;
+  musicBotActive: boolean;
+  memberVolumes: Record<string, number>; // userId -> volume (0-100)
+  memberMuted: Record<string, boolean>; // userId -> mute state
+
+  // Music Bot & Per-Member Volume Actions
+  setMusicTrack: (track: MusicTrackInfo | null) => void;
+  setMusicBotActive: (active: boolean) => void;
+  setMemberVolume: (userId: string, volume: number) => void;
+  toggleMemberMute: (userId: string) => void;
+
   // Voice Channel Actions
   joinVoiceChannel: (roomId: string, channelId: string) => Promise<void>;
   leaveVoiceChannel: () => void;
   toggleMute: () => void;
   toggleDeafen: () => void;
+  toggleVideo: () => void | Promise<void>;
 
   // DM call Actions
   startCall: (roomId: string, targetUserId: string, channelId?: string) => void;
@@ -72,6 +99,7 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
   localStream: null,
   isMuted: false,
   isDeafened: false,
+  isVideoOn: false,
   connectionDuration: 0,
   remoteStreams: {},
   channelParticipants: {},
@@ -80,6 +108,21 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
   callStatus: null,
   isRecoveringCall: false,
   recoveringCallPeerId: null,
+
+  // Music Bot and Per-Member Volume States (Initial)
+  currentMusicTrack: null,
+  musicBotActive: false,
+  memberVolumes: {},
+  memberMuted: {},
+
+  setMusicTrack: (track) => set({ currentMusicTrack: track }),
+  setMusicBotActive: (active) => set({ musicBotActive: active }),
+  setMemberVolume: (userId, volume) => set((state) => ({
+    memberVolumes: { ...state.memberVolumes, [userId]: volume }
+  })),
+  toggleMemberMute: (userId) => set((state) => ({
+    memberMuted: { ...state.memberMuted, [userId]: !state.memberMuted[userId] }
+  })),
 
   joinVoiceChannel: async (roomId: string, channelId: string) => {
     const activeChannel = get().currentChannel;
@@ -90,18 +133,25 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
       get().leaveVoiceChannel();
     }
 
+    set({ isVideoOn: false });
+
     try {
       console.log(`[VoiceStore] Joining channel ${channelId} in room ${roomId}`);
 
       // 1. Initialise WebRTC manager stream & fetch dynamic TURN credentials
       resumeAudioContext();
-      const localStream = await webrtcManager.initLocalStream();
+      const localStream = await webrtcManager.initLocalStream(get().isVideoOn);
       set({ localStream });
       const startingMute = get().isMuted;
       const startingDeafen = get().isDeafened;
       const audioTrack = localStream?.getAudioTracks()[0];
       if (audioTrack) {
         audioTrack.enabled = !startingMute && !startingDeafen;
+      }
+      const startingVideo = get().isVideoOn;
+      const videoTrack = localStream?.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.enabled = startingVideo;
       }
 
       // 2. Setup WebRTC callbacks
@@ -124,6 +174,22 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
             targetUserId,
             type: "ICE",
             payload: JSON.stringify(candidate)
+          })
+        });
+      };
+
+      webrtcManager.onNegotiationNeeded = (targetUserId, sdpOffer) => {
+        const token = useAuthStore.getState().token;
+        if (!token) return;
+
+        getStompClient(token).publish({
+          destination: "/app/voice.signal",
+          body: JSON.stringify({
+            roomId,
+            channelId,
+            targetUserId,
+            type: "OFFER",
+            payload: sdpOffer
           })
         });
       };
@@ -232,6 +298,7 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
     set((state) => ({
       currentChannel: null,
       localStream: null,
+      isVideoOn: false,
       connectionDuration: 0,
       remoteStreams: {},
       channelParticipants: {
@@ -372,13 +439,90 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
     soundEngine?.play(nowDeafened ? "deafen" : "undeafen");
   },
 
+  toggleVideo: async () => {
+    resumeAudioContext();
+    const currentUserId = useAuthStore.getState().user?.id;
+    const activeChannel = get().currentChannel;
+    const activeCall = get().activeCallRoomId;
+    if (!activeChannel && !activeCall) return;
+
+    const nowVideoOn = !get().isVideoOn;
+
+    // Toggle camera locally
+    await webrtcManager.toggleCamera(nowVideoOn);
+
+    const channelKey = activeChannel?.channelId || (activeCall ? "dm" : null);
+
+    set((state) => {
+      const updated: Partial<VoiceStoreState> = { isVideoOn: nowVideoOn };
+      if (channelKey && currentUserId) {
+        const list = state.channelParticipants[channelKey] || [];
+        updated.channelParticipants = {
+          ...state.channelParticipants,
+          [channelKey]: list.map((p) =>
+            p.userId === currentUserId ? { ...p, cameraOn: nowVideoOn } : p
+          ),
+        };
+      }
+      return updated;
+    });
+
+    // Notify backend
+    const active = activeChannel || activeCall;
+    if (active) {
+      const roomId = typeof active === "string" ? active : active.roomId;
+      const channelId = typeof active === "string" ? "dm" : active.channelId;
+      const token = useAuthStore.getState().token;
+      if (token) {
+        getStompClient(token).publish({
+          destination: "/app/voice.camera",
+          body: JSON.stringify({
+            roomId,
+            channelId,
+            cameraOn: nowVideoOn
+          })
+        });
+      }
+    }
+  },
+
   startCall: (roomId: string, targetUserId: string, channelId?: string) => {
     resumeAudioContext();
     const currentUser = useAuthStore.getState().user;
     if (!currentUser) return;
 
     console.log(`[VoiceStore] Initiating DM direct call inside room ${roomId} for channel ${channelId}`);
-    set({ activeCallRoomId: roomId, callStatus: "RINGING" });
+
+    // Resolve target user name and attributes from friends list if available
+    const friends = useFriendStore.getState().friends;
+    const friend = friends.find((f) => f.user.id === targetUserId);
+    const resolvedTargetName = friend?.user.displayName || friend?.user.username || "User";
+    const resolvedTargetAvatar = friend?.user.avatarUrl || null;
+
+    set((state) => ({
+      activeCallRoomId: roomId,
+      callStatus: "RINGING",
+      channelParticipants: {
+        ...state.channelParticipants,
+        dm: [
+          {
+            userId: currentUser.id,
+            username: currentUser.username,
+            avatarUrl: currentUser.avatarUrl || null,
+            muted: state.isMuted,
+            deafened: state.isDeafened,
+          },
+          {
+            userId: targetUserId,
+            username: resolvedTargetName,
+            displayName: resolvedTargetName,
+            avatarUrl: resolvedTargetAvatar,
+            muted: false,
+            deafened: false,
+          }
+        ]
+      }
+    }));
 
     // Send call ringing event over WebSocket
     const token = useAuthStore.getState().token;
@@ -422,14 +566,21 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
       console.log(`[VoiceStore] Accepting call in room ${incoming.roomId}`);
       resumeAudioContext();
 
+      set({ isVideoOn: false });
+
       // Start local media stream for peer call
-      const localStream = await webrtcManager.initLocalStream();
+      const localStream = await webrtcManager.initLocalStream(get().isVideoOn);
       set({ localStream });
       const startingMute = get().isMuted;
       const startingDeafen = get().isDeafened;
       const audioTrack = localStream?.getAudioTracks()[0];
       if (audioTrack) {
         audioTrack.enabled = !startingMute && !startingDeafen;
+      }
+      const startingVideo = get().isVideoOn;
+      const videoTrack = localStream?.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.enabled = startingVideo;
       }
 
       // Configure peer callback events
@@ -455,6 +606,22 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
         });
       };
 
+      webrtcManager.onNegotiationNeeded = (targetUserId, sdpOffer) => {
+        const token = useAuthStore.getState().token;
+        if (!token) return;
+
+        getStompClient(token).publish({
+          destination: "/app/voice.signal",
+          body: JSON.stringify({
+            roomId: incoming.roomId,
+            channelId: "dm",
+            targetUserId,
+            type: "OFFER",
+            payload: sdpOffer
+          })
+        });
+      };
+
       webrtcManager.onPeerDisconnected = (userId) => {
         get().endCall();
       };
@@ -468,11 +635,32 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
         });
       }
 
-      set({
+      const currentUser = useAuthStore.getState().user;
+      set((state) => ({
         activeCallRoomId: incoming.roomId,
         callStatus: "ACTIVE",
         incomingCall: null,
-      });
+        channelParticipants: {
+          ...state.channelParticipants,
+          dm: currentUser ? [
+            {
+              userId: currentUser.id,
+              username: currentUser.username,
+              avatarUrl: currentUser.avatarUrl || null,
+              muted: state.isMuted,
+              deafened: state.isDeafened,
+            },
+            {
+              userId: incoming.callerId,
+              username: incoming.callerName,
+              displayName: incoming.callerName,
+              avatarUrl: incoming.callerAvatar,
+              muted: false,
+              deafened: false,
+            }
+          ] : []
+        }
+      }));
 
       soundEngine?.play("voice_join");
     } catch (e) {
@@ -530,6 +718,7 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
       callStatus: null,
       incomingCall: null,
       localStream: null,
+      isVideoOn: false,
       remoteStreams: {},
     });
 
@@ -605,6 +794,16 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
               ...p,
               muted: action === "MUTE" || action === "DEAFEN",
               deafened: action === "DEAFEN",
+            };
+          }
+          return p;
+        });
+      } else if (action === "VIDEO_ON" || action === "VIDEO_OFF") {
+        updatedList = updatedList.map((p) => {
+          if (p.userId === userId) {
+            return {
+              ...p,
+              cameraOn: action === "VIDEO_ON",
             };
           }
           return p;
@@ -685,10 +884,39 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
         clearTimeout(callTimeout);
         callTimeout = null;
       }
-      set({ activeCallRoomId: roomId, callStatus: "ACTIVE", incomingCall: null });
+
+      const currentUser = useAuthStore.getState().user;
+      const peerId = event.targetUserId === currentUser?.id ? event.callerId : event.targetUserId;
+
+      set((state) => ({
+        activeCallRoomId: roomId,
+        callStatus: "ACTIVE",
+        incomingCall: null,
+        channelParticipants: {
+          ...state.channelParticipants,
+          dm: currentUser ? [
+            {
+              userId: currentUser.id,
+              username: currentUser.username,
+              avatarUrl: currentUser.avatarUrl || null,
+              muted: state.isMuted,
+              deafened: state.isDeafened,
+            },
+            {
+              userId: peerId,
+              username: event.callerName || "User",
+              displayName: event.callerName || "User",
+              avatarUrl: event.callerAvatar || null,
+              muted: false,
+              deafened: false,
+            }
+          ] : []
+        }
+      }));
+
       // Initiate WebRTC peer logic
       resumeAudioContext();
-      webrtcManager.initLocalStream().then((localStream) => {
+      webrtcManager.initLocalStream(get().isVideoOn).then((localStream) => {
         set({ localStream });
         const startingMute = get().isMuted;
         const startingDeafen = get().isDeafened;
@@ -712,6 +940,20 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
               targetUserId,
               type: "ICE",
               payload: JSON.stringify(candidate)
+            })
+          });
+        };
+        webrtcManager.onNegotiationNeeded = (targetUserId, sdpOffer) => {
+          const token = useAuthStore.getState().token;
+          if (!token) return;
+          getStompClient(token).publish({
+            destination: "/app/voice.signal",
+            body: JSON.stringify({
+              roomId,
+              channelId: "dm",
+              targetUserId,
+              type: "OFFER",
+              payload: sdpOffer
             })
           });
         };
@@ -889,6 +1131,22 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
             targetUserId: tid,
             type: "ICE",
             payload: JSON.stringify(candidate)
+          })
+        });
+      };
+
+      webrtcManager.onNegotiationNeeded = (targetUserId, sdpOffer) => {
+        const token = useAuthStore.getState().token;
+        if (!token) return;
+
+        getStompClient(token).publish({
+          destination: "/app/voice.signal",
+          body: JSON.stringify({
+            roomId,
+            channelId: "dm",
+            targetUserId,
+            type: "OFFER",
+            payload: sdpOffer
           })
         });
       };

@@ -182,6 +182,14 @@ public class RoomController {
         return ResponseEntity.ok(ApiResponse.ok("Server ownership transferred successfully", null));
     }
 
+    @DeleteMapping("/{roomId}/members/me")
+    public ResponseEntity<ApiResponse<Void>> leaveRoom(
+            @RequestHeader("X-User-Id") UUID userId,
+            @PathVariable UUID roomId) {
+        membershipService.leaveRoom(roomId, userId);
+        return ResponseEntity.ok(ApiResponse.ok("Server left successfully", null));
+    }
+
     @PostMapping("/{roomId}/members/{memberId}/role")
     public ResponseEntity<ApiResponse<Void>> updateMemberRole(
             @RequestHeader("X-User-Id") UUID requesterId,

@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.Collections;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Component
@@ -89,8 +90,13 @@ public class MembershipClient {
                     })
                     .toBodilessEntity();
 
-            // Pre-populate ALL room members in Redis (not just sender)
-            populateRoomMembersCache(roomId, userId);
+            // Populate verified user immediately into Redis so subsequent requests hit
+            // cache
+            redisTemplate.opsForSet().add(cacheKey, userId);
+            redisTemplate.expire(cacheKey, Duration.ofMinutes(30));
+
+            // Pre-populate ALL other room members in Redis asynchronously (not blocking)
+            CompletableFuture.runAsync(() -> populateRoomMembersCache(roomId, userId));
         } catch (BaseException e) {
             throw e;
         } catch (Exception e) {

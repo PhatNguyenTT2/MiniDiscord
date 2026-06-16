@@ -356,7 +356,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     if (msgWithStatus.status === "FAILED") return;
 
-    // Mark as FAILED if no ACK within 10s (instead of deleting)
+    // Mark as FAILED if no ACK within 15s (instead of deleting)
     setTimeout(() => {
       set((state) => {
         const msgs = state.channelMessages[channelId] || [];
@@ -373,7 +373,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
         return state;
       });
-    }, 10000);
+    }, 15000);
   },
 
   editMessage: async (channelId, messageId, content) => {
@@ -724,7 +724,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const existing = state.channelMessages[channelId] || [];
 
       // Prevent duplicates if server broadcast reaches us twice
-      if (existing.some((m) => m.id === message.id || (m.messageId && m.messageId === message.id) || (message.messageId && m.id === message.messageId))) {
+      if (
+        existing.some((m) =>
+          m.id === message.id ||
+          (m.messageId && m.messageId === message.id) ||
+          (message.messageId && m.id === message.messageId) ||
+          (m.messageId && message.messageId && m.messageId === message.messageId)
+        )
+      ) {
         return state;
       }
 
@@ -806,7 +813,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }
             return s;
           });
-        }, 10000);
+        }, 15000);
 
         return {
           channelMessages: {

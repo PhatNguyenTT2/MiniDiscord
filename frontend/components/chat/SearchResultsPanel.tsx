@@ -12,6 +12,8 @@ import { useAuthStore } from "@/stores/authStore";
 import { StatusAvatar } from "@/components/ui/StatusAvatar";
 import { StickerPreview } from "@/components/chat/StickerPreview";
 
+import { ImageViewerModal } from "@/components/chat/ImageViewerModal";
+
 interface SearchResultsPanelProps {
   channelId: string;
   roomId?: string;
@@ -23,6 +25,7 @@ const EMPTY_MEMBERS: any[] = [];
 function SearchResultAttachment({ message }: { message: Message }) {
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
 
   useEffect(() => {
     if (!message.fileKey) return;
@@ -66,19 +69,52 @@ function SearchResultAttachment({ message }: { message: Message }) {
     resolvedUrl.match(/\.(jpeg|jpg|gif|png|webp|svg)($|\?)/i) ||
     message.fileName?.match(/\.(jpeg|jpg|gif|png|webp|svg)$/i);
 
+  const isVideo =
+    resolvedUrl.match(/\.(mp4|webm|mov)($|\?)/i) ||
+    message.fileName?.match(/\.(mp4|webm|mov)$/i);
+
+  const isAudio =
+    resolvedUrl.match(/\.(mp3|wav|ogg)($|\?)/i) ||
+    message.fileName?.match(/\.(mp3|wav|ogg)$/i);
+
   if (isImage) {
     return (
-      <div className="mt-2 rounded overflow-hidden max-w-full max-h-[160px] border border-[#1e1f22]">
-        <img
-          src={resolvedUrl}
-          alt={message.fileName || "image"}
-          className="object-contain max-w-full max-h-[160px] bg-black/10 hover:brightness-95 transition cursor-pointer"
-          onClick={() => {
-            window.open(resolvedUrl, "_blank");
-          }}
-        />
-      </div>
+      <>
+        <div className="mt-2 rounded overflow-hidden max-w-full max-h-[160px] border border-[#1e1f22]">
+          <img
+            src={resolvedUrl}
+            alt={message.fileName || "image"}
+            className="object-contain max-w-full max-h-[160px] bg-black/10 hover:brightness-95 transition cursor-pointer"
+            onClick={() => {
+              setIsImageViewerOpen(true);
+            }}
+          />
+        </div>
+        {isImageViewerOpen && (
+          <ImageViewerModal
+            isOpen={isImageViewerOpen}
+            onClose={() => setIsImageViewerOpen(false)}
+            imageUrl={resolvedUrl}
+            fileName={message.fileName || "image.png"}
+          />
+        )}
+      </>
     );
+  }
+
+  if (isVideo) {
+    return (
+      <video
+        src={resolvedUrl}
+        controls
+        className="mt-2 max-w-full max-h-[160px] rounded border border-[#1e1f22]"
+        preload="metadata"
+      />
+    );
+  }
+
+  if (isAudio) {
+    return <audio src={resolvedUrl} controls className="mt-2 w-full max-w-[300px]" />;
   }
 
   return (

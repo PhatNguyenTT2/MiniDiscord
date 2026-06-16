@@ -286,8 +286,48 @@ export default function DmChatPage() {
   const [showCallUnavailableModal, setShowCallUnavailableModal] = useState(false);
   const [relationship, setRelationship] = useState<"friend" | "none" | "blocked">("friend");
 
+  // Vertical resize states for CallView height adjustment
+  const [callHeight, setCallHeight] = useState(360);
+  const isDraggingVertical = useRef(false);
+  const startY = useRef(0);
+  const startHeight = useRef(360);
+
+  const handleVerticalResizeDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDraggingVertical.current = true;
+    startY.current = e.clientY;
+    startHeight.current = callHeight;
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+  }, [callHeight]);
+
+  const handleVerticalMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDraggingVertical.current) return;
+    const deltaY = e.clientY - startY.current;
+    const newHeight = Math.max(180, Math.min(600, startHeight.current + deltaY));
+    setCallHeight(newHeight);
+  }, []);
+
+  const handleVerticalMouseUp = useCallback(() => {
+    if (isDraggingVertical.current) {
+      isDraggingVertical.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener("mousemove", handleVerticalMouseMove);
+    document.addEventListener("mouseup", handleVerticalMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", handleVerticalMouseMove);
+      document.removeEventListener("mouseup", handleVerticalMouseUp);
+    };
+  }, [handleVerticalMouseMove, handleVerticalMouseUp]);
+
   // Chat store — Read messages from global channel storage
   const messages = useChatStore((s) => s.getChannelMessages(channelId));
+  const typingUsers = useChatStore((s) => s.typingUsers[channelId] || EMPTY_DM);
   const addReaction = useChatStore((s) => s.addReaction);
   const addOptimisticMessage = useChatStore((s) => s.addOptimisticMessage);
   const replyingTo = useChatStore((s) => s.replyingTo);
@@ -557,6 +597,7 @@ export default function DmChatPage() {
                         }
                       }
                       if (activeRoomId) {
+                        useVoiceStore.setState({ isVideoOn: false });
                         useVoiceStore.getState().startCall(activeRoomId, userId, activeChannelId);
                       }
                     }}
@@ -565,7 +606,35 @@ export default function DmChatPage() {
                   >
                     <Phone className="h-5 w-5" />
                   </button>
-                  <button className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                  <button
+                    onClick={async () => {
+                      if (!userId) return;
+                      let activeRoomId = roomId;
+                      let activeChannelId = channelId;
+                      if (!activeRoomId) {
+                        try {
+                          const newRoom = await findOrCreateDmRoom(userId);
+                          activeRoomId = newRoom.id;
+                          const { channels: updatedChannels } = useRoomStore.getState();
+                          const newChannels = updatedChannels[newRoom.id] || [];
+                          const defaultCh = newChannels.find((c) => c.type === "TEXT") || newChannels[0];
+                          if (defaultCh) {
+                            activeChannelId = defaultCh.id;
+                          }
+                        } catch (err) {
+                          console.error("Failed to create lazy room for video calling", err);
+                          return;
+                        }
+                      }
+                      if (activeRoomId) {
+                        // Mark video as on first!
+                        useVoiceStore.setState({ isVideoOn: true });
+                        useVoiceStore.getState().startCall(activeRoomId, userId, activeChannelId);
+                      }
+                    }}
+                    className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                    title={t("friends.startVideoCall")}
+                  >
                     <Video className="h-5 w-5" />
                   </button>
                 </>
@@ -595,18 +664,20 @@ export default function DmChatPage() {
                   }}
                 />
               </div>
-              <button
-                onClick={toggleDmUserPanel}
-                className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-md transition-colors cursor-pointer",
-                  showDmUserPanel
-                    ? "text-foreground bg-secondary"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-                aria-label="Toggle user panel"
-              >
-                <User className="h-5 w-5" />
-              </button>
+              {activeCallRoomId !== roomId && (
+                <button
+                  onClick={toggleDmUserPanel}
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-md transition-colors cursor-pointer",
+                    showDmUserPanel
+                      ? "text-foreground bg-secondary"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  aria-label="Toggle user panel"
+                >
+                  <User className="h-5 w-5" />
+                </button>
+              )}
             </div>
 
             {/* Search Bar */}
@@ -664,12 +735,19 @@ export default function DmChatPage() {
           {/* Chat content container */}
           <div className="flex flex-1 flex-col min-w-0 relative">
             {activeCallRoomId === roomId && (
-              <DmCallView
-                roomId={roomId}
-                recipientId={userId}
-                recipientName={friendName}
-                recipientAvatar={friendAvatar}
-              />
+              <>
+                <DmCallView
+                  roomId={roomId}
+                  recipientId={userId}
+                  recipientName={friendName}
+                  recipientAvatar={friendAvatar}
+                  height={callHeight}
+                />
+                <div
+                  onMouseDown={handleVerticalResizeDown}
+                  className="h-1 bg-[#1f2023]/60 cursor-row-resize hover:bg-[#5865f2] hover:h-[6px] transition-all duration-150 z-20 shrink-0"
+                />
+              </>
             )}
 
             {/* Messages */}
@@ -816,6 +894,7 @@ export default function DmChatPage() {
                   isDm
                   onSend={handleSend}
                   onTyping={handleTyping}
+                  typingUsers={typingUsers}
                   members={roomId ? (allMembers[roomId] || []) : []}
                   showScrollDown={showJumpBanner}
                   onScrollDown={() => messageListRef.current?.scrollToBottom()}
@@ -825,7 +904,7 @@ export default function DmChatPage() {
           </div> {/* End of Chat container */}
 
           {/* DmUserPanel container (CSS Toggle instead of conditional render / SlidingPanel to avoid API spam) */}
-          <div className={cn("shrink-0 bg-[#2b2d31] overflow-hidden transition-all duration-200 ease-in-out", showDmUserPanel && !showSearchPanel ? "w-[340px]" : "w-0")}>
+          <div className={cn("shrink-0 bg-[#2b2d31] overflow-hidden transition-all duration-200 ease-in-out", showDmUserPanel && !showSearchPanel && activeCallRoomId !== roomId ? "w-[340px]" : "w-0")}>
             <div className="w-[340px] h-full">
               <DmUserPanel userId={userId} />
             </div>

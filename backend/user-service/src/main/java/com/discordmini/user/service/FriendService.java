@@ -186,6 +186,7 @@ public class FriendService {
         return UserResponse.builder()
                 .id(user.getId())
                 .username(user.getUsername())
+                .displayName(user.getDisplayName())
                 .email(user.getEmail())
                 .avatarUrl(user.getAvatarUrl())
                 .status(status)

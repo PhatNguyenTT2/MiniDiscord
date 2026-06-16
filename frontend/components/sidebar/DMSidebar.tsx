@@ -110,7 +110,7 @@ export function DMSidebar({ activeUserId }: { activeUserId?: string }) {
       entries.push({
         roomId: room.id,
         recipientId: otherUser.userId,
-        recipientName: otherUser.username,
+        recipientName: otherUser.displayName || otherUser.username,
         recipientAvatar: otherUser.avatarUrl,
         recipientStatus: otherUser.status || "OFFLINE",
         channelId,

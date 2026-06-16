@@ -287,6 +287,7 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - METERED_DOMAIN=${METERED_DOMAIN:-}
       - METERED_SECRET_KEY=${METERED_SECRET_KEY:-}
+      - MUSIC_EXTRACTOR_URL=http://music-extractor:3001
     deploy:
       resources:
         limits:
@@ -307,6 +308,21 @@ services:
       timeout: 5s
       retries: 5
       start_period: 50s
+
+  music-extractor:
+    build:
+      context: .
+      dockerfile: music-extractor/Dockerfile
+    container_name: minidiscord-music-extractor
+    expose:
+      - "3001"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    networks:
+      - minidiscord-net
+    restart: "on-failure:3"
 
   file-service:
     build:

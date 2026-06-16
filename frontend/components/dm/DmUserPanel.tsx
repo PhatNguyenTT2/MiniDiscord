@@ -84,10 +84,10 @@ function UserProfileModal({
             </div>
 
             <h2 className="text-xl font-bold text-foreground">
-              {user.username}
+              {user.displayName || user.username}
             </h2>
             <p className="text-sm text-muted-foreground">
-              {user.username.toLowerCase()}
+              {user.username}
             </p>
 
             <div className="mt-3 flex items-center gap-2">
@@ -165,7 +165,7 @@ function UserProfileModal({
               {activeTab === "activity" && (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <p className="text-sm font-medium text-foreground">
-                    {t("dm.noActivity").replace("{username}", user.username)}
+                    {t("dm.noActivity").replace("{username}", user.displayName || user.username)}
                   </p>
                   <p className="mt-2 max-w-[280px] text-xs text-muted-foreground leading-relaxed">
                     {t("dm.noActivityDesc")}
@@ -253,12 +253,14 @@ export function DmUserPanel({ userId }: { userId: string }) {
     ? allMembers[dmRoom.roomId]?.find((m) => m.userId === userId)
     : null;
 
-  const resolvedName = apiUser?.username || friendEntry?.user.username || roomMember?.username;
-  if (!resolvedName) return null;
+  const resolvedDisplayName = apiUser?.displayName || friendEntry?.user.displayName || roomMember?.displayName || apiUser?.username || friendEntry?.user.username || roomMember?.username;
+  const resolvedUsername = apiUser?.username || friendEntry?.user.username || roomMember?.username;
+  if (!resolvedDisplayName || !resolvedUsername) return null;
 
   const user = {
     id: userId,
-    username: resolvedName,
+    username: resolvedUsername,
+    displayName: resolvedDisplayName,
     avatarUrl: apiUser?.avatarUrl || friendEntry?.user.avatarUrl || roomMember?.avatarUrl || null,
     status: (friendEntry?.user.status || roomMember?.status || "OFFLINE") as User["status"],
     createdAt: apiUser?.createdAt || new Date().toISOString(),
@@ -296,10 +298,10 @@ export function DmUserPanel({ userId }: { userId: string }) {
 
             {/* Username + tag */}
             <h3 className="text-xl font-bold text-white leading-tight">
-              {user.username}
+              {user.displayName || user.username}
             </h3>
             <p className="text-sm text-[#b5bac1] mt-0.5">
-              {user.username.toLowerCase()}
+              {user.username}
             </p>
 
             {/* Separator */}
@@ -311,7 +313,7 @@ export function DmUserPanel({ userId }: { userId: string }) {
                 {t("dm.aboutMeUpper")}
               </p>
               <p className="text-[13px] text-[#dbdee1] leading-relaxed">
-                {t("dm.hello").replace("{username}", user.username)}
+                {t("dm.hello").replace("{username}", user.displayName || user.username)}
               </p>
             </div>
 

@@ -137,7 +137,32 @@ export function useWebSocket() {
 
     activateClient();
 
+    const checkInterval = setInterval(() => {
+      const isActuallyConnected = client.connected;
+      const currentWsStatus = useNetworkStore.getState().wsStatus;
+      const isOnline = useNetworkStore.getState().isOnline;
+
+      if (!isOnline) {
+        if (currentWsStatus !== "disconnected") {
+          useNetworkStore.getState().setWsStatus("disconnected");
+        }
+      } else {
+        if (isActuallyConnected) {
+          if (currentWsStatus !== "connected") {
+            console.log("[STOMP] Syncing wsStatus to connected (active under the hood)");
+            useNetworkStore.getState().setWsStatus("connected");
+          }
+        } else {
+          if (currentWsStatus !== "connecting") {
+            console.log("[STOMP] Syncing wsStatus to connecting (inactive under the hood)");
+            useNetworkStore.getState().setWsStatus("connecting");
+          }
+        }
+      }
+    }, 5000);
+
     return () => {
+      clearInterval(checkInterval);
       // Unsubscribe all and disconnect
       subscriptionsRef.current.forEach((sub) => sub.unsubscribe());
       subscriptionsRef.current.clear();
@@ -214,6 +239,42 @@ function handleRoomMessage(msg: IMessage) {
       return;
     }
 
+    if (eventType === "MUSIC_PLAY") {
+      const track = data.data;
+      console.log("[STOMP] MUSIC_PLAY event received:", track);
+      useVoiceStore.getState().setMusicTrack({
+        ...track,
+        startTime: data.startTime || Date.now()
+      });
+      useVoiceStore.getState().setMusicBotActive(true);
+
+      const channelId = data.channelId;
+      useVoiceStore.getState().handleVoiceStateUpdate({
+        channelId,
+        userId: "music-bot",
+        username: "Music Bot",
+        displayName: "Music Bot",
+        avatarUrl: null,
+        action: "JOIN",
+        muted: false,
+        deafened: false,
+      });
+      return;
+    }
+
+    if (eventType === "MUSIC_STOP") {
+      console.log("[STOMP] MUSIC_STOP event received");
+      useVoiceStore.getState().setMusicTrack(null);
+      useVoiceStore.getState().setMusicBotActive(false);
+
+      useVoiceStore.getState().handleVoiceStateUpdate({
+        channelId: data.channelId,
+        userId: "music-bot",
+        action: "LEAVE",
+      });
+      return;
+    }
+
     if (eventType === "VOICE_CALL") {
       const callData = data.data || data;
       console.log("[STOMP] VOICE_CALL via room:", callData);
@@ -281,6 +342,37 @@ function handleRoomMessage(msg: IMessage) {
           }
         } else {
           // If another member is banned, trigger state cleanup in the voice store
+          const voiceState = useVoiceStore.getState();
+          const roomChannels = useRoomStore.getState().channels[data.roomId] || [];
+          roomChannels.forEach((ch) => {
+            voiceState.handleVoiceStateUpdate({
+              channelId: ch.id,
+              userId: data.userId,
+              action: "LEAVE",
+            });
+          });
+        }
+      }
+      return;
+    }
+
+    if (eventType === "MEMBER_LEFT") {
+      console.log("[STOMP] MEMBER_LEFT received for room:", data.roomId);
+      if (data.roomId) {
+        useRoomStore.getState().fetchMembers(data.roomId, undefined, true);
+
+        const currentUserId = useAuthStore.getState().user?.id;
+        if (data.userId === currentUserId) {
+          const voiceState = useVoiceStore.getState();
+          if (voiceState.currentChannel?.roomId === data.roomId) {
+            voiceState.leaveVoiceChannel();
+          }
+          if (voiceState.activeCallRoomId === data.roomId) {
+            voiceState.endCall();
+          }
+
+          useRoomStore.getState().fetchMyRooms(true);
+        } else {
           const voiceState = useVoiceStore.getState();
           const roomChannels = useRoomStore.getState().channels[data.roomId] || [];
           roomChannels.forEach((ch) => {

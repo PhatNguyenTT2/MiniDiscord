@@ -1,5 +1,6 @@
 package com.discordmini.user.controller;
 
+import com.discordmini.common.dto.ApiResponse;
 import com.discordmini.user.model.entity.Notification;
 import com.discordmini.user.repository.NotificationRepository;
 import lombok.Data;
@@ -21,10 +22,11 @@ public class NotificationController {
   private final NotificationRepository notificationRepository;
 
   @GetMapping
-  public ResponseEntity<List<Notification>> getNotifications(Authentication authentication) {
+  public ResponseEntity<ApiResponse<List<Notification>>> getNotifications(Authentication authentication) {
     UUID userId = extractUserId(authentication);
     log.info("Fetching notifications for user: {}", userId);
-    return ResponseEntity.ok(notificationRepository.findByUserIdOrderByCreatedAtDesc(userId));
+    List<Notification> list = notificationRepository.findByUserIdOrderByCreatedAtDesc(userId);
+    return ResponseEntity.ok(ApiResponse.ok("Notifications fetched", list));
   }
 
   @PostMapping("/{id}/read")
@@ -43,6 +45,25 @@ public class NotificationController {
 
     return ResponseEntity.notFound().build();
   }
+
+  @PostMapping("/{id}/process")
+  public ResponseEntity<Void> processNotification(
+      Authentication authentication,
+      @PathVariable UUID id) {
+    UUID userId = extractUserId(authentication);
+    log.info("Processing notification {} for user: {}", id, userId);
+
+    Notification notification = notificationRepository.findById(id).orElse(null);
+    if (notification != null && notification.getUserId().equals(userId)) {
+      notification.setRead(true);
+      notification.setProcessed(true);
+      notificationRepository.save(notification);
+      return ResponseEntity.ok().build();
+    }
+
+    return ResponseEntity.notFound().build();
+  }
+
 
   @DeleteMapping("/{id}")
   public ResponseEntity<Void> deleteNotification(

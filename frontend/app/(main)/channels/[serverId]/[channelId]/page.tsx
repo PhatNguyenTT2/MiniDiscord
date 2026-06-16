@@ -100,6 +100,7 @@ export default function ChannelPage() {
 
   // Read messages from in-memory store
   const messages = useChatStore((s) => s.getChannelMessages(channelId));
+  const typingUsers = useChatStore((s) => s.typingUsers[channelId] || EMPTY_MEMBERS);
   const replyingTo = useChatStore((s) => s.replyingTo);
   const clearReplyingTo = useChatStore((s) => s.clearReplyingTo);
   const markChannelAsRead = useChatStore((s) => s.markChannelAsRead);
@@ -349,6 +350,7 @@ export default function ChannelPage() {
               channelName={channelName}
               onSend={handleSend}
               onTyping={handleTyping}
+              typingUsers={typingUsers}
               members={members}
               showScrollDown={showJumpBanner}
               onScrollDown={() => messageListRef.current?.scrollToBottom()}

@@ -14,6 +14,7 @@ export interface InboxNotification {
   channelName: string | null;
   content: string | null;
   isRead: boolean;
+  isProcessed: boolean;
   createdAt: string;
 }
 
@@ -23,6 +24,7 @@ interface InboxState {
   error: string | null;
   fetchNotifications: () => Promise<void>;
   markAsRead: (id: string) => Promise<void>;
+  processNotification: (id: string) => Promise<void>;
   deleteNotification: (id: string) => Promise<void>;
   clearChannel: (roomId: string, channelId?: string) => Promise<void>;
 }
@@ -35,8 +37,19 @@ export const useInboxStore = create<InboxState>((set, get) => ({
   fetchNotifications: async () => {
     set({ isLoading: true });
     try {
-      const res = await api.get<InboxNotification[]>("/users/notifications");
-      set({ notifications: res.data, error: null });
+      const res = await api.get<any>("/users/notifications");
+      // Handle both wrapped ApiResponse and raw array formats de-fensively
+      const data = Array.isArray(res.data)
+        ? res.data
+        : (res.data && Array.isArray(res.data.data) ? res.data.data : []);
+
+      const mappedData = data.map((n: any) => ({
+        ...n,
+        isRead: n.isRead !== undefined ? n.isRead : (n.read !== undefined ? n.read : false),
+        isProcessed: n.isProcessed !== undefined ? n.isProcessed : (n.processed !== undefined ? n.processed : false),
+      }));
+
+      set({ notifications: mappedData, error: null });
     } catch (err: any) {
       console.error("Failed to fetch notifications:", err);
       set({ error: err.message });
@@ -56,6 +69,20 @@ export const useInboxStore = create<InboxState>((set, get) => ({
       });
     } catch (err) {
       console.error(`Failed to mark notification ${id} as read:`, err);
+    }
+  },
+
+  processNotification: async (id: string) => {
+    try {
+      await api.post(`/users/notifications/${id}/process`);
+      // Update local state isRead & isProcessed status
+      set({
+        notifications: get().notifications.map((n) =>
+          n.id === id ? { ...n, isRead: true, isProcessed: true } : n
+        ),
+      });
+    } catch (err) {
+      console.error(`Failed to process notification ${id}:`, err);
     }
   },
 
@@ -96,3 +123,4 @@ export const useInboxStore = create<InboxState>((set, get) => ({
     }
   },
 }));
+

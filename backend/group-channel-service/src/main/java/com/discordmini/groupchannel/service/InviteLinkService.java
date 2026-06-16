@@ -41,7 +41,8 @@ public class InviteLinkService {
 
   @Transactional
   public InviteLink createInviteLink(UUID roomId, UUID creatorId) {
-    membershipService.validateOwner(roomId, creatorId);
+    membershipService.validatePermission(roomId, creatorId,
+        com.discordmini.groupchannel.model.enums.PermissionKey.MANAGE_CHANNEL);
 
     Room room = roomRepository.findById(roomId)
         .orElseThrow(() -> new RoomNotFoundException("Room not found"));
@@ -65,13 +66,15 @@ public class InviteLinkService {
 
   @Transactional(readOnly = true)
   public List<InviteLink> getActiveInvites(UUID roomId, UUID requesterId) {
-    membershipService.validateOwner(roomId, requesterId);
+    membershipService.validatePermission(roomId, requesterId,
+        com.discordmini.groupchannel.model.enums.PermissionKey.INVITE_MEMBER);
     return inviteLinkRepository.findByRoomIdAndExpiresAtAfter(roomId, Instant.now());
   }
 
   @Transactional
   public void deleteInviteLink(UUID roomId, UUID inviteId, UUID requesterId) {
-    membershipService.validateOwner(roomId, requesterId);
+    membershipService.validatePermission(roomId, requesterId,
+        com.discordmini.groupchannel.model.enums.PermissionKey.MANAGE_CHANNEL);
     InviteLink inviteLink = inviteLinkRepository.findById(inviteId)
         .orElseThrow(() -> new BaseException("Invite link not found", HttpStatus.NOT_FOUND));
 

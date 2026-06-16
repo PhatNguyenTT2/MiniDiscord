@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { Inbox, Check, Trash2, Bell, MessageSquare, AlertCircle, Sparkles } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { useInboxStore } from "@/stores/inboxStore";
+import { useRoomStore } from "@/stores/roomStore";
 import { useRouter } from "next/navigation";
 import { ScrollArea } from "../ui/ScrollArea";
 import { cn } from "@/lib/utils";
 import { StatusAvatar } from "@/components/ui/StatusAvatar";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
 export function InboxPopover() {
   const { t } = useTranslation();
@@ -15,8 +17,13 @@ export function InboxPopover() {
   const popoverRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  const { notifications, fetchNotifications, markAsRead, deleteNotification, clearChannel } = useInboxStore();
+  const { notifications, fetchNotifications, markAsRead, processNotification, deleteNotification, clearChannel } = useInboxStore();
   const [isOpen, setIsOpen] = useState(false);
+
+  // Invitation Modal States
+  const [showInviteConfirm, setShowInviteConfirm] = useState(false);
+  const [inviteToConfirm, setInviteToConfirm] = useState<any | null>(null);
+  const [isJoining, setIsJoining] = useState(false);
 
   // Fetch immediately on mount, and pull periodic updates
   useEffect(() => {
@@ -59,25 +66,29 @@ export function InboxPopover() {
       await markAsRead(n.id);
     }
 
-    setIsOpen(false);
-
     if (n.type === "DM") {
+      setIsOpen(false);
       router.push(`/channels/me/${n.senderId}`);
       if (n.roomId) {
         await clearChannel(n.roomId);
       }
     } else if (n.type === "MENTION") {
+      setIsOpen(false);
       router.push(`/channels/${n.roomId}/${n.channelId}`);
       if (n.roomId && n.channelId) {
         await clearChannel(n.roomId, n.channelId);
       }
     } else if (n.type === "FRIEND_ACCEPTED") {
+      setIsOpen(false);
       router.push("/channels/me");
       await deleteNotification(n.id);
     } else if (n.type === "SERVER_INVITE") {
-      router.push(`/channels/${n.roomId}`);
-      if (n.roomId) {
-        await clearChannel(n.roomId);
+      if (n.isProcessed) {
+        setIsOpen(false);
+        router.push(`/channels/${n.roomId}`);
+      } else {
+        setInviteToConfirm(n);
+        setShowInviteConfirm(true);
       }
     }
   };
@@ -202,6 +213,26 @@ export function InboxPopover() {
                         </p>
                       )}
 
+                      {n.type === "SERVER_INVITE" && (
+                        <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            disabled={n.isProcessed || isJoining}
+                            onClick={() => {
+                              setInviteToConfirm(n);
+                              setShowInviteConfirm(true);
+                            }}
+                            className={cn(
+                              "text-xs font-semibold px-3 py-1 rounded transition select-none cursor-pointer outline-none border-0",
+                              n.isProcessed
+                                ? "bg-[#2b2d31] text-[#949ba4] cursor-not-allowed"
+                                : "bg-[#23a55a] text-white hover:bg-[#1a7f45] active:bg-[#136034]"
+                            )}
+                          >
+                            {n.isProcessed ? t("inbox.joined") : t("inbox.join")}
+                          </button>
+                        </div>
+                      )}
+
                       <span className="text-[10px] text-[#949ba4] font-medium leading-none mt-1">
                         {formatTime(n.createdAt)}
                       </span>
@@ -240,6 +271,59 @@ export function InboxPopover() {
           </ScrollArea>
         </div>
       )}
+
+      {/* Confirmation Modal for Server Invites */}
+      {showInviteConfirm && (
+        <ConfirmModal
+          onClose={() => {
+            setShowInviteConfirm(false);
+            setInviteToConfirm(null);
+          }}
+          title={t("inbox.inviteTitle")}
+          description={t("inbox.inviteDesc").replace("{serverName}", inviteToConfirm?.roomName || "")}
+          confirmText={t("inbox.join")}
+          variant="primary"
+          onConfirm={async () => {
+            if (!inviteToConfirm) return;
+            try {
+              setIsJoining(true);
+              await processNotification(inviteToConfirm.id);
+
+              // Fetch rooms to ensure local list update
+              const { fetchMyRooms, fetchChannels } = useRoomStore.getState();
+              await fetchMyRooms(true);
+
+              // Find default channel of this room
+              let defaultChannelId = "";
+              try {
+                await fetchChannels(inviteToConfirm.roomId);
+                const roomChannels = useRoomStore.getState().channels[inviteToConfirm.roomId] || [];
+                if (roomChannels.length > 0) {
+                  const defaultChannel = roomChannels.find((c: any) => c.type === "TEXT") || roomChannels[0];
+                  defaultChannelId = defaultChannel.id;
+                }
+              } catch (err) {
+                console.error("Failed to fetch channels for redirect", err);
+              }
+
+              // Redirect
+              if (defaultChannelId) {
+                router.push(`/channels/${inviteToConfirm.roomId}/${defaultChannelId}`);
+              } else {
+                router.push(`/channels/${inviteToConfirm.roomId}`);
+              }
+            } catch (err) {
+              console.error("Failed to accept invite:", err);
+            } finally {
+              setIsJoining(false);
+              setShowInviteConfirm(false);
+              setInviteToConfirm(null);
+              setIsOpen(false);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
+

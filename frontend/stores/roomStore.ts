@@ -48,6 +48,7 @@ interface RoomState {
   deleteChannel: (roomId: string, channelId: string) => Promise<void>;
   getMyRoleInRoom: (roomId: string, userId: string) => "OWNER" | "ADMIN" | "MEMBER" | null;
   refreshAllDmMembers: () => Promise<void>;
+  leaveRoom: (roomId: string) => Promise<void>;
 }
 
 
@@ -92,9 +93,11 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   fetchChannels: async (roomId: string) => {
     try {
       const res = await api.get<{ message: string; data: Channel[] }>(`/rooms/${roomId}/channels`);
+      const nextChannels = { ...get().channels, [roomId]: res.data.data };
       set({
-        channels: { ...get().channels, [roomId]: res.data.data },
+        channels: nextChannels,
       });
+      saveCache(get().rooms, nextChannels, get().members);
     } catch (error: any) {
       console.error("[roomStore] fetchChannels failed for", roomId, error.message);
     }
@@ -120,14 +123,18 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         console.log("[roomStore] fetchMembers result for", roomId, ":", res.data.data);
         const { members: page, hasMore } = res.data.data;
 
-        set((state) => ({
-          members: {
+        set((state) => {
+          const nextMembers = {
             ...state.members,
             [roomId]: beforeJoinedAt ? [...(state.members[roomId] || []), ...page] : page,
-          },
-          memberHasMore: { ...state.memberHasMore, [roomId]: hasMore },
-          isFetchingMembers: { ...state.isFetchingMembers, [roomId]: false }
-        }));
+          };
+          saveCache(state.rooms, state.channels, nextMembers);
+          return {
+            members: nextMembers,
+            memberHasMore: { ...state.memberHasMore, [roomId]: hasMore },
+            isFetchingMembers: { ...state.isFetchingMembers, [roomId]: false }
+          };
+        });
         return;
       } catch (error: any) {
         if (error.response?.status === 429 && attempt < MAX_RETRIES) {
@@ -199,10 +206,18 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   updateMemberStatus: (userId: string, status: string) => {
     set((state) => {
       const nextMembers = { ...state.members };
+      let changed = false;
       for (const roomId in nextMembers) {
-        nextMembers[roomId] = nextMembers[roomId].map((m) =>
-          m.userId === userId ? { ...m, status } : m
-        );
+        nextMembers[roomId] = nextMembers[roomId].map((m) => {
+          if (m.userId === userId && m.status !== status) {
+            changed = true;
+            return { ...m, status };
+          }
+          return m;
+        });
+      }
+      if (changed) {
+        saveCache(state.rooms, state.channels, nextMembers);
       }
       return { members: nextMembers };
     });
@@ -258,6 +273,19 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   refreshAllDmMembers: async () => {
     const dmRooms = get().rooms.filter(r => r.type === "DM");
     await Promise.all(dmRooms.map(r => get().fetchMembers(r.id)));
+  },
+
+  leaveRoom: async (roomId: string) => {
+    try {
+      clearCache();
+      await api.delete(`/rooms/${roomId}/members/me`);
+      set((state) => ({
+        rooms: state.rooms.filter((r) => r.id !== roomId),
+      }));
+    } catch (error: any) {
+      set({ error: error.message });
+      throw error;
+    }
   },
 }));
 

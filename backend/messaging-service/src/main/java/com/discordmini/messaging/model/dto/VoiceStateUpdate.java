@@ -16,5 +16,6 @@ public class VoiceStateUpdate {
   private String userId;
   private String username;
   private String avatarUrl;
-  private String action; // "JOIN" | "LEAVE" | "MUTE" | "UNMUTE" | "DEAFEN" | "UNDEAFEN"
+  private String action; // "JOIN" | "LEAVE" | "MUTE" | "UNMUTE" | "DEAFEN" | "UNDEAFEN" | "VIDEO_ON" |
+                         // "VIDEO_OFF"
 }

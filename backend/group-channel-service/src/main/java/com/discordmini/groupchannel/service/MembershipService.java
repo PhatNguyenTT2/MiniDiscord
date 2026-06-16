@@ -347,4 +347,29 @@ public class MembershipService {
             log.error("Failed to publish member banned event", e);
         }
     }
+
+    @Transactional
+    public void leaveRoom(UUID roomId, UUID userId) {
+        Room room = roomRepository.findById(roomId)
+                .orElseThrow(() -> new RoomNotFoundException("Room not found"));
+
+        if (room.getOwnerId().equals(userId)) {
+            throw new BaseException("Owner cannot leave the room", HttpStatus.BAD_REQUEST, "BAD_REQUEST");
+        }
+
+        RoomParticipant participant = participantRepository.findByUserIdAndRoomId(userId, roomId)
+                .orElseThrow(() -> new BaseException("Not a member of this room", HttpStatus.FORBIDDEN, "FORBIDDEN"));
+
+        participantRepository.delete(participant);
+
+        log.info("User {} left room {}", userId, roomId);
+
+        try {
+            rabbitTemplate.convertAndSend("room.events", "member.left", java.util.Map.of(
+                    "roomId", roomId.toString(),
+                    "userId", userId.toString()));
+        } catch (Exception e) {
+            log.error("Failed to publish member left event", e);
+        }
+    }
 }

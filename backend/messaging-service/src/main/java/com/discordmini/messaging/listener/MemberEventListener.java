@@ -28,6 +28,18 @@ public class MemberEventListener {
         if (roomId != null) {
             log.info("Member removed/left event received for room {}, evicting cache", roomId);
             redisTemplate.delete("room:members:" + roomId);
+
+            // Broadcast the MEMBER_LEFT event to the room subscribers
+            try {
+                String userId = (String) event.get("userId");
+                messagingTemplate.convertAndSend("/topic/room." + roomId, Map.of(
+                        "eventType", "MEMBER_LEFT",
+                        "roomId", roomId,
+                        "userId", userId != null ? userId : ""));
+                log.info("Broadcasted MEMBER_LEFT event to room {} for user {}", roomId, userId);
+            } catch (Exception e) {
+                log.error("Failed to broadcast MEMBER_LEFT event to room {}", roomId, e);
+            }
         }
     }
 
@@ -83,6 +95,27 @@ public class MemberEventListener {
                 log.info("Broadcasted MEMBER_BANNED event to room {}", roomId);
             } catch (Exception e) {
                 log.error("Failed to broadcast MEMBER_BANNED event to room {}", roomId, e);
+            }
+        }
+    }
+
+    @RabbitListener(bindings = @QueueBinding(value = @Queue(name = "messaging.room-presence-events.queue", durable = "true"), exchange = @Exchange(name = "room.events", type = ExchangeTypes.TOPIC), key = {
+            "member.presence" }))
+    public void onMemberPresence(Map<String, Object> event) {
+        String roomId = (String) event.get("roomId");
+        String userId = (String) event.get("userId");
+        String status = (String) event.get("status");
+
+        if (roomId != null && userId != null && status != null) {
+            try {
+                messagingTemplate.convertAndSend("/topic/room." + roomId, Map.of(
+                        "eventType", "PRESENCE_UPDATE",
+                        "roomId", roomId,
+                        "fromUserId", userId,
+                        "status", status));
+                log.info("Broadcasted PRESENCE_UPDATE event to room {} for user {}", roomId, userId);
+            } catch (Exception e) {
+                log.error("Failed to broadcast PRESENCE_UPDATE event to room {}", roomId, e);
             }
         }
     }
