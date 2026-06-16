@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
 
 COPY music-extractor/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -U yt-dlp
 
 COPY music-extractor/ .
 
