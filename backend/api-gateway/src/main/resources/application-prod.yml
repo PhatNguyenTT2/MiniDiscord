@@ -1,6 +1,8 @@
 # === PRODUCTION PROFILE (DigitalOcean) ===
 # Eureka enabled — Load-balanced routing via Service Discovery
 spring:
+  codec:
+    max-in-memory-size: 26MB
   cloud:
     gateway:
       discovery:
@@ -58,3 +60,12 @@ app:
   cors:
     allowed-origins: ${CORS_ORIGINS:https://minidiscord.vercel.app}
     allowed-origin-patterns: ${CORS_ORIGIN_PATTERNS:https://*.vercel.app}
+
+jwt:
+  secret: ${JWT_SECRET:default-secret-change-me}
+
+gateway:
+  rate-limit:
+    max-requests: 100000
+    window-seconds: 10
+

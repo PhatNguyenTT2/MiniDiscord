@@ -55,15 +55,8 @@ public class GlobalExceptionHandler {
         @ExceptionHandler(Exception.class)
         public ResponseEntity<ApiResponse<Void>> handleGeneric(Exception ex) {
                 log.error("Unhandled exception", ex);
-                java.io.StringWriter sw = new java.io.StringWriter();
-                java.io.PrintWriter pw = new java.io.PrintWriter(sw);
-                ex.printStackTrace(pw);
-                String details = ex.getClass().getName() + ": " + ex.getMessage() + "\n" + sw.toString();
-                if (details.length() > 500) {
-                        details = details.substring(0, 500);
-                }
                 return ResponseEntity
                                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                                .body(ApiResponse.ok("Internal server error: " + details, null));
+                                .body(ApiResponse.error("Internal server error", "INTERNAL_ERROR"));
         }
 }
