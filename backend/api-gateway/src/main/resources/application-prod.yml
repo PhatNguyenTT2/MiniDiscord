@@ -16,7 +16,7 @@ spring:
         - id: group-channel-service
           uri: lb://group-channel-service
           predicates:
-            - Path=/api/rooms/**, /api/channels/**, /api/invites/**
+            - Path=/api/rooms/**, /api/channels/**, /api/stickers/**, /api/invites/**
 
         - id: chat-history-service
           uri: lb://chat-history-service
@@ -32,6 +32,11 @@ spring:
           uri: lb://file-service
           predicates:
             - Path=/api/files/**
+
+        - id: music-extractor
+          uri: lb://music-extractor
+          predicates:
+            - Path=/api/music/**
   data:
     redis:
       host: ${REDIS_HOST:redis}
