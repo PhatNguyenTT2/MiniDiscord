@@ -16,66 +16,86 @@ Real-time chat · Microservices architecture · Cloud-native deployment
 
 ## 🎯 Overview
 
-MiniDiscord is a **multi-user chat server** inspired by Discord, designed as a microservices system with real-time WebSocket communication. The project demonstrates enterprise-grade patterns including service discovery, API gateway routing, JWT authentication, and automated CI/CD pipelines — all deployed on cloud infrastructure.
+MiniDiscord is a **multi-user chat server** inspired by Discord, designed as a highly scalable microservices system. It leverages real-time WebSocket communication, event-driven state orchestration via RabbitMQ, centralized service registry, and distributed persistence. The project demonstrates enterprise-grade backend patterns alongside a modern, fully-reactive frontend.
 
 ### Architecture at a Glance
 
 ```mermaid
 graph TD
-    Browser[Browser] -->|HTTPS| Vercel[Vercel CDN<br/>Next.js SSR]
+    Browser[Browser / Next.js SPA] -->|HTTPS| Nginx
     
-    Vercel -->|HTTPS| Nginx
-    
-    subgraph Droplet [DigitalOcean Droplet - 2GB RAM]
-        Nginx[Nginx<br/>SSL Let's Encrypt]
+    subgraph Droplet [DigitalOcean Droplet - Cloud Hosting]
+        Nginx[Nginx Reverse Proxy<br/>SSL Termination]
         
         subgraph Docker [Docker Compose Network]
-            GW[API Gateway<br/>CORS, JWT, Rate Limiting]
-            ES[Eureka Server<br/>Service Discovery]
-            US[User Service<br/>Auth, Profile CRUD]
-            Redis[(Redis<br/>Rate Limit Cache)]
+            GW[API Gateway<br/>Spring Cloud Gateway :8080]
+            ES[Eureka Server<br/>Service Discovery :8761]
+            Config[Config Server<br/>Spring Cloud Config :8888]
             
-            GW -.->|Lookup| ES
-            GW -->|Forward| US
-            GW -.->|Cache| Redis
+            US[User Service :8081]
+            GCS[Group & Channel Service :8082]
+            CHS[Chat History Service :8083]
+            MS[Messaging Service :8084]
+            FS[File Service :8085]
+            ME[Music Extractor :3001]
+            
+            RD[(Redis<br/>Presence & Rate-limits)]
+            RMQ[RabbitMQ Broker<br/>Event Fanout]
+            MDB[(MongoDB<br/>Messages & History)]
         end
         
-        Nginx -->|Proxy Pass 8080| GW
+        Nginx -->|Proxy Pass| GW
     end
 
-    US -->|JDBC| DB[(Supabase PostgreSQL<br/>Managed Database)]
+    GW -.->|Lookup| ES
+    GW --> US
+    GW --> GCS
+    GW --> CHS
+    GW --> MS
+    GW --> FS
+    
+    MS -.-> RD
+    MS -.-> ME
+    
+    US --> PG[(Supabase PostgreSQL)]
+    GCS --> PG
+    
+    %% Event Broker Flow
+    GCS -.->|Publish events| RMQ
+    MS -.->|Publish/Subscribe| RMQ
+    CHS -.->|Consume history| RMQ
 ```
 
 ---
 
 ## ✨ Features
 
-### Authentication & Users
-- 📧 Email/Password registration and login
-- 🔐 Google OAuth 2.0 integration
-- 🎫 JWT-based stateless authentication
-- 👤 User profile management (avatar, status, username)
+### 🔐 Authentication & Users
+- [x] **Email & Password**: Classical registration and login.
+- [x] **Google OAuth 2.0**: Quick sign-up and authentication.
+- [x] **Stateless Security**: JWT tokens with flexible duration.
+- [x] **Profile Setup**: Manage display names, customize profile decorator frames, and upload status/avatars.
 
-### API Gateway
-- 🚦 Centralized routing with Spring Cloud Gateway
-- 🔍 Eureka-based service discovery with `lb://` load-balanced routing
-- 🛡️ Global JWT authentication filter with route whitelisting
-- ⚡ Redis-backed IP/User-ID rate limiting (20 req/10s, fail-open)
-- 🌐 Dynamic CORS with origin patterns for Vercel preview deployments
+### 💬 Real-Time Messaging & Chat
+- [x] **STOMP over WebSocket**: Instant, low-latency messaging.
+- [x] **Typing Indicator**: Real-time broadcast showing who is typing in the channel.
+- [x] **Reactions & Interactions**: Fast reaction emojis, replies, and pinned messages.
+- [x] **Message Forwarding**: Share messages across servers or direct channels.
+- [x] **Synchronized Deletion**: 
+  - *Delete For Me* (restores local privacy in DMs and servers).
+  - *Delete For Everyone* (broadcasts soft-delete flag, sanitizing content on the backend and leaving an elegant placeholder).
 
-### Infrastructure & DevOps
-- 🐳 Dockerized microservices with multi-stage builds (~180MB per image)
-- 🔄 Automated CI/CD via GitHub Actions → GHCR → SSH deploy
-- 🔒 Security-hardened: UFW firewall, `127.0.0.1` Docker binding, SSL termination
-- 📊 Memory-budgeted deployment with container resource limits
-- ♻️ Zero-downtime deployments with SHA-tagged rollback support
+### 🎙️ HD Voice & Music Bot
+- [x] **Voice Channels**: Low-latency voice conference rooms with active participant display.
+- [x] **User Volume Controls**: Adjust the volume level on a per-member basis or mute them locally.
+- [x] **Music Bot Playback**: Add a music bot to the voice channel (`/play <URL>`).
+- [x] **Playback Control**: Control the queue (`/skip`, `/stop`, `/queue`) fetching audio streams and syncing them in real-time.
 
-### Frontend
-- ⚡ Next.js with App Router and Server-Side Rendering
-- 🎨 Discord-accurate UI layout with dark theme
-- 🌍 Internationalization (i18n) support
-- 📱 Responsive design
-- 🗃️ Zustand state management
+### � Servers & Permissions
+- [x] **Server Management**: Create, customize, and manage servers & channels.
+- [x] **Role Hierarchy**: Structured permissions (Owner, Admin, Member) with custom role configs.
+- [x] **Invite Link Management**: Generate temporary/permanent join invitations complete with use counters.
+- [x] **Cascade Destruction**: Leaving a server as the sole remaining owner automatically initiates a cascading database deletion of the server.
 
 ---
 
@@ -83,16 +103,15 @@ graph TD
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| **Frontend** | Next.js 14+, TypeScript, Zustand | SSR, state management |
-| **API Gateway** | Spring Cloud Gateway (Reactive) | Routing, auth, rate limiting |
-| **Service Discovery** | Netflix Eureka | Dynamic service registration |
-| **Auth & Users** | Spring Boot 3.x, Spring Security 6 | JWT, Google OAuth, BCrypt |
-| **Database** | Supabase (PostgreSQL 15+) | Managed relational data |
-| **Cache** | Redis 7 (Docker container) | Rate limiting, session cache |
-| **Shared Library** | `common-lib` (Maven module) | JwtUtil, ApiResponse, BaseException |
-| **CI/CD** | GitHub Actions | Build, push GHCR, SSH deploy |
-| **Infrastructure** | DigitalOcean Droplet, Nginx, Certbot | Hosting, SSL, reverse proxy |
-| **Frontend Hosting** | Vercel | CDN, auto-deploy, preview URLs |
+| **Frontend** | React 19, Next.js 16 (App Router), Zustand, Tailwind CSS | UI rendering, client-side store logic, dark-mode design system |
+| **API Gateway** | Spring Cloud Gateway | Path routing, JWT validation filter, CORS handling, rate-limiting |
+| **Service Register** | Netflix Eureka | Dynamic microservice orchestration and status checkups |
+| **Relational DB** | Supabase (PostgreSQL) | ACID transactions for User accounts, Servers, Roles and Room Memberships |
+| **NoSQL DB** | MongoDB | Document storage optimized for cursor-paginated chat logs and message reactions |
+| **Memory Cache** | Redis | In-memory distributed lock and temporary status presence tracker |
+| **Message Broker** | RabbitMQ | Handles asynchronous service communication and WebSocket STOMP broadcasting |
+| **Storage CDN** | Backblaze B2 | Reliable file-sharing, image uploads and attachments storage |
+| **Audio Extractor** | Node.js + `play-dl` | Resolves YouTube URLs into raw audio streams for voice channel playback |
 
 ---
 
@@ -100,35 +119,26 @@ graph TD
 
 ```
 MiniDiscord/
-├── frontend/                      # Next.js application
-│   ├── app/                       # App Router pages
-│   ├── components/                # React components
-│   ├── stores/                    # Zustand stores
-│   └── lib/                       # API client, utilities
+├── frontend/                      # Next.js Application
+│   ├── app/                       # Routing pages
+│   ├── components/                # Modular visual components
+│   ├── stores/                    # Zustand stores (chatStore, voiceStore, etc.)
+│   └── dictionaries/              # Multilingual translations (en.json, vi.json)
 │
-├── backend/                       # Java Microservices (Maven multi-module)
-│   ├── common-lib/                # Shared DTOs, JwtUtil, exceptions
-│   ├── discovery-server/          # Eureka Server (:8761)
-│   ├── config-server/             # Spring Cloud Config (:8888)
+├── backend/                       # Java Microservices (Maven Multi-Module)
+│   ├── common-lib/                # Shared utilities, JwtUtil, DTOs & exceptions
+│   ├── discovery-server/          # Eureka registry (:8761)
+│   ├── config-server/             # Distributed config loader (:8888)
 │   ├── api-gateway/               # Spring Cloud Gateway (:8080)
-│   ├── user-service/              # Auth & User CRUD (:8081)
-│   ├── group-channel-service/     # Rooms & Channels (:8082)
-│   ├── chat-history-service/      # Message storage - MongoDB (:8083)
-│   ├── messaging-service/         # WebSocket real-time (:8084)
-│   ├── file-service/              # File upload - Backblaze B2 (:8085)
-│   ├── docker-compose.yml         # Local development
-│   └── docker-compose.prod.yml    # Production (DigitalOcean)
+│   ├── user-service/              # Account & Authentication (:8081)
+│   ├── group-channel-service/     # Guilds, rooms, memberships, invitations (:8082)
+│   ├── chat-history-service/      # paginated MongoDB messages (:8083)
+│   ├── messaging-service/         # STOMP WebSocket server & Voice coordination (:8084)
+│   ├── file-service/              # File uploads to Backblaze B2 (:8085)
+│   ├── music-extractor/           # Node.js play-dl extractor (:3001)
+│   └── docker-compose.yml         # Local stack orchestration configuration
 │
-├── .github/workflows/
-│   └── deploy-backend.yml         # CI/CD: Build → GHCR → SSH Deploy
-│
-└── docs/
-    ├── plan.md                    # Master architecture plan
-    ├── progress.md                # Development progress tracker
-    └── deploy/                    # Deployment documentation
-        ├── report.md              # Full deployment report
-        ├── devops_deep_dive.md    # Code-level DevOps explanation
-        └── infrastructure_verification.md
+└── docs/                          # Architecture details and deployment instructions
 ```
 
 ---
@@ -136,183 +146,76 @@ MiniDiscord/
 ## 🚀 Getting Started
 
 ### Prerequisites
+- **Java 17 & Maven 3.9** (or Docker to run multi-stage packaging)
+- **Node.js 18+ & npm**
+- **Docker / Docker Compose**
 
-- Java 17+
-- Maven 3.9+
-- Node.js 18+
-- Docker & Docker Compose
+### Running the Project Locally
 
-### Local Development
+**1. Set up Environment Variables**
+Configure a `.env` file inside the `backend` directory. Reference `backend/.env` for a list of required variables (such as `JWT_SECRET`, `GOOGLE_CLIENT_ID`, etc.).
 
-**1. Backend**
-
+**2. Spin Up Infrastructure & Microservices**
+Deploy all database and message brokers, then build the service jar files and spin up the backend:
 ```bash
 cd backend
 
-# Start infrastructure (Redis, Eureka)
-docker compose up redis discovery-server -d
+# Build containers compiling Java jars internally
+docker compose build
 
-# Build and run services
-mvn clean install -DskipTests
-mvn -pl user-service spring-boot:run
-mvn -pl api-gateway spring-boot:run
+# Launch the entire backend topology
+docker compose up -d
 ```
 
-**2. Frontend**
-
+**3. Run the Frontend**
 ```bash
-cd frontend
+cd ../frontend
 npm install
-cp .env.example .env.local
-# Edit .env.local with your API URL
 npm run dev
 ```
-
-Open [http://localhost:3000](http://localhost:3000) to see the app.
-
-### Environment Variables
-
-| Variable | Service | Description |
-|----------|---------|-------------|
-| `SPRING_DATASOURCE_URL` | User Service | PostgreSQL JDBC URL |
-| `JWT_SECRET` | Gateway + User | Shared JWT signing key |
-| `CORS_ORIGINS` | Gateway | Allowed frontend origins |
-| `GOOGLE_CLIENT_ID` | User Service | Google OAuth client ID |
-| `NEXT_PUBLIC_API_URL` | Frontend | Backend API base URL |
+Open [http://localhost:3000](http://localhost:3000) to view the client dashboard.
 
 ---
 
-## 🏗️ Microservices Architecture
+## 📊 API & Signaling Gateway Reference
 
-### Service Communication
+### Popular HTTP Gateway Operations (`:8080`)
 
-```mermaid
-graph TD
-    Client[Next.js Client] --> GW[API Gateway<br/>Spring Cloud Gateway]
-    GW --> US[User Service]
-    GW --> GCS[Groups & Channels Service]
-    GW --> MS[Messaging Service<br/>WebSocket]
-    GW --> CHS[Chat History Service]
-    GW --> FS[File Service]
+| Method | Route | Purpose | Authorization |
+|--------|-------|---------|---------------|
+| `POST` | `/api/auth/register` | Create a new user profile | None |
+| `POST` | `/api/auth/login` | Return JWT token on valid credentials | None |
+| `POST` | `/api/auth/google` | Exchange Google OAuth code for session token | None |
+| `GET`  | `/api/users/me` | Return active user information | JWT User |
+| `GET`  | `/api/messages/search` | Search message history using text & filters | JWT User |
+| `POST` | `/api/rooms/{id}/leave` | Drop server membership (cascade delete if empty owner) | JWT User |
 
-    MS --> RMQ[RabbitMQ]
-    CHS --> RMQ
-    GCS --> RMQ
+### Real-Time WebSocket Events (`:8084/ws`)
 
-    US --> PG[(PostgreSQL)]
-    GCS --> PG2[(PostgreSQL)]
-    CHS --> MDB[(MongoDB)]
-    MS --> RD[(Redis)]
-    FS --> B2[(Backblaze B2)]
-
-    SD[Eureka Server] -.-> US
-    SD -.-> GCS
-    SD -.-> MS
-    SD -.-> CHS
-    SD -.-> FS
-```
-
-### Database Design
-
-| Data Type | Database | Rationale |
-|-----------|----------|-----------|
-| Users, Rooms, Memberships | **PostgreSQL** | Relational data with ACID transactions, complex JOINs |
-| Chat Messages | **MongoDB** | Write-heavy, flexible schema, horizontal sharding by `roomId` |
-| Connection State, Cache | **Redis** | In-memory, ultra-low latency for presence and rate limiting |
-| Files & Media | **Backblaze B2** | S3-compatible object storage, cost-effective |
-
-### Concurrency Patterns
-
-| Scenario | Strategy | Implementation |
-|----------|----------|----------------|
-| WebSocket sessions | `ConcurrentHashMap` | Lock-free reads, atomic `putIfAbsent` |
-| Message fan-out | `@Async` + `CompletableFuture` | Non-blocking parallel delivery |
-| Room member operations | Redis Distributed Lock | Prevents duplicate membership race conditions |
-| User profile updates | JPA `@Version` | Optimistic locking with conflict detection |
-| Rate limiting | Redis Lua Script | Atomic increment with sliding window |
+| Destination / Topic | Event Type | Description |
+|---------------------|------------|-------------|
+| `/app/chat.send` | Client Output | Send a message to a channel |
+| `/topic/room.{roomId}` | Server Broadcast | Broadcast real-time chats, messages and edits |
+| `/topic/typing.{roomId}` | Server Broadcast | Broadcast typing indicators for channel members |
+| `/topic/voice.{roomId}` | Server Broadcast | Sync voice state join/leaves and volume properties |
 
 ---
 
-## 🔒 Security
+## 📄 Documentation Indices
 
-| Layer | Mechanism |
-|-------|-----------|
-| **Network** | UFW firewall (ports 22/80/443 only), Docker `127.0.0.1` binding |
-| **Transport** | TLS 1.3 via Let's Encrypt auto-renewing certificates |
-| **Authentication** | JWT tokens with configurable expiry, Google OAuth 2.0 |
-| **Authorization** | Global `JwtAuthFilter` with route-based whitelisting |
-| **Rate Limiting** | IP-based (anonymous) / User-ID-based (authenticated), fail-open design |
-| **CORS** | Dynamic origin patterns, `HIGHEST_PRECEDENCE` filter ordering |
-| **Secrets** | `.env` files excluded via `.gitignore`, no credentials in repository |
+- [Master Architecture & Database Plan](docs/plan.md)
+- [Production Deployment Report](docs/deploy/report.md)
+- [Infrastructure Setup & Verification Guide](docs/deploy/infrastructure_verification.md)
+- [DevOps CI/CD Custom Pipeline Breakdown](docs/deploy/devops_deep_dive.md)
 
 ---
 
-## 🔮 Roadmap
+## 👨‍💻 Primary Authors
 
-### Upcoming Features
-
-| Feature | Description | Architecture |
-|---------|-------------|--------------|
-| **Group Chat Rooms** | Create/join rooms, channels, member management | `group-channel-service` + PostgreSQL |
-| **Real-time Messaging** | WebSocket STOMP protocol, typing indicators | `messaging-service` + Redis + RabbitMQ |
-| **Chat History** | Persistent message storage, cursor pagination, search | `chat-history-service` + MongoDB Atlas |
-| **File Sharing** | Image/file upload with presigned URLs | `file-service` + Backblaze B2 |
-| **Voice/Video Calls** | WebRTC peer-to-peer with signaling server | Leveraging existing WebSocket infrastructure |
-| **Message Reactions** | Emoji reactions with embedded document arrays | MongoDB embedded sub-documents |
-| **User Presence** | Online/Offline/Idle/DND status tracking | Redis ephemeral keys with TTL |
-| **Push Notifications** | Firebase Cloud Messaging for mobile | Dedicated notification service |
-
----
-
-## 📊 API Reference
-
-### REST Endpoints
-
-| Method | Endpoint | Description | Auth |
-|--------|----------|-------------|------|
-| `POST` | `/api/auth/register` | Register new account | No |
-| `POST` | `/api/auth/login` | Login with credentials | No |
-| `POST` | `/api/auth/google` | Google OAuth login | No |
-| `GET` | `/api/users/me` | Get current user profile | JWT |
-| `PUT` | `/api/users/me` | Update profile | JWT |
-| `GET` | `/actuator/health` | Service health check | No |
-
-### Response Format
-
-All API responses follow a standardized format:
-
-```json
-{
-  "success": true,
-  "message": "Operation successful",
-  "data": { ... },
-  "timestamp": "2026-05-11T15:00:00",
-  "errorCode": null
-}
-```
-
----
-
-## 📄 Documentation
-
-| Document | Description |
-|----------|-------------|
-| [Master Plan](docs/plan.md) | Full architecture, database design, concurrency patterns |
-| [Deployment Report](docs/deploy/report.md) | Production configuration and troubleshooting |
-| [DevOps Deep Dive](docs/deploy/devops_deep_dive.md) | Line-by-line code explanation of the deployment pipeline |
-| [Infrastructure Verification](docs/deploy/infrastructure_verification.md) | Step-by-step server setup and verification guide |
-
----
-
-## 👨‍💻 Author
-
-**Phat Nguyen** — [GitHub](https://github.com/PhatNguyenTT2)
-
----
+- **Phat Nguyen** — [GitHub Page](https://github.com/PhatNguyenTT2)
 
 <div align="center">
 
-Built with ☕ Java · ⚛️ React · 🐳 Docker · ☁️ DigitalOcean
+Built with ☕ Java · ⚛️ React · 🐳 Docker · ☁️ DigitalOcean · 🍃 MongoDB · 🐇 RabbitMQ
 
 </div>
-cd /opt/minidiscord
