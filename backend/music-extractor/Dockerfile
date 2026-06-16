@@ -1,14 +1,16 @@
-FROM node:20-alpine
+FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY music-extractor/package*.json ./
+# Install ffmpeg for yt-dlp
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+  && rm -rf /var/lib/apt/lists/*
 
-RUN npm install --only=production
+COPY music-extractor/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY music-extractor/ .
 
 EXPOSE 3001
 
-CMD ["npm", "start"]
-
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3001"]

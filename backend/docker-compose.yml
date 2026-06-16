@@ -116,21 +116,21 @@ services:
       - "8081:8081"
     environment:
       - EUREKA_URL=http://discovery-server:8761/eureka/
-      - DB_URL=jdbc:postgresql://postgres:5432/discord_mini_users
-      - DB_USERNAME=postgres
-      - USER_DB_URL=jdbc:postgresql://postgres:5432/discord_mini_users
-      - USER_DB_USERNAME=postgres
-      - DB_PASSWORD=postgres
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=
-      - REDIS_SSL=false
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_PORT=5672
-      - RABBITMQ_USER=guest
-      - RABBITMQ_PASS=guest
-      - RABBITMQ_VHOST=/
-      - RABBITMQ_SSL=false
+      - DB_URL=${USER_DB_URL}
+      - DB_USERNAME=${USER_DB_USERNAME}
+      - USER_DB_URL=${USER_DB_URL}
+      - USER_DB_USERNAME=${USER_DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_SSL=${REDIS_SSL}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_PORT=${RABBITMQ_PORT}
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASS=${RABBITMQ_PASS}
+      - RABBITMQ_VHOST=${RABBITMQ_VHOST}
+      - RABBITMQ_SSL=${RABBITMQ_SSL}
       - JWT_SECRET=${JWT_SECRET}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
     deploy:
@@ -165,10 +165,10 @@ services:
       - "8080:8080"
     environment:
       - EUREKA_URL=http://discovery-server:8761/eureka/
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=
-      - REDIS_SSL=false
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_SSL=${REDIS_SSL}
       - JWT_SECRET=${JWT_SECRET}
       - APP_CORS_ALLOWED_ORIGINS=http://localhost:3000
     deploy:
@@ -194,17 +194,17 @@ services:
       - "8082"
     environment:
       - EUREKA_URL=http://discovery-server:8761/eureka/
-      - DB_URL=jdbc:postgresql://postgres:5432/discord_mini_groups
-      - DB_USERNAME=postgres
-      - GROUP_DB_URL=jdbc:postgresql://postgres:5432/discord_mini_groups
-      - GROUP_DB_USERNAME=postgres
-      - DB_PASSWORD=postgres
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_PORT=5672
-      - RABBITMQ_USER=guest
-      - RABBITMQ_PASS=guest
-      - RABBITMQ_VHOST=/
-      - RABBITMQ_SSL=false
+      - DB_URL=${GROUP_DB_URL}
+      - DB_USERNAME=${GROUP_DB_USERNAME}
+      - GROUP_DB_URL=${GROUP_DB_URL}
+      - GROUP_DB_USERNAME=${GROUP_DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_PORT=${RABBITMQ_PORT}
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASS=${RABBITMQ_PASS}
+      - RABBITMQ_VHOST=${RABBITMQ_VHOST}
+      - RABBITMQ_SSL=${RABBITMQ_SSL}
       - JWT_SECRET=${JWT_SECRET}
     deploy:
       resources:
@@ -236,13 +236,13 @@ services:
       - "8083"
     environment:
       - EUREKA_URL=http://discovery-server:8761/eureka/
-      - MONGODB_URI=mongodb://mongodb:27017/discord_mini_chat
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_PORT=5672
-      - RABBITMQ_USER=guest
-      - RABBITMQ_PASS=guest
-      - RABBITMQ_VHOST=/
-      - RABBITMQ_SSL=false
+      - MONGODB_URI=${MONGODB_URI}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_PORT=${RABBITMQ_PORT}
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASS=${RABBITMQ_PASS}
+      - RABBITMQ_VHOST=${RABBITMQ_VHOST}
+      - RABBITMQ_SSL=${RABBITMQ_SSL}
       - JWT_SECRET=${JWT_SECRET}
     deploy:
       resources:
@@ -274,16 +274,16 @@ services:
       - "8084"
     environment:
       - EUREKA_URL=http://discovery-server:8761/eureka/
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=
-      - REDIS_SSL=false
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_PORT=5672
-      - RABBITMQ_USER=guest
-      - RABBITMQ_PASS=guest
-      - RABBITMQ_VHOST=/
-      - RABBITMQ_SSL=false
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_SSL=${REDIS_SSL}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_PORT=${RABBITMQ_PORT}
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASS=${RABBITMQ_PASS}
+      - RABBITMQ_VHOST=${RABBITMQ_VHOST}
+      - RABBITMQ_SSL=${RABBITMQ_SSL}
       - JWT_SECRET=${JWT_SECRET}
       - METERED_DOMAIN=${METERED_DOMAIN:-}
       - METERED_SECRET_KEY=${METERED_SECRET_KEY:-}
@@ -314,6 +314,8 @@ services:
       context: .
       dockerfile: music-extractor/Dockerfile
     container_name: minidiscord-music-extractor
+    volumes:
+      - ./music-extractor/cookies.txt:/app/cookies.txt:ro
     expose:
       - "3001"
     deploy:
