@@ -510,7 +510,10 @@
     "ownerWarningTitle": "Bạn là chủ sở hữu máy chủ",
     "ownerWarningDesc": "Bạn không thể rời khỏi máy chủ này vì bạn là chủ sở hữu. Bạn phải chuyển giao quyền sở hữu cho thành viên khác hoặc xóa máy chủ trước khi rời đi.",
     "ownerWarningConfirm": "Đồng ý",
-    "successAlert": "Rời phòng thành công!"
+    "successAlert": "Rời phòng thành công!",
+    "deleteServerTitle": "Xóa Máy Chủ",
+    "deleteServerDesc": "Bạn là thành viên duy nhất còn lại. Rời đi sẽ xóa vĩnh viễn máy chủ này và toàn bộ dữ liệu. Hành động này không thể hoàn tác.",
+    "deleteServerConfirm": "Xóa Máy Chủ"
   },
   "invite": {
     "title": "Mời bạn bè vào Máy chủ {serverName}",

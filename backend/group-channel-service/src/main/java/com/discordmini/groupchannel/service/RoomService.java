@@ -12,6 +12,8 @@ import com.discordmini.groupchannel.repository.RoomParticipantRepository;
 import com.discordmini.groupchannel.repository.RoomRepository;
 import com.discordmini.groupchannel.repository.RoleRepository;
 import com.discordmini.groupchannel.repository.RolePermissionRepository;
+import com.discordmini.groupchannel.repository.InviteLinkRepository;
+import com.discordmini.groupchannel.repository.RoomBanRepository;
 import com.discordmini.groupchannel.model.entity.Role;
 import com.discordmini.groupchannel.model.entity.RolePermission;
 import com.discordmini.groupchannel.model.enums.PermissionKey;
@@ -28,8 +30,8 @@ import com.discordmini.common.exception.BaseException;
 
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
+@lombok.extern.slf4j.Slf4j
 @Service
 @RequiredArgsConstructor
 public class RoomService {
@@ -42,6 +44,8 @@ public class RoomService {
         private final MembershipService membershipService;
         private final RoleRepository roleRepository;
         private final RolePermissionRepository rolePermissionRepository;
+        private final InviteLinkRepository inviteLinkRepository;
+        private final RoomBanRepository roomBanRepository;
 
         @Value("${app.default-room.name:MiniDiscord General}")
         private String defaultRoomName;
@@ -306,6 +310,30 @@ public class RoomService {
 
                 newOwnerParticipant.setRole(RoomRole.OWNER);
                 participantRepository.save(newOwnerParticipant);
+        }
+
+        @Transactional
+        public void deleteRoomCascade(UUID roomId) {
+                Room room = roomRepository.findById(roomId)
+                                .orElseThrow(() -> new BaseException("Room not found", HttpStatus.NOT_FOUND));
+
+                // 1. Delete dependent data
+                channelRepository.deleteByRoomId(roomId);
+                participantRepository.deleteByRoomId(roomId);
+                inviteLinkRepository.deleteByRoomId(roomId);
+                roomBanRepository.deleteByRoomId(roomId);
+
+                // 2. Delete roles & permissions
+                List<Role> roles = roleRepository.findByRoomId(roomId);
+                for (Role role : roles) {
+                        rolePermissionRepository.deleteByRoleId(role.getId());
+                }
+                roleRepository.deleteByRoomId(roomId);
+
+                // 3. Delete Room
+                roomRepository.delete(room);
+
+                log.info("Room {} cascade deleted", roomId);
         }
 
         @Transactional

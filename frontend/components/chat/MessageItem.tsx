@@ -594,7 +594,7 @@ export function MessageItem({
           onEdit={() => { setIsEditing(true); setEditContent(message.content); }}
           onDelete={() => setIsDeleteModalOpen(true)}
           canEdit={isOwnMessage}
-          canDelete={isOwnMessage || canDeletePermission}
+          canDelete={true}
           messageContent={message.content}
           isOwnMessage={isOwnMessage}
           onMarkUnread={onMarkUnread}

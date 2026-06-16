@@ -684,7 +684,7 @@ export function MessageInput({
         </div>
 
         {typingUsers.length > 0 && (
-          <div className="absolute -bottom-6 left-0 px-1 font-semibold">
+          <div className="absolute -top-6 left-2 px-1 font-semibold pointer-events-none">
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground animate-in fade-in duration-300">
               <span className="flex gap-0.5">
                 <span className="w-1 h-1 rounded-full bg-muted-foreground animate-[bounce_1.4s_infinite_.2s]" />

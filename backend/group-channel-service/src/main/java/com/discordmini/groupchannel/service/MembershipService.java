@@ -42,6 +42,10 @@ public class MembershipService {
     private final PermissionService permissionService;
     private final RoomBanRepository roomBanRepository;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.context.annotation.Lazy
+    private RoomService roomService;
+
     public void validatePermission(UUID roomId, UUID userId, PermissionKey permissionKey) {
         List<String> permissions = permissionService.getMyPermissions(roomId, userId);
         if (!permissions.contains(permissionKey.name())) {
@@ -354,7 +358,13 @@ public class MembershipService {
                 .orElseThrow(() -> new RoomNotFoundException("Room not found"));
 
         if (room.getOwnerId().equals(userId)) {
-            throw new BaseException("Owner cannot leave the room", HttpStatus.BAD_REQUEST, "BAD_REQUEST");
+            long memberCount = participantRepository.countByRoomId(roomId);
+            if (memberCount == 1) {
+                roomService.deleteRoomCascade(roomId);
+                return;
+            }
+            throw new BaseException("Owner cannot leave the room without transferring ownership",
+                    HttpStatus.BAD_REQUEST, "BAD_REQUEST");
         }
 
         RoomParticipant participant = participantRepository.findByUserIdAndRoomId(userId, roomId)

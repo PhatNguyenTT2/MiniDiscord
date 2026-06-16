@@ -51,14 +51,30 @@ public class VoiceWebSocketController {
       if ("play".equalsIgnoreCase(command)) {
         String query = dto.getArgs();
         if (query == null || query.trim().isEmpty()) {
+          sendBotFeedback(roomId, channelId,
+              "❌ Usage: `/play <YouTube URL>` — Please provide a valid YouTube video link.");
           return;
         }
 
+        // Validate: only accept YouTube URLs (not search queries)
+        String trimmedQuery = query.trim();
+        if (!trimmedQuery.startsWith("https://www.youtube.com/") &&
+            !trimmedQuery.startsWith("https://youtu.be/") &&
+            !trimmedQuery.startsWith("https://m.youtube.com/") &&
+            !trimmedQuery.startsWith("https://music.youtube.com/")) {
+          sendBotFeedback(roomId, channelId,
+              "❌ Only YouTube URLs are supported. Please paste a link like: `https://www.youtube.com/watch?v=...`");
+          return;
+        }
+
+        sendBotFeedback(roomId, channelId, "🔍 Extracting audio from YouTube...");
+
         // 1. Resolve direct stream URL via ExtractionService
-        MusicTrack track = musicExtractionService.extractTrack(query, userId, userId);
+        MusicTrack track = musicExtractionService.extractTrack(trimmedQuery, userId, userId);
         if (track == null) {
-          log.error("Failed to query/extract url metadata for: {}", query);
-          sendBotFeedback(roomId, channelId, "❌ Could not find or extract music for query: " + query);
+          log.error("Failed to extract audio for URL: {}", trimmedQuery);
+          sendBotFeedback(roomId, channelId,
+              "❌ Could not extract audio. YouTube may be temporarily blocking this server.");
           return;
         }
 

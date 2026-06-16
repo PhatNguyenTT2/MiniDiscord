@@ -24,6 +24,8 @@ public interface RoomParticipantRepository extends JpaRepository<RoomParticipant
 
     long countByRoomId(UUID roomId);
 
+    void deleteByRoomId(UUID roomId);
+
     // Cursor pagination queries
     List<RoomParticipant> findByRoomIdOrderByJoinedAtDesc(UUID roomId, Pageable pageable);
 

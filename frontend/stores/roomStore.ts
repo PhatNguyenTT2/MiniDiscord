@@ -63,28 +63,30 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   error: null,
 
   fetchMyRooms: async (skipCache?: boolean) => {
-    // A. Nạp nhanh từ Cache (Nếu có)
+    // A. Nạp nhanh từ Cache (Nếu có) để UI phản hồi tức thì
     const cache = loadCache();
     if (cache && !skipCache) {
       set({ rooms: cache.rooms, channels: cache.channels, members: cache.members, isLoading: false });
-      return;
+    } else {
+      set({ isLoading: true });
     }
 
-    // B. Chỉ fetch danh sách phòng (Nhanh, chỉ 1 request)
-    set({ isLoading: true });
+    // B. Revalidate ngầm từ Server
     try {
       const res = await api.get<{ message: string; data: Room[] }>("/rooms/my");
       const rooms = res.data.data;
 
-      // Gán rooms vào store ngay lập tức để UI render và WebSocket nhận diện được dependency
-      set({ rooms, isLoading: false });
+      // Cập nhật rooms vào store
+      set({ rooms, isLoading: false, error: null });
 
-      // C. Khởi chạy luồng nạp dữ liệu ngầm (Fire-and-forget)
-      // LƯU Ý: KHÔNG dùng await ở đây để tránh block hàm fetchMyRooms
-      hydrateRoomDetails(rooms);
+      // C. Khởi chạy luồng nạp dữ liệu chi tiết ngầm cho phòng đang hoạt động
+      await hydrateRoomDetails(rooms);
     } catch (error: any) {
-      console.error("Failed to fetch rooms:", error);
-      set({ error: error.message, isLoading: false });
+      console.error("Failed to revalidate rooms:", error);
+      // Chỉ hiện thông báo lỗi nếu không có dữ liệu cache từ trước
+      if (!cache) {
+        set({ error: error.message, isLoading: false });
+      }
     }
   },
 

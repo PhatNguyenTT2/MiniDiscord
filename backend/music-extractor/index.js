@@ -5,10 +5,9 @@ const { v4: uuidv4 } = require('uuid');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Express JSON parsing
 app.use(express.json());
 
-// Main extraction endpoint
+// Main extraction endpoint — only accepts direct YouTube video URLs
 app.get('/extract', async (req, res) => {
   const query = req.query.q;
   if (!query) {
@@ -16,41 +15,29 @@ app.get('/extract', async (req, res) => {
   }
 
   try {
-    let videoUrl = query;
-    let title = '';
-    let duration = 0;
-    let thumbnail = '';
-
-    // Check if query is a valid youtube URL, else treat it as a search query
+    // Validate: only accept direct YouTube video URLs
     const validation = play.yt_validate(query);
-    if (!validation) {
-      // Search for the video
-      console.log(`[MusicExtractor] Searching for: "${query}"`);
-      const searchResults = await play.search(query, { limit: 1, source: { youtube: 'video' } });
-      if (!searchResults || searchResults.length === 0) {
-        return res.status(404).json({ error: 'No results found on YouTube' });
-      }
-      const firstResult = searchResults[0];
-      videoUrl = firstResult.url;
-      title = firstResult.title;
-      duration = firstResult.durationInSec;
-      thumbnail = firstResult.thumbnails[0]?.url || '';
-    } else {
-      console.log(`[MusicExtractor] Resolving URL: "${videoUrl}"`);
-      const videoInfo = await play.video_info(videoUrl);
-      title = videoInfo.video_details.title;
-      duration = videoInfo.video_details.durationInSec;
-      thumbnail = videoInfo.video_details.thumbnails[0]?.url || '';
+    if (validation !== 'video') {
+      console.log(`[MusicExtractor] Rejected non-video input: "${query}" (type: ${validation})`);
+      return res.status(400).json({
+        error: 'Please provide a valid YouTube video URL (e.g. https://www.youtube.com/watch?v=xxxxx)'
+      });
     }
 
-    // Extract raw audio stream URL
-    console.log(`[MusicExtractor] Extracting stream for video: "${videoUrl}"`);
-    const stream = await play.stream(videoUrl, { filter: 'audioonly' });
+    console.log(`[MusicExtractor] Resolving video URL: "${query}"`);
+    const videoInfo = await play.video_info(query);
+    const title = videoInfo.video_details.title;
+    const duration = videoInfo.video_details.durationInSec;
+    const thumbnail = videoInfo.video_details.thumbnails[0]?.url || '';
+
+    console.log(`[MusicExtractor] Extracting audio stream for: "${title}"`);
+    const stream = await play.stream(query, { quality: 2 });
 
     if (!stream || !stream.url) {
-      throw new Error('Failed to extract direct audio URL');
+      throw new Error('Failed to extract direct audio URL from YouTube');
     }
 
+    console.log(`[MusicExtractor] Success — streaming: "${title}" (${duration}s)`);
     return res.json({
       trackId: uuidv4(),
       title: title,
@@ -59,9 +46,29 @@ app.get('/extract', async (req, res) => {
       thumbnail: thumbnail
     });
   } catch (error) {
-    console.error('[MusicExtractor] Error extracting stream:', error);
-    return res.status(500).json({ error: error.message || 'Internal server error while extracting stream' });
+    console.error('[MusicExtractor] Extraction failed:', error.message);
+
+    // Provide actionable error messages based on failure type
+    if (error.message?.includes('Sign in to confirm') || error.message?.includes('429')) {
+      return res.status(429).json({
+        error: 'YouTube is temporarily blocking requests from this server. Please try again later.'
+      });
+    }
+    if (error.message?.includes('Captcha')) {
+      return res.status(429).json({
+        error: 'YouTube CAPTCHA triggered. The server IP may be rate-limited.'
+      });
+    }
+
+    return res.status(500).json({
+      error: error.message || 'Internal server error while extracting stream'
+    });
   }
+});
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', service: 'music-extractor' });
 });
 
 app.listen(PORT, () => {

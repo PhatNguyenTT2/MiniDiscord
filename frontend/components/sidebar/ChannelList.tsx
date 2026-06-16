@@ -260,7 +260,7 @@ export function ChannelList() {
   const params = useParams();
   const sidebarWidth = useUIStore((s) => s.sidebarWidth);
 
-  const { rooms, channels, getMyRoleInRoom, leaveRoom } = useRoomStore();
+  const { rooms, channels, members, getMyRoleInRoom, leaveRoom } = useRoomStore();
   const currentUserId = useAuthStore((s) => s.user?.id);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -273,6 +273,7 @@ export function ChannelList() {
   const [isNotificationSettingsOpen, setIsNotificationSettingsOpen] = useState(false);
   const [isLeaveOpen, setIsLeaveOpen] = useState(false);
   const [isOwnerWarningOpen, setIsOwnerWarningOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
   // Derive active channel and room from URL params
   const activeChannelId = (params?.channelId as string) || null;
@@ -299,9 +300,7 @@ export function ChannelList() {
     if (!displayRoomId) return;
     const init = async () => {
       // 1. Fetch channel structure config
-      if (!useRoomStore.getState().channels[displayRoomId]) {
-        await useRoomStore.getState().fetchChannels(displayRoomId);
-      }
+      await useRoomStore.getState().fetchChannels(displayRoomId);
       // 2. Load members (async promise resolution) so names exist in cache map first
       await useRoomStore.getState().fetchMembers(displayRoomId);
 
@@ -411,8 +410,13 @@ export function ChannelList() {
                 onClick={() => {
                   setIsDropdownOpen(false);
                   const isOwner = room?.ownerId === currentUserId;
+                  const currentMembers = displayRoomId ? (members[displayRoomId] || []) : [];
                   if (isOwner) {
-                    setIsOwnerWarningOpen(true);
+                    if (currentMembers.length <= 1) {
+                      setIsDeleteConfirmOpen(true);
+                    } else {
+                      setIsOwnerWarningOpen(true);
+                    }
                   } else {
                     setIsLeaveOpen(true);
                   }
@@ -535,6 +539,24 @@ export function ChannelList() {
           showCancel={false}
           onClose={() => setIsOwnerWarningOpen(false)}
           onConfirm={() => setIsOwnerWarningOpen(false)}
+          variant="danger"
+        />
+      )}
+
+      {isDeleteConfirmOpen && displayRoomId && (
+        <ConfirmModal
+          title={t("leaveServerModal.deleteServerTitle")}
+          description={t("leaveServerModal.deleteServerDesc")}
+          confirmText={t("leaveServerModal.deleteServerConfirm")}
+          onClose={() => setIsDeleteConfirmOpen(false)}
+          onConfirm={async () => {
+            try {
+              await leaveRoom(displayRoomId);
+              router.push("/channels/me");
+            } catch (err: any) {
+              console.error("Failed to delete server:", err);
+            }
+          }}
           variant="danger"
         />
       )}

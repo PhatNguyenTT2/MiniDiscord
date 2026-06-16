@@ -12,4 +12,6 @@ public interface RoleRepository extends JpaRepository<Role, UUID> {
   List<Role> findByRoomId(UUID roomId);
 
   List<Role> findByRoomIdOrderByPositionAsc(UUID roomId);
+
+  void deleteByRoomId(UUID roomId);
 }

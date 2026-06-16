@@ -13,18 +13,18 @@ import java.util.Optional;
 public interface MessageRepository extends MongoRepository<Message, String> {
 
         // Cursor pagination: first page (no cursor)
-        @Query("{ 'roomId': ?0, 'channelId': ?1, 'isDeleted': false, 'deletedForUsers': { '$nin': [?2] } }")
+        @Query("{ 'roomId': ?0, 'channelId': ?1, 'deletedForUsers': { '$nin': [?2] } }")
         List<Message> findByRoomIdAndChannelIdFilteredUser(
                         String roomId, String channelId, String userId, Pageable pageable);
 
         // Cursor pagination: subsequent pages (before cursor, strictly older)
-        @Query("{ 'roomId': ?0, 'channelId': ?1, 'isDeleted': false, 'deletedForUsers': { '$nin': [?2] }, '_id': { '$lt': { '$oid': ?3 } } }")
+        @Query("{ 'roomId': ?0, 'channelId': ?1, 'deletedForUsers': { '$nin': [?2] }, '_id': { '$lt': { '$oid': ?3 } } }")
         List<Message> findByRoomIdAndChannelIdFilteredUserBeforeCursor(
                         String roomId, String channelId, String userId, String beforeId, Pageable pageable);
 
         // Cursor pagination: forward pages (after cursor, inclusive to capture
         // watermark message)
-        @Query("{ 'roomId': ?0, 'channelId': ?1, 'isDeleted': false, 'deletedForUsers': { '$nin': [?2] }, '_id': { '$gte': { '$oid': ?3 } } }")
+        @Query("{ 'roomId': ?0, 'channelId': ?1, 'deletedForUsers': { '$nin': [?2] }, '_id': { '$gte': { '$oid': ?3 } } }")
         List<Message> findByRoomIdAndChannelIdFilteredUserAfterCursor(
                         String roomId, String channelId, String userId, String afterId, Pageable pageable);
 

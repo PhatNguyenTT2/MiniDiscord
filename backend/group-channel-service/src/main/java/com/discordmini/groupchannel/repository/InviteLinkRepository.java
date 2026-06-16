@@ -18,4 +18,6 @@ public interface InviteLinkRepository extends JpaRepository<InviteLink, UUID> {
   List<InviteLink> findByRoomIdAndExpiresAtAfter(UUID roomId, Instant now);
 
   void deleteByExpiresAtBefore(Instant now);
+
+  void deleteByRoomId(UUID roomId);
 }

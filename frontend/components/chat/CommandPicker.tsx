@@ -31,8 +31,8 @@ export function CommandPicker({
   const commands: CommandDef[] = [
     {
       name: "play",
-      description: t("music.slashPlay") || "Summon the bot to join voice channel and play music or search YouTube",
-      args: "link-or-query",
+      description: t("music.slashPlay") || "Play music from a YouTube URL in the voice channel",
+      args: "youtube-url",
       botName: "Music Bot",
       icon: Music,
     },

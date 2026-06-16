@@ -90,10 +90,12 @@ public class MessageService {
 
         int clampedLimit = Math.min(Math.max(limit, 1), MAX_LIMIT);
 
-        // Core filter conditions: roomId, channelId, and isDeleted=false
+        // Core filter conditions: roomId, channelId, isDeleted=false, and not deleted
+        // for client user
         Criteria criteria = Criteria.where("roomId").is(roomId)
                 .and("channelId").is(channelId)
-                .and("isDeleted").is(false);
+                .and("isDeleted").is(false)
+                .and("deletedForUsers").nin(userId);
 
         // Filter: 'from' represents senderName (username typed in search box)
         if (from != null && !from.trim().isEmpty()) {

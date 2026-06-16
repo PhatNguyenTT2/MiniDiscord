@@ -315,3 +315,4 @@ All API responses follow a standardized format:
 Built with ☕ Java · ⚛️ React · 🐳 Docker · ☁️ DigitalOcean
 
 </div>
+cd /opt/minidiscord

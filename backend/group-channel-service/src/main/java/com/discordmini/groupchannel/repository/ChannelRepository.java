@@ -10,5 +10,8 @@ import java.util.UUID;
 @Repository
 public interface ChannelRepository extends JpaRepository<Channel, UUID> {
     List<Channel> findByRoomIdOrderByPositionAsc(UUID roomId);
+
     long countByRoomId(UUID roomId);
+
+    void deleteByRoomId(UUID roomId);
 }

@@ -510,7 +510,10 @@
     "ownerWarningTitle": "You are the owner of this server",
     "ownerWarningDesc": "You cannot leave this server because you are the owner. You must transfer ownership to another member or delete the server entirely before leaving.",
     "ownerWarningConfirm": "Okay",
-    "successAlert": "Successfully left the server."
+    "successAlert": "Successfully left the server.",
+    "deleteServerTitle": "Delete Server",
+    "deleteServerDesc": "You are the last member. Leaving will permanently delete this server and all its data. This action cannot be undone.",
+    "deleteServerConfirm": "Delete Server"
   },
   "invite": {
     "title": "Invite friends to Server {serverName}",

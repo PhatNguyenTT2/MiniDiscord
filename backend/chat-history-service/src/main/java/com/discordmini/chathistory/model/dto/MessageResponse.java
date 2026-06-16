@@ -42,6 +42,9 @@ public class MessageResponse {
     private List<String> mentions;
     private List<String> stickerIds;
 
+    @com.fasterxml.jackson.annotation.JsonProperty("isDeleted")
+    private boolean isDeleted;
+
     @Data
     @Builder
     @NoArgsConstructor
@@ -53,7 +56,7 @@ public class MessageResponse {
     }
 
     public static MessageResponse from(Message message) {
-        return MessageResponse.builder()
+        MessageResponseBuilder builder = MessageResponse.builder()
                 .id(message.getId())
                 .messageId(message.getMessageId())
                 .nonce(message.getNonce())
@@ -63,25 +66,38 @@ public class MessageResponse {
                 .senderName(message.getSenderName())
                 .senderAvatar(message.getSenderAvatar())
                 .type(message.getType())
-                .content(message.getContent())
-                .fileKey(message.getFileKey())
-                .fileName(message.getFileName())
-                .fileSize(message.getFileSize())
                 .isEdited(message.isEdited())
                 .isPinned(message.isPinned())
                 .isForwarded(message.isForwarded())
+                .isDeleted(message.isDeleted())
                 .createdAt(message.getCreatedAt())
                 .updatedAt(message.getUpdatedAt())
-                .replyTo(message.getReplyTo())
-                .mentions(message.getMentions())
-                .stickerIds(message.getStickerIds())
-                .reactions(message.getReactions() != null ? message.getReactions().stream()
-                        .map(r -> ReactionResponse.builder()
-                                .emoji(r.getEmoji())
-                                .userIds(r.getUserIds() != null ? r.getUserIds() : List.of())
-                                .count(r.getUserIds() != null ? r.getUserIds().size() : 0)
-                                .build())
-                        .collect(Collectors.toList()) : List.of())
-                .build();
+                .replyTo(message.getReplyTo());
+
+        if (message.isDeleted()) {
+            builder.content("")
+                    .fileKey(null)
+                    .fileName(null)
+                    .fileSize(null)
+                    .mentions(List.of())
+                    .stickerIds(List.of())
+                    .reactions(List.of());
+        } else {
+            builder.content(message.getContent())
+                    .fileKey(message.getFileKey())
+                    .fileName(message.getFileName())
+                    .fileSize(message.getFileSize())
+                    .mentions(message.getMentions())
+                    .stickerIds(message.getStickerIds())
+                    .reactions(message.getReactions() != null ? message.getReactions().stream()
+                            .map(r -> ReactionResponse.builder()
+                                    .emoji(r.getEmoji())
+                                    .userIds(r.getUserIds() != null ? r.getUserIds() : List.of())
+                                    .count(r.getUserIds() != null ? r.getUserIds().size() : 0)
+                                    .build())
+                            .collect(Collectors.toList()) : List.of());
+        }
+
+        return builder.build();
     }
 }
