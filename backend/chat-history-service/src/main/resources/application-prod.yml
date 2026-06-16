@@ -1,0 +1,23 @@
+# === PRODUCTION PROFILE (DigitalOcean) ===
+spring:
+  data:
+    mongodb:
+      uri: ${MONGODB_URI}
+      auto-index-creation: false
+  rabbitmq:
+    host: ${RABBITMQ_HOST}
+    port: ${RABBITMQ_PORT}
+    username: ${RABBITMQ_USER}
+    password: ${RABBITMQ_PASS}
+    virtual-host: ${RABBITMQ_VHOST}
+    ssl:
+      enabled: ${RABBITMQ_SSL:true}
+
+eureka:
+  client:
+    enabled: true
+    service-url:
+      defaultZone: ${EUREKA_URL:http://discovery-server:8761/eureka/}
+
+server:
+  port: ${PORT:8083}

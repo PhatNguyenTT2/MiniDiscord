@@ -1,0 +1,22 @@
+# === PRODUCTION PROFILE (DigitalOcean) ===
+spring:
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 25MB
+
+# Backblaze B2 (S3-compatible, uses MinIO SDK)
+b2:
+  endpoint: ${B2_ENDPOINT}
+  key-id: ${B2_KEY_ID}
+  app-key: ${B2_APP_KEY}
+  bucket-name: ${B2_BUCKET_NAME}
+
+eureka:
+  client:
+    enabled: true
+    service-url:
+      defaultZone: ${EUREKA_URL:http://discovery-server:8761/eureka/}
+
+server:
+  port: ${PORT:8085}

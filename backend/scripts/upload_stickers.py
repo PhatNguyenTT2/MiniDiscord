@@ -27,7 +27,11 @@ def load_env(env_path):
 
 def main():
     backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    env_path = os.path.join(backend_dir, ".env")
+    
+    # Support --prod command-line argument for production environment variable routing
+    env_file = ".env.prod" if len(sys.argv) > 1 and sys.argv[1] == "--prod" else ".env"
+    env_path = os.path.join(backend_dir, env_file)
+    print(f"Loading credentials from: {env_path}")
     env = load_env(env_path)
     
     endpoint = env.get("B2_ENDPOINT")
@@ -52,13 +56,14 @@ def main():
         config=Config(signature_version='s3v4')
     )
     
-    # Mapping of B2 target keys to local paths
+    # Mapping of B2 target keys to local paths relative to the script directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
     stickers_to_upload = {
-        "stickers/packs/meow/cover.png": r"C:\Users\ACER\.gemini\antigravity\brain\71bab537-7a8c-4175-a99a-8a5481e09ceb\meow_cover_1781385383947.png",
-        "stickers/packs/meow/smile.png": r"C:\Users\ACER\.gemini\antigravity\brain\71bab537-7a8c-4175-a99a-8a5481e09ceb\meow_smile_1781385394328.png",
-        "stickers/packs/meow/cry.png":   r"C:\Users\ACER\.gemini\antigravity\brain\71bab537-7a8c-4175-a99a-8a5481e09ceb\meow_cry_1781385405615.png",
-        "stickers/packs/pepe/cover.png": r"C:\Users\ACER\.gemini\antigravity\brain\71bab537-7a8c-4175-a99a-8a5481e09ceb\pepe_cover_1781385417305.png",
-        "stickers/packs/pepe/sad.png":   r"C:\Users\ACER\.gemini\antigravity\brain\71bab537-7a8c-4175-a99a-8a5481e09ceb\pepe_sad_1781385427693.png",
+        "stickers/packs/meow/cover.png": os.path.join(script_dir, "stickers", "meow", "cover.png"),
+        "stickers/packs/meow/smile.png": os.path.join(script_dir, "stickers", "meow", "smile.png"),
+        "stickers/packs/meow/cry.png":   os.path.join(script_dir, "stickers", "meow", "cry.png"),
+        "stickers/packs/pepe/cover.png": os.path.join(script_dir, "stickers", "pepe", "cover.png"),
+        "stickers/packs/pepe/sad.png":   os.path.join(script_dir, "stickers", "pepe", "sad.png"),
     }
     
     for b2_key, local_path in stickers_to_upload.items():
