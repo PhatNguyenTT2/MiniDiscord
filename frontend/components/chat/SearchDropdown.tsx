@@ -55,7 +55,9 @@ export function SearchDropdown({
 
   // Render components helper for members list
   const renderMemberRow = (member: MemberDetailResponse, prefixType: "from" | "mentions") => {
-    const displayPrefix = prefixType === "from" ? "từ:" : "đề cập:";
+    const displayPrefix = prefixType === "from"
+      ? `${t("chat.searchFromUserSub").split(":")[0]}:`
+      : `${t("chat.searchMentionsUserSub").split(":")[0]}:`;
     return (
       <button
         key={member.userId}
@@ -103,7 +105,7 @@ export function SearchDropdown({
             {chan.name}
           </span>
           <span className="text-[11px] text-[#949ba4] truncate">
-            trong: # {chan.name}
+            {t("chat.searchInChannelSub").split(":")[0]}: # {chan.name}
           </span>
         </div>
       </button>
@@ -136,7 +138,7 @@ export function SearchDropdown({
                 </span>
                 <span className="text-[11px] text-[#949ba4]">
                   <span className="font-semibold text-[#dbdee1]">from:</span>
-                  {" "}{t("chat.searchFromUserTitle")}
+                  {" "}{t("chat.searchFromUserSub").split(":")[1]?.trim()}
                 </span>
               </div>
             </button>
@@ -158,7 +160,7 @@ export function SearchDropdown({
                   </span>
                   <span className="text-[11px] text-[#949ba4]">
                     <span className="font-semibold text-[#dbdee1]">in:</span>
-                    {" "}{t("chat.searchInChannelTitle")}
+                    {" "}{t("chat.searchInChannelSub").split(":")[1]?.trim()}
                   </span>
                 </div>
               </button>
@@ -180,7 +182,7 @@ export function SearchDropdown({
                 </span>
                 <span className="text-[11px] text-[#949ba4]">
                   <span className="font-semibold text-[#dbdee1]">has:</span>
-                  {" "}{t("chat.searchHasDataTitle")}
+                  {" "}{t("chat.searchHasDataSub").split(":")[1]?.trim()}
                 </span>
               </div>
             </button>
@@ -201,7 +203,7 @@ export function SearchDropdown({
                 </span>
                 <span className="text-[11px] text-[#949ba4]">
                   <span className="font-semibold text-[#dbdee1]">mentions:</span>
-                  {" "}{t("chat.searchMentionsUserTitle")}
+                  {" "}{t("chat.searchMentionsUserSub").split(":")[1]?.trim()}
                 </span>
               </div>
             </button>
@@ -257,7 +259,7 @@ export function SearchDropdown({
             filteredMembers.map((m) => renderMemberRow(m, "from"))
           ) : (
             <div className="text-xs text-[#949ba4] px-2 py-1.5 italic">
-              No matching members found
+              {t("chat.searchNoMatchingMembers")}
             </div>
           )}
         </div>
@@ -278,12 +280,12 @@ export function SearchDropdown({
               filteredChannels.map((c) => renderChannelRow(c))
             ) : (
               <div className="text-xs text-[#949ba4] px-2 py-1.5 italic">
-                No matching channels found
+                {t("chat.searchNoMatchingChannels")}
               </div>
             )
           ) : (
             <div className="text-xs text-[#949ba4] px-2 py-1.5 italic">
-              Channel search is only available in server view
+              {t("chat.searchChannelOnlyServer")}
             </div>
           )}
         </div>
@@ -343,7 +345,7 @@ export function SearchDropdown({
             filteredMembers.map((m) => renderMemberRow(m, "mentions"))
           ) : (
             <div className="text-xs text-[#949ba4] px-2 py-1.5 italic">
-              No matching users found
+              {t("chat.searchNoMatchingUsers")}
             </div>
           )}
         </div>

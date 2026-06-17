@@ -269,7 +269,33 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const { api } = await import("@/lib/api"); // import dynamically to avoid circular dependencies
       const params = new URLSearchParams();
       if (filters.q) params.set("q", filters.q);
-      if (filters.from) params.set("from", filters.from);
+
+      // Resolve 'from' username to userId (same pattern as mentions resolution)
+      let fromVal = filters.from;
+      if (fromVal) {
+        const { useRoomStore } = await import("./roomStore");
+        const roomMembers = useRoomStore.getState().members[roomId] || [];
+        const matchMem = roomMembers.find(m => m.username.toLowerCase() === fromVal!.toLowerCase());
+        if (matchMem) {
+          fromVal = matchMem.userId;
+        } else {
+          const { useAuthStore } = await import("./authStore");
+          const currentUser = useAuthStore.getState().user;
+          if (currentUser && currentUser.username.toLowerCase() === fromVal.toLowerCase()) {
+            fromVal = currentUser.id;
+          } else {
+            const { useFriendStore } = await import("./friendStore");
+            const friends = useFriendStore.getState().friends || [];
+            const matchFriend = friends.find(f => f.user.username.toLowerCase() === fromVal!.toLowerCase());
+            if (matchFriend) {
+              fromVal = matchFriend.user.id;
+            }
+            // If not resolved, keep original value — backend will try senderName match
+          }
+        }
+      }
+      if (fromVal) params.set("from", fromVal);
+
       if (filters.has) params.set("has", filters.has);
 
       let mentionsVal = filters.mentions;

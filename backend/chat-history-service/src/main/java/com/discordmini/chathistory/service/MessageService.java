@@ -97,9 +97,12 @@ public class MessageService {
                 .and("isDeleted").is(false)
                 .and("deletedForUsers").nin(userId);
 
-        // Filter: 'from' represents senderName (username typed in search box)
+        // Filter: 'from' may be a resolved userId (UUID) or a senderName (display name)
         if (from != null && !from.trim().isEmpty()) {
-            criteria.and("senderName").regex("^" + Pattern.quote(from.trim()) + "$", "i");
+            String fromTrimmed = from.trim();
+            criteria.andOperator(new Criteria().orOperator(
+                    Criteria.where("senderId").is(fromTrimmed),
+                    Criteria.where("senderName").regex("^" + Pattern.quote(fromTrimmed) + "$", "i")));
         }
 
         Query query = new Query(criteria)
@@ -119,7 +122,6 @@ public class MessageService {
             String typeStr = has.toLowerCase().trim();
             switch (typeStr) {
                 case "image":
-                case "hình ảnh":
                     query.addCriteria(new Criteria().orOperator(
                             Criteria.where("type").is("IMAGE"),
                             Criteria.where("fileName").regex("\\.(jpeg|jpg|gif|png|webp|svg)($|\\?)", "i")));
@@ -133,7 +135,6 @@ public class MessageService {
                     query.addCriteria(Criteria.where("content").regex("https?://", "i"));
                     break;
                 case "file":
-                case "tệp":
                     query.addCriteria(new Criteria().andOperator(
                             Criteria.where("fileKey").exists(true).ne(null).ne(""),
                             Criteria.where("type").nin("IMAGE", "VIDEO", "AUDIO", "STICKER"),
@@ -144,7 +145,6 @@ public class MessageService {
                                             "\\.(jpeg|jpg|gif|png|webp|svg|mp4|webm|mov|mp3|wav|ogg)($|\\?)", "i"))));
                     break;
                 case "audio":
-                case "âm thanh":
                     query.addCriteria(new Criteria().orOperator(
                             Criteria.where("type").is("AUDIO"),
                             Criteria.where("fileName").regex("\\.(mp3|wav|ogg)($|\\?)", "i")));

@@ -23,6 +23,7 @@ const EMPTY_SEARCH_RESULTS: Message[] = [];
 const EMPTY_MEMBERS: any[] = [];
 
 function SearchResultAttachment({ message }: { message: Message }) {
+  const { t } = useTranslation();
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
@@ -58,7 +59,7 @@ function SearchResultAttachment({ message }: { message: Message }) {
     return (
       <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground bg-[#2b2d31]/50 p-2 rounded max-w-full">
         <div className="h-3.5 w-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-        <span className="text-[11px]">Loading attachment...</span>
+        <span className="text-[11px]">{t("chat.searchLoadingAttachment")}</span>
       </div>
     );
   }
