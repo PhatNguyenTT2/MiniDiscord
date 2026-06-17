@@ -125,7 +125,7 @@ export function SearchDropdown({
               type="button"
               onMouseDown={(e) => {
                 e.preventDefault();
-                onSelectFilter?.(t("chat.searchFromUserSub").split(":")[0] + ":");
+                onSelectFilter?.("from:");
               }}
               className="w-full flex items-center gap-3 px-2.5 py-1.5 rounded-md hover:bg-[#2b2d31]/60 text-left transition duration-150 cursor-pointer outline-none border-none"
             >
@@ -135,8 +135,8 @@ export function SearchDropdown({
                   {t("chat.searchFromUserTitle")}
                 </span>
                 <span className="text-[11px] text-[#949ba4]">
-                  <span className="font-semibold text-[#dbdee1]">{t("chat.searchFromUserSub").split(":")[0]}:</span>
-                  {t("chat.searchFromUserSub").split(":")[1]}
+                  <span className="font-semibold text-[#dbdee1]">from:</span>
+                  {" "}{t("chat.searchFromUserTitle")}
                 </span>
               </div>
             </button>
@@ -147,7 +147,7 @@ export function SearchDropdown({
                 type="button"
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  onSelectFilter?.(t("chat.searchInChannelSub").split(":")[0] + ":");
+                  onSelectFilter?.("in:");
                 }}
                 className="w-full flex items-center gap-3 px-2.5 py-1.5 rounded-md hover:bg-[#2b2d31]/60 text-left transition duration-150 cursor-pointer outline-none border-none"
               >
@@ -157,8 +157,8 @@ export function SearchDropdown({
                     {t("chat.searchInChannelTitle")}
                   </span>
                   <span className="text-[11px] text-[#949ba4]">
-                    <span className="font-semibold text-[#dbdee1]">{t("chat.searchInChannelSub").split(":")[0]}:</span>
-                    {t("chat.searchInChannelSub").split(":")[1]}
+                    <span className="font-semibold text-[#dbdee1]">in:</span>
+                    {" "}{t("chat.searchInChannelTitle")}
                   </span>
                 </div>
               </button>
@@ -169,7 +169,7 @@ export function SearchDropdown({
               type="button"
               onMouseDown={(e) => {
                 e.preventDefault();
-                onSelectFilter?.(t("chat.searchHasDataSub").split(":")[0] + ":");
+                onSelectFilter?.("has:");
               }}
               className="w-full flex items-center gap-3 px-2.5 py-1.5 rounded-md hover:bg-[#2b2d31]/60 text-left transition duration-150 cursor-pointer outline-none border-none"
             >
@@ -179,8 +179,8 @@ export function SearchDropdown({
                   {t("chat.searchHasDataTitle")}
                 </span>
                 <span className="text-[11px] text-[#949ba4]">
-                  <span className="font-semibold text-[#dbdee1]">{t("chat.searchHasDataSub").split(":")[0]}:</span>
-                  {t("chat.searchHasDataSub").split(":")[1]}
+                  <span className="font-semibold text-[#dbdee1]">has:</span>
+                  {" "}{t("chat.searchHasDataTitle")}
                 </span>
               </div>
             </button>
@@ -190,7 +190,7 @@ export function SearchDropdown({
               type="button"
               onMouseDown={(e) => {
                 e.preventDefault();
-                onSelectFilter?.(t("chat.searchMentionsUserSub").split(":")[0] + ":");
+                onSelectFilter?.("mentions:");
               }}
               className="w-full flex items-center gap-3 px-2.5 py-1.5 rounded-md hover:bg-[#2b2d31]/60 text-left transition duration-150 cursor-pointer outline-none border-none"
             >
@@ -200,8 +200,8 @@ export function SearchDropdown({
                   {t("chat.searchMentionsUserTitle")}
                 </span>
                 <span className="text-[11px] text-[#949ba4]">
-                  <span className="font-semibold text-[#dbdee1]">{t("chat.searchMentionsUserSub").split(":")[0]}:</span>
-                  {t("chat.searchMentionsUserSub").split(":")[1]}
+                  <span className="font-semibold text-[#dbdee1]">mentions:</span>
+                  {" "}{t("chat.searchMentionsUserTitle")}
                 </span>
               </div>
             </button>
@@ -315,7 +315,7 @@ export function SearchDropdown({
                 type="button"
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  onSelectDataType?.(dt.local);
+                  onSelectDataType?.(dt.key);
                 }}
                 className="w-full flex items-center gap-3 px-2.5 py-1.5 rounded-md hover:bg-[#2b2d31]/60 text-left transition duration-150 cursor-pointer outline-none border-none"
               >

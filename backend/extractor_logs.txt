@@ -1,8 +1,0 @@
-INFO:music-extractor:Loaded YouTube cookies to writable /tmp/cookies.txt
-INFO:     Started server process [1]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://0.0.0.0:3001 (Press CTRL+C to quit)
-ERROR: [youtube] dQw4w9WgXcQ: Requested format is not available. Use --list-formats for a list of available formats
-ERROR:music-extractor:yt-dlp error: ERROR: [youtube] dQw4w9WgXcQ: Requested format is not available. Use --list-formats for a list of available formats
-INFO:     127.0.0.1:49166 - "GET /extract?q=https://www.youtube.com/watch?v=dQw4w9WgXcQ HTTP/1.1" 500 Internal Server Error

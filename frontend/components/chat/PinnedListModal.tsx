@@ -6,6 +6,7 @@ import { useTranslation } from "@/lib/i18n";
 import { useChatStore } from "@/stores/chatStore";
 import { getResolvedFileUrl } from "@/lib/fileResolver";
 import { StatusAvatar } from "@/components/ui/StatusAvatar";
+import { StickerPreview } from "@/components/chat/StickerPreview";
 import { useAuthStore } from "@/stores/authStore";
 import { useRoomStore } from "@/stores/roomStore";
 
@@ -110,6 +111,15 @@ function PinnedMessageItem({
           {msg.content && (
             <div className="mt-1 text-sm text-[#dbdee1] break-words whitespace-normal">
               {msg.content}
+            </div>
+          )}
+
+          {/* Sticker preview */}
+          {msg.stickerIds && msg.stickerIds.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {msg.stickerIds.map((sid: string) => (
+                <StickerPreview key={sid} stickerId={sid} />
+              ))}
             </div>
           )}
 

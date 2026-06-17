@@ -100,17 +100,17 @@ export default function DmChatPage() {
       return { activeFilter: "filters", filterQuery: "" };
     }
 
-    if (lastToken.startsWith("từ:") || lastToken.startsWith("from:")) {
-      return { activeFilter: "from-user", filterQuery: lastToken.slice(lastToken.indexOf(":") + 1) };
+    if (lastToken.startsWith("from:")) {
+      return { activeFilter: "from-user", filterQuery: lastToken.slice(5) };
     }
-    if (lastToken.startsWith("trong:") || lastToken.startsWith("in:")) {
-      return { activeFilter: "in-channel", filterQuery: lastToken.slice(lastToken.indexOf(":") + 1) };
+    if (lastToken.startsWith("in:")) {
+      return { activeFilter: "in-channel", filterQuery: lastToken.slice(3) };
     }
-    if (lastToken.startsWith("có:") || lastToken.startsWith("has:")) {
-      return { activeFilter: "has-data", filterQuery: lastToken.slice(lastToken.indexOf(":") + 1) };
+    if (lastToken.startsWith("has:")) {
+      return { activeFilter: "has-data", filterQuery: lastToken.slice(4) };
     }
-    if (lastToken.startsWith("đề cập:") || lastToken.startsWith("mentions:")) {
-      return { activeFilter: "mentions", filterQuery: lastToken.slice(lastToken.indexOf(":") + 1) };
+    if (lastToken.startsWith("mentions:")) {
+      return { activeFilter: "mentions", filterQuery: lastToken.slice(9) };
     }
 
     return { activeFilter: "general", filterQuery: lastToken };

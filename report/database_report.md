@@ -57,33 +57,33 @@ Chịu trách nhiệm quản lý tài khoản người dùng, hồ sơ cá nhân
 erDiagram
     users {
         uuid id PK
-        varchar username UK "Unique, length 50"
-        varchar email UK "Unique, length 100"
+        varchar username "Unique - length 50"
+        varchar email "Unique - length 100"
         varchar password_hash
-        varchar display_name "Length 100"
-        varchar avatar_url "Length 500"
-        varchar status "Default OFFLINE"
-        varchar role "Enum: USER, ADMIN"
+        varchar display_name "length 100"
+        varchar avatar_url "length 500"
+        varchar status "default OFFLINE"
+        varchar role "USER or ADMIN"
         timestamp created_at
         timestamp updated_at
         timestamp last_seen_at
-        boolean is_active "Default TRUE"
+        boolean is_active "default TRUE"
         bigint version "Optimistic Locking"
     }
 
     friendships {
         uuid id PK
-        uuid requester_id FK "References users"
-        uuid receiver_id FK "References users"
-        varchar status "Enum: PENDING, ACCEPTED, BLOCKED"
+        uuid requester_id FK
+        uuid receiver_id FK
+        varchar status "PENDING or ACCEPTED or BLOCKED"
         timestamp created_at
         timestamp updated_at
     }
 
     notifications {
         uuid id PK
-        uuid user_id FK "References users"
-        varchar type "Enum: FRIEND_REQUEST, MESSAGE, etc."
+        uuid user_id FK
+        varchar type "FRIEND_REQUEST etc"
         uuid sender_id
         varchar sender_name
         varchar sender_avatar
@@ -91,13 +91,13 @@ erDiagram
         varchar room_name
         uuid channel_id
         varchar channel_name
-        varchar content "Length 1000"
+        varchar content "length 1000"
         boolean is_read
-        boolean is_processed "Default FALSE"
+        boolean is_processed "default FALSE"
         timestamp created_at
     }
 
-    users ||--o{ friendships : "requests/receives"
+    users ||--o{ friendships : "requests-receives"
     users ||--o{ notifications : "has"
 ```
 
@@ -117,66 +117,66 @@ Quản lý thực thể Máy chủ (Rooms), các Kênh (Channels), phân quyền
 erDiagram
     rooms {
         uuid id PK
-        varchar name "Length 100"
-        varchar description "Length 500"
-        varchar icon_url "Length 500"
-        varchar type "Enum: SERVER, DM"
+        varchar name "length 100"
+        varchar description "length 500"
+        varchar icon_url "length 500"
+        varchar type "SERVER or DM"
         uuid owner_id
         timestamp created_at
         timestamp updated_at
-        boolean is_active "Default TRUE"
+        boolean is_active "default TRUE"
         bigint version
     }
 
     channels {
         uuid id PK
-        uuid room_id FK "M-N relation via rooms"
-        varchar name "Length 100"
-        varchar type "Enum: TEXT, VOICE"
-        varchar topic "Length 1024"
-        boolean is_private "Default FALSE"
-        integer position "Default 0"
+        uuid room_id FK
+        varchar name "length 100"
+        varchar type "TEXT or VOICE"
+        varchar topic "length 1024"
+        boolean is_private "default FALSE"
+        integer position "default 0"
         timestamp created_at
     }
 
     room_participants {
         uuid id PK
-        uuid user_id "Replicated from UserService"
-        uuid room_id FK "References rooms"
-        varchar role "Enum: OWNER, ADMIN, MEMBER"
-        uuid role_id FK "References roles (nullable)"
+        uuid user_id FK
+        uuid room_id FK
+        varchar role "OWNER or ADMIN or MEMBER"
+        uuid role_id FK "nullable"
         timestamp joined_at
         timestamp muted_until
     }
 
     invite_links {
         uuid id PK
-        uuid room_id FK "References rooms"
+        uuid room_id FK
         uuid creator_id
-        varchar code UK "Length 8"
-        integer uses "Default 0"
+        varchar code "Unique - length 8"
+        integer uses "default 0"
         timestamp expires_at
         timestamp created_at
     }
 
     roles {
         uuid id PK
-        uuid room_id FK "References rooms"
-        varchar name "Length 100"
-        varchar color "Length 20"
-        integer position "Default 0"
+        uuid room_id FK
+        varchar name "length 100"
+        varchar color "length 20"
+        integer position "default 0"
     }
 
     role_permissions {
         uuid id PK
-        uuid role_id FK "References roles"
-        varchar permission_key "Enum: PermissionKey"
-        boolean is_allowed "Default FALSE"
+        uuid role_id FK
+        varchar permission_key "PermissionKey enum"
+        boolean is_allowed "default FALSE"
     }
 
     room_bans {
         uuid id PK
-        uuid room_id FK "References rooms"
+        uuid room_id FK
         uuid user_id
         uuid banned_by
         text reason
@@ -185,17 +185,17 @@ erDiagram
 
     sticker_packs {
         uuid id PK
-        varchar name "Length 100"
-        varchar cover_file_key "Length 512"
+        varchar name "length 100"
+        varchar cover_file_key "length 512"
         timestamp created_at
     }
 
     stickers {
         uuid id PK
-        uuid pack_id FK "References sticker_packs"
-        varchar name "Length 100"
-        varchar file_key "Length 512"
-        varchar format_type "e.g., PNG, WEBP"
+        uuid pack_id FK
+        varchar name "length 100"
+        varchar file_key "length 512"
+        varchar format_type "PNG or WEBP"
     }
 
     rooms ||--o{ channels : "contains"
