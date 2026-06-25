@@ -161,6 +161,7 @@
     "typingSingle": "{username} is typing...",
     "typingDouble": "{username1} and {username2} are typing...",
     "typingMultiple": "Several people are typing...",
+    "botThinking": "{name} is thinking...",
     "editMessage": "Edit Message",
     "forward": "Forward",
     "copyText": "Copy Text",
@@ -682,6 +683,9 @@
     "slashPlay": "Use /play <url or keyword> to play music",
     "slashStop": "Use /stop to stop playback",
     "slashSkip": "Use /skip to skip to next track",
-    "slashQueue": "Use /queue to view the queue"
+    "slashQueue": "Use /queue to view the queue",
+    "slashSummarize": "Summarize the last 50 messages in this channel",
+    "slashUnread": "Summarize unread messages since your last visit",
+    "botThinking": "{name} is thinking..."
   }
 }

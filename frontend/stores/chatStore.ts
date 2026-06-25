@@ -488,7 +488,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => {
       const users = state.typingUsers[channelId] || [];
       const existing = users.find(u => u.userId === userId);
-      const expiresAt = Date.now() + 5000; // Increased to 5s to overlap 3s emit throttle
+      const isBot = userId === "music-bot" || username === "music-bot";
+      const duration = isBot ? 15000 : 5000;
+      const expiresAt = Date.now() + duration;
 
       let nextUsers;
       if (existing) {
@@ -500,7 +502,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Schedule cleanup
       setTimeout(() => {
         useChatStore.getState().clearTyping(channelId, userId);
-      }, 5000);
+      }, duration);
 
       return {
         typingUsers: {

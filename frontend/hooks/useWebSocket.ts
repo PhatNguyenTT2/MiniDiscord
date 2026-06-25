@@ -496,6 +496,34 @@ function handleNotification(msg: IMessage) {
         console.log("[STOMP] INBOX_UPDATE received — refetching notifications");
         useInboxStore.getState().fetchNotifications();
         break;
+      case "SYSTEM_MESSAGE_NEW":
+        console.log("[STOMP] SYSTEM_MESSAGE_NEW received:", data);
+        if (data.channelId) {
+          useChatStore.getState().receiveMessage(data.channelId, {
+            id: data.messageId,
+            messageId: data.messageId,
+            roomId: data.roomId,
+            channelId: data.channelId,
+            senderId: data.senderId || "music-bot",
+            senderName: data.senderName || "Music Bot",
+            senderAvatar: null,
+            type: "SYSTEM",
+            content: data.content,
+            fileKey: null,
+            fileName: null,
+            fileSize: null,
+            reactions: [],
+            isEdited: false,
+            isDeleted: false,
+            isPinned: false,
+            isForwarded: false,
+            editedAt: null,
+            createdAt: data.createdAt || new Date().toISOString(),
+            replyTo: null,
+            mentions: [],
+          });
+        }
+        break;
       default:
         console.log("[STOMP] Unknown notification type:", type);
     }

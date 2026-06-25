@@ -10,6 +10,7 @@ import com.discordmini.messaging.service.MusicExtractionService;
 import com.discordmini.messaging.service.MusicQueueService;
 import com.discordmini.messaging.service.VoiceStateService;
 import com.discordmini.messaging.service.PresenceService;
+import com.discordmini.messaging.service.BotFeedbackService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.bson.types.ObjectId;
@@ -34,6 +35,7 @@ public class VoiceWebSocketController {
   private final PresenceService presenceService;
   private final MusicQueueService musicQueueService;
   private final MusicExtractionService musicExtractionService;
+  private final BotFeedbackService botFeedbackService;
 
   @MessageMapping("/voice.music.command")
   public void handleMusicCommand(@Payload MusicCommandDTO dto, Principal principal) {
@@ -545,47 +547,6 @@ public class VoiceWebSocketController {
   }
 
   private void sendBotFeedback(String roomId, String channelId, String content) {
-    if (channelId == null || channelId.isEmpty())
-      return;
-
-    MessageEvent event = MessageEvent.builder()
-        .id(new org.bson.types.ObjectId().toHexString())
-        .messageId(UUID.randomUUID().toString())
-        .roomId(roomId)
-        .channelId(channelId)
-        .senderId("music-bot")
-        .senderName("Music Bot")
-        .senderAvatar("music-bot")
-        .content(content)
-        .type("USER")
-        .createdAt(Instant.now())
-        .build();
-    try {
-      messageRouter.publishToHistory(event);
-
-      ChatMessage chatMsg = ChatMessage.builder()
-          .id(event.getId())
-          .messageId(event.getMessageId())
-          .roomId(event.getRoomId())
-          .channelId(event.getChannelId())
-          .senderId(event.getSenderId())
-          .senderName(event.getSenderName())
-          .senderAvatar(event.getSenderAvatar())
-          .content(event.getContent())
-          .type(event.getType())
-          .createdAt(event.getCreatedAt().toString())
-          .build();
-      messageRouter.fanOutToMembers(chatMsg, roomId);
-    } catch (Exception e) {
-      log.error("Failed to send bot chat feedback", e);
-    }
-  }
-
-  private String formatDuration(long seconds) {
-    if (seconds < 60)
-      return seconds + " giây";
-    long mins = seconds / 60;
-    long secs = seconds % 60;
-    return mins + " phút " + (secs > 0 ? secs + " giây" : "");
+    botFeedbackService.sendBotFeedback(roomId, channelId, content);
   }
 }

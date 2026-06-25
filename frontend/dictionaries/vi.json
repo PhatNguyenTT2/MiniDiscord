@@ -161,6 +161,7 @@
     "typingSingle": "{username} đang nhập...",
     "typingDouble": "{username1} và {username2} đang nhập...",
     "typingMultiple": "Nhiều người đang nhập...",
+    "botThinking": "{name} đang suy nghĩ...",
     "editMessage": "Chỉnh sửa tin nhắn",
     "forward": "Chuyển tiếp",
     "copyText": "Sao chép văn bản",
@@ -682,6 +683,9 @@
     "slashPlay": "Dùng lệnh /play <link hoặc từ khóa> để phát nhạc",
     "slashStop": "Dùng lệnh /stop để dừng phát nhạc",
     "slashSkip": "Dùng lệnh /skip để bỏ qua bài hát",
-    "slashQueue": "Dùng lệnh /queue để xem hàng đợi"
+    "slashQueue": "Dùng lệnh /queue để xem hàng đợi",
+    "slashSummarize": "Tóm tắt 50 tin nhắn gần nhất trong kênh",
+    "slashUnread": "Tóm tắt các tin nhắn chưa đọc",
+    "botThinking": "{name} đang suy nghĩ..."
   }
 }

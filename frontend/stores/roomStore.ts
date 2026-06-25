@@ -126,9 +126,28 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         const { members: page, hasMore } = res.data.data;
 
         set((state) => {
+          let pageWithBot = page;
+          const roomObj = state.rooms.find((r) => r.id === roomId);
+          const isDm = roomObj?.type === "DM";
+          if (!isDm && !beforeJoinedAt) {
+            const hasBot = page.some((m) => m.userId === "music-bot");
+            if (!hasBot) {
+              const chatbotMember: MemberDetailResponse = {
+                userId: "music-bot",
+                username: "music-bot",
+                displayName: "Music Bot",
+                avatarUrl: null,
+                status: "ONLINE",
+                role: "MEMBER",
+                joinedAt: new Date(0).toISOString()
+              };
+              pageWithBot = [...page, chatbotMember];
+            }
+          }
+
           const nextMembers = {
             ...state.members,
-            [roomId]: beforeJoinedAt ? [...(state.members[roomId] || []), ...page] : page,
+            [roomId]: beforeJoinedAt ? [...(state.members[roomId] || []), ...pageWithBot] : pageWithBot,
           };
           saveCache(state.rooms, state.channels, nextMembers);
           return {

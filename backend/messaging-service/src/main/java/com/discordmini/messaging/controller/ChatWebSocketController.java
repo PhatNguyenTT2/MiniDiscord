@@ -7,9 +7,12 @@ import com.discordmini.messaging.model.dto.TypingEvent;
 import com.discordmini.messaging.service.MessageRouter;
 import com.discordmini.messaging.service.RateLimiter;
 import com.discordmini.messaging.service.RedisPubSubService;
+import com.discordmini.messaging.service.AiChatbotService;
+import com.discordmini.messaging.model.dto.BotCommandDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Controller;
 
 import java.security.Principal;
@@ -30,6 +33,7 @@ public class ChatWebSocketController {
     private final MembershipClient membershipClient;
     private final MessageRouter messageRouter;
     private final RedisPubSubService redisPubSubService;
+    private final AiChatbotService aiChatbotService;
 
     @MessageMapping("/chat.send")
     public void sendChat(ChatMessage message, Principal principal) {
@@ -107,6 +111,27 @@ public class ChatWebSocketController {
 
         // 6. Fan-out to connected members across instances
         messageRouter.fanOutToMembers(message, message.getRoomId());
+
+        // 7. Check if bot is mentioned in this message to execute async reply
+        if (mentions != null && mentions.contains("music-bot") && message.getContent() != null) {
+            String rawPrompt = message.getContent()
+                    .replaceAll("<@music-bot>", "")
+                    .replaceAll("@music-bot", "")
+                    .trim();
+            aiChatbotService.processBotMention(
+                    userId,
+                    message.getRoomId(),
+                    message.getChannelId(),
+                    rawPrompt,
+                    message.getSenderName());
+        }
+    }
+
+    @MessageMapping("/chat.botCommand")
+    public void handleBotCommand(@Payload BotCommandDTO dto, Principal principal) {
+        String userId = principal.getName();
+        membershipClient.verifyMembership(userId, dto.getRoomId());
+        aiChatbotService.executeSlashCommand(userId, dto.getRoomId(), dto.getChannelId(), dto.getCommand());
     }
 
     @MessageMapping("/chat.typing")

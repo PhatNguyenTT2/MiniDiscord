@@ -263,6 +263,33 @@ export function MessageInput({
       return;
     }
 
+    // Intercept chatbot AI commands (summarize, unread)
+    if (/^\/(summarize|unread)\b/.test(trimmed)) {
+      const match = trimmed.match(/^\/(\w+)(?:\s+(.*))?$/);
+      if (match) {
+        const command = match[1];
+        const token = useAuthStore.getState().token;
+        if (token) {
+          console.log(`[MessageInput] Intercepted chatbot command: /${command} inside channel ${channelId}`);
+          getStompClient(token).publish({
+            destination: "/app/chat.botCommand",
+            body: JSON.stringify({
+              roomId,
+              channelId,
+              command
+            })
+          });
+        }
+      }
+      setMessage("");
+      setAttachment(null);
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+        setPreviewUrl(null);
+      }
+      return;
+    }
+
     if (message.length > 2000) {
       setRateLimitCooldown(3);
       const timer = setInterval(() => {
@@ -694,6 +721,17 @@ export function MessageInput({
               {typingUsers.length === 1 && (
                 <span>
                   {(() => {
+                    const isBot = typingUsers[0].userId === "music-bot" || typingUsers[0].username === "music-bot";
+                    if (isBot) {
+                      const template = t("chat.botThinking") || "{name} is thinking...";
+                      const parts = template.split(/(\{name\})/);
+                      return parts.map((part, i) => {
+                        if (part === "{name}") {
+                          return <strong key={i} className="text-foreground">Music Bot</strong>;
+                        }
+                        return part;
+                      });
+                    }
                     const template = t("chat.typingSingle");
                     const parts = template.split(/(\{username\})/);
                     return parts.map((part, i) => {

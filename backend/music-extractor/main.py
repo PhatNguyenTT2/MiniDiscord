@@ -3,13 +3,30 @@ from fastapi.responses import JSONResponse
 import yt_dlp
 import uuid
 import logging
-
-app = FastAPI(title="MiniDiscord Music Extractor")
-logging.basicConfig(level=logging.INFO)
-log = logging.getLogger("music-extractor")
-
 import shutil
 import os
+from huggingface_hub import InferenceClient
+from pydantic import BaseModel
+from typing import List, Optional
+
+app = FastAPI(title="MiniDiscord AI Worker")
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("ai-worker")
+
+HF_TOKEN = os.getenv("HF_ACCESS_TOKEN")
+client = InferenceClient(token=HF_TOKEN)
+
+class MessageItem(BaseModel):
+    sender: str
+    content: str
+
+class ChatPayload(BaseModel):
+    prompt: str
+    senderName: Optional[str] = "User"
+    history: Optional[List[MessageItem]] = None
+
+class SummarizePayload(BaseModel):
+    messages: List[MessageItem]
 
 YDL_OPTS = {
     "format": "bestaudio/best",
@@ -95,6 +112,65 @@ def extract(q: str = Query(..., description="Link YouTube hoặc từ khóa tìm
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/ai/chat")
+async def ai_chat(payload: ChatPayload):
+    try:
+        user_prompt = payload.prompt
+        system_prompt = (
+            "You are a helpful and friendly AI Assistant in a Discord-like server named MiniDiscord. "
+            "Keep responses concise, interactive, and friendly. "
+            "Always respond in the exact language the user used (such as English or Vietnamese)."
+        )
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        if payload.history:
+            formatted_history = "Here is the recent chat history in this channel for context:\n"
+            for msg in payload.history:
+                formatted_history += f"[{msg.sender}]: {msg.content}\n"
+            messages.append({"role": "user", "content": formatted_history + "\nUnderstood. Please perform the user's request based on this context if relevant."})
+            messages.append({"role": "assistant", "content": "I have read the history. How can I help you?"})
+            
+        messages.append({"role": "user", "content": user_prompt})
+        
+        response = client.chat_completion(
+            model="Qwen/Qwen2.5-7B-Instruct",
+            messages=messages,
+            max_tokens=256
+        )
+        bot_response = response.choices[0].message.content
+        return {"response": bot_response.strip()}
+    except Exception as e:
+        log.error(f"Hugging Face Inference Chat Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/ai/summarize")
+async def ai_summarize(payload: SummarizePayload):
+    try:
+        if not payload.messages:
+            return {"summary": "Không có tin nhắn nào để tóm tắt."}
+        formatted_chat = ""
+        for msg in payload.messages:
+            formatted_chat += f"[{msg.sender}]: {msg.content}\n"
+        system_prompt = (
+            "You are an AI assistant. Summarize the conversation log concisely as a bulleted list. "
+            "Always reply in the same language as the conversation log (e.g. Vietnamese if chat log is Vietnamese, English if English)."
+        )
+        user_prompt = f"Here is the chat conversation:\n{formatted_chat}\nProvide a brief summary of the conversation."
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        response = client.chat_completion(
+            model="Qwen/Qwen2.5-7B-Instruct",
+            messages=messages,
+            max_tokens=256
+        )
+        summary = response.choices[0].message.content
+        return {"summary": summary.strip()}
+    except Exception as e:
+        log.error(f"Hugging Face Inference Summarize Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "music-extractor", "engine": "yt-dlp"}
+    return {"status": "ok", "service": "ai-worker", "engine": "yt-dlp+huggingface"}

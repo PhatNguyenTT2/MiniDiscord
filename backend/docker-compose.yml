@@ -318,10 +318,12 @@ services:
       - ./music-extractor/cookies.txt:/app/cookies.txt:ro
     expose:
       - "3001"
+    environment:
+      - HF_ACCESS_TOKEN=${HF_ACCESS_TOKEN:-}
     deploy:
       resources:
         limits:
-          memory: 128M
+          memory: 256M
     networks:
       - minidiscord-net
     restart: "on-failure:3"

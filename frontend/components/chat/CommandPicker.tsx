@@ -3,7 +3,7 @@
 import React, { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/i18n";
-import { Disc, Music, Square, FastForward } from "lucide-react";
+import { Disc, Music, Square, FastForward, FileText, BookOpen } from "lucide-react";
 
 export interface CommandDef {
   name: string;
@@ -53,6 +53,18 @@ export function CommandPicker({
       description: t("music.slashQueue") || "Hiển thị danh sách hàng đợi các bài hát",
       botName: "Music Bot",
       icon: Disc,
+    },
+    {
+      name: "summarize",
+      description: t("music.slashSummarize") || "Summarize the last 50 messages in this channel",
+      botName: "Music Bot",
+      icon: FileText,
+    },
+    {
+      name: "unread",
+      description: t("music.slashUnread") || "Summarize unread messages since your last visit",
+      botName: "Music Bot",
+      icon: BookOpen,
     },
   ];
 
