@@ -212,8 +212,13 @@ function ParticipantCard({
       </div>
 
       {!showVideo && (
-        <span className="text-[13px] font-bold text-[#dbdee1] mt-3 max-w-[85%] truncate block text-center select-none">
-          {displayName}
+        <span className="text-[13px] font-bold text-[#dbdee1] mt-3 max-w-[85%] truncate select-none flex items-center justify-center gap-1.5 w-full">
+          <span>{displayName}</span>
+          {p.userId === "music-bot" && (
+            <span className="bg-[#5865f2] text-white text-[8px] px-1 py-0.2 rounded font-black uppercase tracking-wider scale-95 leading-none">
+              BOT
+            </span>
+          )}
         </span>
       )}
       {p.statusText && !showVideo && (

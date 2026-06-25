@@ -18,4 +18,5 @@ public class VoiceCallEvent {
   private String callerAvatar;
   private String targetUserId;
   private String action; // "RING" | "ACCEPT" | "DECLINE" | "END" | "MISSED"
+  private boolean videoOn;
 }

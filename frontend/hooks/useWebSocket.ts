@@ -551,6 +551,7 @@ function handleVoiceMessage(msg: IMessage) {
           callerName: data.callerName || data.data?.callerName,
           callerAvatar: data.callerAvatar || data.data?.callerAvatar || null,
           targetUserId: data.targetUserId || data.data?.targetUserId,
+          videoOn: data.videoOn || data.data?.videoOn || false,
         });
         break;
       case "CALL_INCOMING":
@@ -561,6 +562,7 @@ function handleVoiceMessage(msg: IMessage) {
           callerName: data.callerName,
           callerAvatar: data.callerAvatar,
           targetUserId: data.targetUserId,
+          videoOn: data.videoOn || false,
         });
         break;
       case "CALL_ACCEPTED":
@@ -571,6 +573,7 @@ function handleVoiceMessage(msg: IMessage) {
           callerName: data.callerName,
           callerAvatar: data.callerAvatar,
           targetUserId: data.targetUserId,
+          videoOn: data.videoOn || false,
         });
         break;
       case "CALL_DECLINED":

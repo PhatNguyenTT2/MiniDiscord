@@ -1,11 +1,15 @@
 package com.discordmini.messaging.service;
 
+import com.discordmini.common.event.MessageEvent;
+import com.discordmini.messaging.model.dto.ChatMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.bson.types.ObjectId;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 
 @Slf4j
@@ -14,6 +18,8 @@ import java.util.*;
 public class VoiceStateService {
 
   private final StringRedisTemplate redisTemplate;
+  private final MusicQueueService musicQueueService;
+  private final MessageRouter messageRouter;
   private static final int MAX_PARTICIPANTS = 6;
 
   // ── Key Patterns ──
@@ -95,6 +101,51 @@ public class VoiceStateService {
     Long remaining = redisTemplate.opsForSet().size(channelKey);
     if (remaining != null && remaining == 0) {
       redisTemplate.delete(channelKey);
+
+      // Auto-leave Bot logic when channel is empty
+      try {
+        Map<String, Object> musicState = musicQueueService.getState(roomId);
+        if (musicState != null && Boolean.TRUE.equals(musicState.get("isBotActive"))) {
+          log.info("Last human left voice channel {}. Automatically stopping bot in room {}", channelId, roomId);
+          musicQueueService.clearState(roomId);
+
+          messageRouter.fanOutSystemEvent(Map.of(
+              "eventType", "MUSIC_STOP",
+              "roomId", roomId,
+              "channelId", channelId), roomId);
+
+          // Optional: send text feedback to the voice chat
+          MessageEvent event = MessageEvent.builder()
+              .id(new ObjectId().toHexString())
+              .messageId(UUID.randomUUID().toString())
+              .roomId(roomId)
+              .channelId(channelId)
+              .senderId("music-bot")
+              .senderName("Music Bot")
+              .senderAvatar("music-bot")
+              .content("⏹️ All members left. Bot leaving the voice channel.")
+              .type("USER")
+              .createdAt(Instant.now())
+              .build();
+          messageRouter.publishToHistory(event);
+
+          ChatMessage chatMsg = ChatMessage.builder()
+              .id(event.getId())
+              .messageId(event.getMessageId())
+              .roomId(event.getRoomId())
+              .channelId(event.getChannelId())
+              .senderId(event.getSenderId())
+              .senderName(event.getSenderName())
+              .senderAvatar(event.getSenderAvatar())
+              .content(event.getContent())
+              .type(event.getType())
+              .createdAt(event.getCreatedAt().toString())
+              .build();
+          messageRouter.fanOutToMembers(chatMsg, roomId);
+        }
+      } catch (Exception e) {
+        log.error("Failed to auto-clean music bot for room {}: {}", roomId, e.getMessage());
+      }
     }
   }
 
@@ -226,5 +277,28 @@ public class VoiceStateService {
 
   public Map<Object, Object> getCallState(String roomId) {
     return redisTemplate.opsForHash().entries("voice:call:" + roomId);
+  }
+
+  public void initDmCallVoiceState(String userId, String roomId) {
+    String userKey = "voice:user:" + userId;
+    if (Boolean.TRUE.equals(redisTemplate.hasKey(userKey))) {
+      log.debug("Voice state already exists for user {}, skipping DM init", userId);
+      return;
+    }
+    Map<String, String> userState = Map.of(
+        "roomId", roomId,
+        "channelId", "dm",
+        "muted", "false",
+        "deafened", "false",
+        "cameraOn", "false");
+    redisTemplate.opsForHash().putAll(userKey, userState);
+    redisTemplate.expire(userKey, Duration.ofDays(1));
+    log.info("Initialized DM call voice state for user {} in room {}", userId, roomId);
+  }
+
+  public void clearDmCallVoiceState(String userId) {
+    String userKey = "voice:user:" + userId;
+    redisTemplate.delete(userKey);
+    log.debug("Cleared DM call voice state for user {}", userId);
   }
 }

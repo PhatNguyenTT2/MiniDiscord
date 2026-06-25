@@ -164,8 +164,13 @@ function ChannelItem({
                     status="ONLINE"
                     size="sm"
                   />
-                  <span className="text-[13px] text-[#949ba4] group-hover/participant:text-white font-medium truncate select-none">
-                    {displayName}
+                  <span className="text-[13px] text-[#949ba4] group-hover/participant:text-white font-medium truncate select-none flex items-center gap-1.5">
+                    <span>{displayName}</span>
+                    {p.userId === "music-bot" && (
+                      <span className="bg-[#5865f2] text-white text-[8px] px-1 py-0.2 rounded font-black uppercase tracking-wider scale-90 origin-left">
+                        BOT
+                      </span>
+                    )}
                   </span>
                   <div className="flex items-center gap-0.5 ml-auto shrink-0">
                     {p.deafened && <HeadphoneOff className="h-3.5 w-3.5 text-[#ed4245]" />}

@@ -6,6 +6,8 @@ import { useTranslation } from "@/lib/i18n";
 import { useFriendStore } from "@/stores/friendStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useRoomStore } from "@/stores/roomStore";
+import { useVoiceStore } from "@/stores/voiceStore";
+import { getStompClient } from "@/lib/websocket";
 import { StatusAvatar } from "@/components/ui/StatusAvatar";
 import { useHasPermission } from "@/hooks/useHasPermission";
 import { api } from "@/lib/api";
@@ -65,6 +67,33 @@ export function UserProfileCard({
   // Permissions
   const canBan = useHasPermission("BAN_MEMBER", roomId);
   const canRestrict = useHasPermission("RESTRICT_MEMBER", roomId);
+  const rooms = useRoomStore((s) => s.rooms);
+  const activeRoom = rooms.find((r) => r.id === roomId);
+  const isOwner = activeRoom?.ownerId === currentUser?.id;
+  const isAdmin = useHasPermission("MANAGE_CHANNEL", roomId) || isOwner;
+
+  const token = useAuthStore((s) => s.token);
+  const currentChannel = useVoiceStore((s) => s.currentChannel);
+
+  const handleKickBot = () => {
+    if (!token || !currentChannel) return;
+    setLoadingAction("kick");
+    try {
+      getStompClient(token).publish({
+        destination: "/app/voice.music.command",
+        body: JSON.stringify({
+          roomId,
+          channelId: currentChannel.channelId,
+          command: "stop"
+        })
+      });
+      onClose();
+    } catch (err) {
+      console.error("[UserProfileCard] Failed to kick bot:", err);
+    } finally {
+      setLoadingAction(null);
+    }
+  };
 
   // Target Member Server Mute state
   const members = useRoomStore((s) => s.members[roomId]) || [];
@@ -235,7 +264,22 @@ export function UserProfileCard({
 
         {/* Action Button Row */}
         <div className="flex items-center justify-end gap-1.5 h-10 w-full pt-1">
-          {!isSelf && (
+          {userId === "music-bot" && isAdmin && (
+            <button
+              onClick={handleKickBot}
+              disabled={loadingAction !== null}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-[#da373c] text-white hover:bg-[#a92b2f] transition cursor-pointer select-none active:scale-95 disabled:opacity-50"
+            >
+              {loadingAction === "kick" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <UserMinus className="h-3.5 w-3.5" />
+              )}
+              Kick Bot
+            </button>
+          )}
+
+          {!isSelf && userId !== "music-bot" && (
             <>
               {relationType === "NONE" && (
                 <button
@@ -370,10 +414,15 @@ export function UserProfileCard({
       <div className="px-4 pb-4">
         {/* Name and Tag */}
         <div className="bg-[#111214] p-3 rounded-lg border border-[#232428]">
-          <p className="text-[17px] font-bold text-white font-sans truncate leading-none">
-            {resolvedName}
-          </p>
-          <p className="text-xs text-[#b5bac1] mt-1 select-all font-sans">
+          <div className="text-[17px] font-bold text-white font-sans truncate leading-none flex items-center gap-1.5">
+            <span>{resolvedName}</span>
+            {userId === "music-bot" && (
+              <span className="bg-[#5865f2] text-white text-[9px] px-1.5 py-0.5 rounded font-black uppercase tracking-wider select-none leading-none scale-95 font-sans">
+                BOT
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-[#b5bac1] mt-1.5 select-all font-sans">
             @{username}
           </p>
         </div>

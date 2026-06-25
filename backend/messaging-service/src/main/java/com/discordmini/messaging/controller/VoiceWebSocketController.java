@@ -358,7 +358,9 @@ public class VoiceWebSocketController {
             .callerName(event.getCallerName())
             .callerAvatar(event.getCallerAvatar())
             .action("RING")
+            .videoOn(event.isVideoOn())
             .build());
+    voiceStateService.initDmCallVoiceState(callerId, event.getRoomId());
     log.info("DM call initiated from caller {} to target target user {}", callerId, targetUserId);
   }
 
@@ -375,6 +377,7 @@ public class VoiceWebSocketController {
 
     // Transition to ACTIVE (preserves startedAt for duration calc in endCall)
     voiceStateService.setActiveCallState(roomId);
+    voiceStateService.initDmCallVoiceState(principal.getName(), roomId);
 
     messagingTemplate.convertAndSendToUser(
         callerId, "/queue/voice",
@@ -468,6 +471,12 @@ public class VoiceWebSocketController {
       callerName = (String) callState.get("callerName");
       callerAvatar = (String) callState.get("callerAvatar");
       status = (String) callState.get("status");
+      // Clean up DM voice states for both peers
+      voiceStateService.clearDmCallVoiceState(callerId);
+      String targetUserId = (String) callState.get("targetUserId");
+      if (targetUserId != null) {
+        voiceStateService.clearDmCallVoiceState(targetUserId);
+      }
       voiceStateService.clearCallState(roomId);
     }
 

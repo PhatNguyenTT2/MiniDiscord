@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/Avatar";
 import { useState, useEffect } from "react";
 import { getResolvedFileUrl } from "@/lib/fileResolver";
+import { Disc } from "lucide-react";
 
 type UserStatus = "ONLINE" | "OFFLINE" | "IDLE" | "DND";
 type AvatarSize = "sm" | "md" | "lg" | "xl";
@@ -71,14 +72,23 @@ export function StatusAvatar({
   }, [src, isB2Key, getResolvedFileUrl]);
 
   const displayUrl = isB2Key ? resolvedUrl : src;
+  const isMusicBot = src === "music-bot" || fallback === "Music Bot" || fallback === "music-bot";
 
   return (
     <div className={cn("relative inline-flex", className)}>
       <Avatar className={sizeClasses[size]}>
-        {displayUrl && <AvatarImage src={displayUrl} alt={fallback} />}
-        <AvatarFallback className="text-xs">
-          {fallback.slice(0, 2).toUpperCase()}
-        </AvatarFallback>
+        {isMusicBot ? (
+          <div className="h-full w-full bg-[#111214] flex items-center justify-center text-[#23a55a] rounded-full border border-[#23a55a]/30">
+            <Disc className={cn("animate-[spin_8s_linear_infinite]", size === "xl" ? "h-12 w-12" : "h-2/3 w-2/3")} />
+          </div>
+        ) : (
+          <>
+            {displayUrl && <AvatarImage src={displayUrl} alt={fallback} />}
+            <AvatarFallback className="text-xs">
+              {fallback.slice(0, 2).toUpperCase()}
+            </AvatarFallback>
+          </>
+        )}
       </Avatar>
       {status && (
         <span

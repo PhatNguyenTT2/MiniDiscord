@@ -16,7 +16,6 @@ interface MusicPlayerBarProps {
 
 export function MusicPlayerBar({ roomId, channelId }: MusicPlayerBarProps) {
   const { t } = useTranslation();
-  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const currentTrack = useVoiceStore((s) => s.currentMusicTrack);
   const token = useAuthStore((s) => s.token);
@@ -27,86 +26,10 @@ export function MusicPlayerBar({ roomId, channelId }: MusicPlayerBarProps) {
   const setMemberVolume = useVoiceStore((s) => s.setMemberVolume);
   const toggleMemberMute = useVoiceStore((s) => s.toggleMemberMute);
 
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-
-  // 1. Core audio source, offset sync on track change
-  useEffect(() => {
-    if (!currentTrack || !currentTrack.directUrl || !audioRef.current) {
-      setIsPlaying(false);
-      return;
-    }
-
-    const audio = audioRef.current;
-
-    // Stop and load new URL
-    audio.pause();
-    audio.src = currentTrack.directUrl;
-    audio.load();
-
-    // Calculate latency offset: (Date.now() - startTime) / 1000
-    const offsetSeconds = (Date.now() - currentTrack.startTime) / 1000;
-
-    if (offsetSeconds < currentTrack.duration) {
-      audio.currentTime = Math.max(0, offsetSeconds);
-      audio.play()
-        .then(() => setIsPlaying(true))
-        .catch((err) => {
-          console.warn("[MusicPlayerBar] Playback blocked by browser autoplay rules. Waiting for user interaction.", err);
-          setIsPlaying(false);
-        });
-    } else {
-      console.log("[MusicPlayerBar] Offset exceeds track duration, triggering natural end");
-      handleTrackEnded();
-    }
-  }, [currentTrack?.trackId]);
-
-  // 2. Map volume changes dynamically
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = isMuted ? 0 : Math.min(1.0, volume / 100);
-    }
-  }, [volume, isMuted]);
-
-  // 3. Track progress ticker
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const handleTimeUpdate = () => {
-      setCurrentTime(audio.currentTime);
-    };
-
-    const handleDurationChange = () => {
-      setDuration(audio.duration || currentTrack?.duration || 0);
-    };
-
-    const handlePlayState = () => setIsPlaying(true);
-    const handlePauseState = () => setIsPlaying(false);
-
-    audio.addEventListener("timeupdate", handleTimeUpdate);
-    audio.addEventListener("durationchange", handleDurationChange);
-    audio.addEventListener("play", handlePlayState);
-    audio.addEventListener("pause", handlePauseState);
-
-    return () => {
-      audio.removeEventListener("timeupdate", handleTimeUpdate);
-      audio.removeEventListener("durationchange", handleDurationChange);
-      audio.removeEventListener("play", handlePlayState);
-      audio.removeEventListener("pause", handlePauseState);
-    };
-  }, [currentTrack]);
-
-  // 4. Natural track end callback to STOMP
-  const handleTrackEnded = () => {
-    if (!token) return;
-    console.log("[MusicPlayerBar] Audio ended naturally, notifying STOMP of track end");
-    getStompClient(token).publish({
-      destination: "/app/voice.music.trackEnded",
-      body: JSON.stringify({ roomId, channelId })
-    });
-  };
+  // Global playback state
+  const isPlaying = useVoiceStore((s) => s.musicIsPlaying);
+  const currentTime = useVoiceStore((s) => s.musicCurrentTime);
+  const duration = useVoiceStore((s) => s.musicDuration);
 
   // Skip Command Callback
   const handleSkip = () => {
@@ -147,8 +70,6 @@ export function MusicPlayerBar({ roomId, channelId }: MusicPlayerBarProps) {
 
   return (
     <div className="flex flex-col gap-2 p-3 bg-[#111214] border border-[#1f2023]/80 rounded-lg shadow-inner w-full font-sans select-none text-white overflow-hidden">
-      {/* Dynamic hidden audio tag */}
-      <audio ref={audioRef} onEnded={handleTrackEnded} playsInline />
 
       <div className="flex items-center justify-between gap-3">
         {/* Vinyl disk indicator */}

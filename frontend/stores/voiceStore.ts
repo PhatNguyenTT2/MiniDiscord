@@ -26,6 +26,7 @@ export interface VoiceCallEvent {
   callerAvatar: string | null;
   targetUserId: string;
   action: "RING" | "ACCEPT" | "DECLINE" | "END" | "MISSED" | "UNAVAILABLE";
+  videoOn?: boolean;
 }
 
 export interface MusicTrackInfo {
@@ -61,12 +62,18 @@ interface VoiceStoreState {
   // Music Bot and Per-Member Volume States
   currentMusicTrack: MusicTrackInfo | null;
   musicBotActive: boolean;
+  musicCurrentTime: number;
+  musicDuration: number;
+  musicIsPlaying: boolean;
   memberVolumes: Record<string, number>; // userId -> volume (0-100)
   memberMuted: Record<string, boolean>; // userId -> mute state
 
   // Music Bot & Per-Member Volume Actions
   setMusicTrack: (track: MusicTrackInfo | null) => void;
   setMusicBotActive: (active: boolean) => void;
+  setMusicCurrentTime: (time: number) => void;
+  setMusicDuration: (duration: number) => void;
+  setMusicIsPlaying: (playing: boolean) => void;
   setMemberVolume: (userId: string, volume: number) => void;
   toggleMemberMute: (userId: string) => void;
 
@@ -112,11 +119,17 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
   // Music Bot and Per-Member Volume States (Initial)
   currentMusicTrack: null,
   musicBotActive: false,
+  musicCurrentTime: 0,
+  musicDuration: 0,
+  musicIsPlaying: false,
   memberVolumes: {},
   memberMuted: {},
 
   setMusicTrack: (track) => set({ currentMusicTrack: track }),
   setMusicBotActive: (active) => set({ musicBotActive: active }),
+  setMusicCurrentTime: (time) => set({ musicCurrentTime: time }),
+  setMusicDuration: (duration) => set({ musicDuration: duration }),
+  setMusicIsPlaying: (playing) => set({ musicIsPlaying: playing }),
   setMemberVolume: (userId, volume) => set((state) => ({
     memberVolumes: { ...state.memberVolumes, [userId]: volume }
   })),
@@ -262,6 +275,25 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
 
       // Play connecting sound
       soundEngine?.play("voice_join");
+
+      // 5. Fetch active bot music state for the room
+      api.get(`/voice/rooms/${roomId}/music`)
+        .then((res) => {
+          const data = res.data?.data;
+          if (data && data.isBotActive && data.currentTrack) {
+            console.log("[VoiceStore] Syncing active music bot state in newly joined room:", data);
+            set({
+              currentMusicTrack: {
+                ...data.currentTrack,
+                startTime: data.startTime || Date.now()
+              },
+              musicBotActive: true
+            });
+          }
+        })
+        .catch((err) => {
+          console.warn("[VoiceStore] Failed fetching room music status:", err);
+        });
     } catch (e) {
       console.error("[VoiceStore] Failed to acquire media block. Voice channel join denied: ", e);
       soundEngine?.play("voice_leave");
@@ -511,6 +543,7 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
             avatarUrl: currentUser.avatarUrl || null,
             muted: state.isMuted,
             deafened: state.isDeafened,
+            cameraOn: state.isVideoOn,
           },
           {
             userId: targetUserId,
@@ -519,6 +552,7 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
             avatarUrl: resolvedTargetAvatar,
             muted: false,
             deafened: false,
+            cameraOn: false,
           }
         ]
       }
@@ -536,7 +570,8 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
           callerId: currentUser.id,
           callerName: currentUser.username,
           callerAvatar: currentUser.avatarUrl || null,
-          action: "RING"
+          action: "RING",
+          videoOn: get().isVideoOn
         })
       });
     }
@@ -649,6 +684,7 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
               avatarUrl: currentUser.avatarUrl || null,
               muted: state.isMuted,
               deafened: state.isDeafened,
+              cameraOn: false,
             },
             {
               userId: incoming.callerId,
@@ -657,6 +693,7 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
               avatarUrl: incoming.callerAvatar,
               muted: false,
               deafened: false,
+              cameraOn: incoming.videoOn || false,
             }
           ] : []
         }
@@ -747,11 +784,12 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
           }
           const roomMembers = foundRoomId ? (useRoomStore.getState().members[foundRoomId] || []) : [];
           const details = roomMembers.find((m: any) => m.userId === userId);
+          const isBot = userId === "music-bot";
           updatedList.push({
             userId,
-            username: username || `User-${userId.substring(0, 4)}`,
-            displayName: details?.displayName || details?.username || username || `User-${userId.substring(0, 4)}`,
-            avatarUrl: details?.avatarUrl || avatarUrl || null,
+            username: isBot ? "music-bot" : (username || `User-${userId.substring(0, 4)}`),
+            displayName: isBot ? "Music Bot" : (details?.displayName || details?.username || username || `User-${userId.substring(0, 4)}`),
+            avatarUrl: isBot ? "music-bot" : (details?.avatarUrl || avatarUrl || null),
             muted: false,
             deafened: false,
           });
@@ -901,6 +939,7 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
               avatarUrl: currentUser.avatarUrl || null,
               muted: state.isMuted,
               deafened: state.isDeafened,
+              cameraOn: state.isVideoOn,
             },
             {
               userId: peerId,
@@ -909,6 +948,7 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
               avatarUrl: event.callerAvatar || null,
               muted: false,
               deafened: false,
+              cameraOn: event.videoOn || false,
             }
           ] : []
         }
@@ -1026,11 +1066,12 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
         newParticipantsMap[chId] = list.map((uid) => {
           const details = userCachedMap.get(uid);
           const existingParticipant = (get().channelParticipants[chId] || []).find((p) => p.userId === uid);
+          const isBot = uid === "music-bot";
           return {
             userId: uid,
-            username: details?.username || `User-${uid.substring(0, 4)}`,
-            displayName: details?.displayName || details?.username || `User-${uid.substring(0, 4)}`,
-            avatarUrl: details?.avatarUrl || null,
+            username: isBot ? "music-bot" : (details?.username || `User-${uid.substring(0, 4)}`),
+            displayName: isBot ? "Music Bot" : (details?.displayName || details?.username || `User-${uid.substring(0, 4)}`),
+            avatarUrl: isBot ? "music-bot" : (details?.avatarUrl || null),
             muted: existingParticipant?.muted ?? false,
             deafened: existingParticipant?.deafened ?? false,
           };
