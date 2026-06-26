@@ -13,12 +13,6 @@ app = FastAPI(title="MiniDiscord AI Worker")
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("ai-worker")
 
-HF_TOKEN = os.getenv("HF_ACCESS_TOKEN")
-client = InferenceClient(
-    model="Qwen/Qwen2.5-7B-Instruct",
-    token=HF_TOKEN
-)
-
 class MessageItem(BaseModel):
     sender: str
     content: str
@@ -119,6 +113,18 @@ def extract(q: str = Query(..., description="Link YouTube hoặc từ khóa tìm
 async def ai_chat(payload: ChatPayload):
     try:
         user_prompt = payload.prompt
+        # 1. BẮT LỖI TOKEN TẬN GỐC
+        hf_token = os.getenv("HF_ACCESS_TOKEN")
+        if not hf_token:
+            log.error("THẢM HỌA: Docker không nhận được HF_ACCESS_TOKEN. Token đang rỗng!")
+            raise HTTPException(status_code=500, detail="Missing HF Token")
+        
+        # In ra 5 ký tự đầu của token để xác nhận Docker đã đọc được file .env
+        log.info(f"Đã nhận Token bắt đầu bằng: {hf_token[:5]}***")
+
+        # 2. KHỞI TẠO CLIENT CHỈ VỚI TOKEN
+        client = InferenceClient(token=hf_token)
+        
         system_prompt = (
             "You are a helpful and friendly AI Assistant in a Discord-like server named MiniDiscord. "
             "Keep responses concise, interactive, and friendly. "
@@ -135,6 +141,7 @@ async def ai_chat(payload: ChatPayload):
             
         messages.append({"role": "user", "content": user_prompt})
         
+        log.info("Đang gọi Hugging Face API (Bypass Auto-router)...")
         response = client.chat_completion(
             model="Qwen/Qwen2.5-7B-Instruct",
             messages=messages,
@@ -149,6 +156,18 @@ async def ai_chat(payload: ChatPayload):
 @app.post("/ai/summarize")
 async def ai_summarize(payload: SummarizePayload):
     try:
+        # 1. BẮT LỖI TOKEN TẬN GỐC
+        hf_token = os.getenv("HF_ACCESS_TOKEN")
+        if not hf_token:
+            log.error("THẢM HỌA: Docker không nhận được HF_ACCESS_TOKEN. Token đang rỗng!")
+            raise HTTPException(status_code=500, detail="Missing HF Token")
+        
+        # In ra 5 ký tự đầu của token để xác nhận Docker đã đọc được file .env
+        log.info(f"Đã nhận Token bắt đầu bằng: {hf_token[:5]}***")
+
+        # 2. KHỞI TẠO CLIENT CHỈ VỚI TOKEN
+        client = InferenceClient(token=hf_token)
+
         if not payload.messages:
             return {"summary": "Không có tin nhắn nào để tóm tắt."}
         formatted_chat = ""
@@ -163,6 +182,8 @@ async def ai_summarize(payload: SummarizePayload):
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ]
+        
+        log.info("Đang gọi Hugging Face API (Bypass Auto-router)...")
         response = client.chat_completion(
             model="Qwen/Qwen2.5-7B-Instruct",
             messages=messages,
