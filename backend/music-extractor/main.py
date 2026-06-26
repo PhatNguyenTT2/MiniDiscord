@@ -31,28 +31,13 @@ YDL_OPTS = {
     "no_warnings": True,
     "extract_flat": False,
     "noplaylist": True,
-    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["android", "ios"]
+        }
+    },
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 }
-
-# Determine if we should use writeable cookies.txt
-if os.path.exists("/app/cookies.txt"):
-    try:
-        with open("/app/cookies.txt", "r", encoding="utf-8", errors="ignore") as f:
-            lines = f.readlines()
-        has_cookies = any(line.strip() and not line.startswith("#") for line in lines)
-        if has_cookies:
-            shutil.copy2("/app/cookies.txt", "/tmp/cookies.txt")
-            # Make sure it is writable
-            try:
-                os.chmod("/tmp/cookies.txt", 0o666)
-            except Exception:
-                pass
-            YDL_OPTS["cookiefile"] = "/tmp/cookies.txt"
-            log.info("Loaded YouTube cookies to writable /tmp/cookies.txt")
-        else:
-            log.info("Mounted cookies.txt is placeholder/empty. Skipping cookiefile.")
-    except Exception as e:
-        log.warning(f"Could not load cookies.txt: {e}")
 
 def extract_audio_info(query: str):
     try:

@@ -314,8 +314,6 @@ services:
       context: .
       dockerfile: music-extractor/Dockerfile
     container_name: minidiscord-music-extractor
-    volumes:
-      - ./music-extractor/cookies.txt:/app/cookies.txt:ro
     expose:
       - "3001"
     environment:

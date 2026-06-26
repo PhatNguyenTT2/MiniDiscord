@@ -154,8 +154,6 @@ services:
   music-extractor:
     image: ghcr.io/phatnguyentt2/minidiscord-music-extractor:latest
     container_name: minidiscord-music-extractor
-    volumes:
-      - ./backend/music-extractor/cookies.txt:/app/cookies.txt:ro
     restart: "on-failure:5"
     expose:
       - "3001"
