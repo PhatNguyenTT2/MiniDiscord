@@ -14,7 +14,10 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("ai-worker")
 
 HF_TOKEN = os.getenv("HF_ACCESS_TOKEN")
-client = InferenceClient(token=HF_TOKEN)
+client = InferenceClient(
+    model="Qwen/Qwen2.5-7B-Instruct",
+    token=HF_TOKEN
+)
 
 class MessageItem(BaseModel):
     sender: str
