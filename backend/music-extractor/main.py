@@ -33,10 +33,10 @@ YDL_OPTS = {
     "noplaylist": True,
     "extractor_args": {
         "youtube": {
-            "player_client": ["android", "ios"]
+            "player_client": ["tv", "ios", "android"]
         }
     },
-    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    "user_agent": "Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/5.0 TV Safari/538.1"
 }
 
 def extract_audio_info(query: str):
