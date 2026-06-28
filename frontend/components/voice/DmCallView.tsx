@@ -151,14 +151,14 @@ export function DmCallView({ roomId, recipientId, recipientName, recipientAvatar
     if (localVideoRef.current && localStream) {
       localVideoRef.current.srcObject = localStream;
     }
-  }, [localStream]);
+  }, [localStream, showLocalVideo]);
 
   useEffect(() => {
     const remoteStream = remoteStreams[recipientId];
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
     }
-  }, [remoteStreams, recipientId]);
+  }, [remoteStreams, recipientId, showRemoteVideo]);
 
   return (
     <div

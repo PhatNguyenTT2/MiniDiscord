@@ -66,7 +66,7 @@ function ParticipantCard({
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
     }
-  }, [stream]);
+  }, [stream, showVideo]);
 
   if (avatarUrl !== prevAvatarUrl) {
     setPrevAvatarUrl(avatarUrl);
