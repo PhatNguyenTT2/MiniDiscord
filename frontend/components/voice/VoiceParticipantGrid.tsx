@@ -60,7 +60,7 @@ function ParticipantCard({
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const hasVideoTrack = stream?.getVideoTracks().some((t) => t.enabled) ?? false;
-  const showVideo = p.cameraOn && hasVideoTrack;
+  const showVideo = p.cameraOn || hasVideoTrack;
 
   useEffect(() => {
     if (videoRef.current && stream && showVideo) {

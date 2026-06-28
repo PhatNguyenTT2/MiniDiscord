@@ -924,7 +924,9 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
       }
 
       const currentUser = useAuthStore.getState().user;
-      const peerId = event.targetUserId === currentUser?.id ? event.callerId : event.targetUserId;
+      const peerId = event.targetUserId === currentUser?.id
+        ? event.callerId
+        : (event.targetUserId || event.callerId);
 
       set((state) => ({
         activeCallRoomId: roomId,
@@ -932,25 +934,28 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
         incomingCall: null,
         channelParticipants: {
           ...state.channelParticipants,
-          dm: currentUser ? [
-            {
-              userId: currentUser.id,
-              username: currentUser.username,
-              avatarUrl: currentUser.avatarUrl || null,
-              muted: state.isMuted,
-              deafened: state.isDeafened,
-              cameraOn: state.isVideoOn,
-            },
-            {
-              userId: peerId,
-              username: event.callerName || "User",
-              displayName: event.callerName || "User",
-              avatarUrl: event.callerAvatar || null,
-              muted: false,
-              deafened: false,
-              cameraOn: event.videoOn || false,
-            }
-          ] : []
+          dm: currentUser ? (() => {
+            const existingPeer = state.channelParticipants.dm?.find(p => p.userId === peerId);
+            return [
+              {
+                userId: currentUser.id,
+                username: currentUser.username,
+                avatarUrl: currentUser.avatarUrl || null,
+                muted: state.isMuted,
+                deafened: state.isDeafened,
+                cameraOn: state.isVideoOn,
+              },
+              {
+                userId: peerId,
+                username: event.callerName || existingPeer?.username || "User",
+                displayName: event.callerName || existingPeer?.displayName || existingPeer?.username || "User",
+                avatarUrl: event.callerAvatar || existingPeer?.avatarUrl || null,
+                muted: false,
+                deafened: false,
+                cameraOn: event.videoOn || false,
+              }
+            ];
+          })() : []
         }
       }));
 
@@ -1143,7 +1148,33 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
       // 1. Initialise WebRTC manager stream
       await resumeAudioContext();
       const localStream = await webrtcManager.initLocalStream();
-      set({ localStream, isRecoveringCall: false });
+      const currentUser = useAuthStore.getState().user;
+      set((state) => ({
+        localStream,
+        isRecoveringCall: false,
+        channelParticipants: {
+          ...state.channelParticipants,
+          dm: currentUser ? [
+            {
+              userId: currentUser.id,
+              username: currentUser.username,
+              avatarUrl: currentUser.avatarUrl || null,
+              muted: state.isMuted,
+              deafened: state.isDeafened,
+              cameraOn: state.isVideoOn,
+            },
+            {
+              userId: targetUserId,
+              username: "User",
+              displayName: "User",
+              avatarUrl: null,
+              muted: false,
+              deafened: false,
+              cameraOn: false,
+            }
+          ] : []
+        }
+      }));
 
       const startingMute = get().isMuted;
       const startingDeafen = get().isDeafened;

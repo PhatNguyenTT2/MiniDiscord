@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { X, ArrowUpDown, SlidersHorizontal, Settings, FileIcon, ShieldAlert } from "lucide-react";
+import { X, ArrowUpDown, SlidersHorizontal, Settings, FileIcon, ShieldAlert, Pin, Phone, PhoneOff } from "lucide-react";
 import { useChatStore } from "@/stores/chatStore";
 import { useTranslation } from "@/lib/i18n";
 import { useRoomStore } from "@/stores/roomStore";
@@ -471,45 +471,119 @@ export function SearchResultsPanel({ channelId, roomId }: SearchResultsPanelProp
                     </button>
                   </div>
 
-                  {/* Msg Author & Info */}
-                  <div className="flex items-start gap-2.5">
-                    <StatusAvatar
-                      src={avatarSrc}
-                      fallback={msg.senderName}
-                      size="md"
-                      status={status}
-                      className="shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-sm font-semibold text-foreground truncate">
-                          {msg.senderName}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground">
-                          {formatDate(msg.createdAt)}
-                        </span>
+                  {msg.type === "SYSTEM" ? (
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-8 shrink-0 flex items-center justify-center mt-0.5">
+                        {(() => {
+                          const isCompletedCall = msg.content.startsWith("voice.callCompletedLog:") || msg.content.startsWith("voice.callEndedDuration:");
+                          const isMissedCall = msg.content === "voice.callMissed" || msg.content === "voice.callMissedLog";
+                          const isUnavailableCall = msg.content === "voice.callUnavailable";
+
+                          if (isCompletedCall) {
+                            return <Phone className="h-4 w-4 text-[#23a55a] fill-current" />;
+                          } else if (isMissedCall || isUnavailableCall) {
+                            return <PhoneOff className="h-4 w-4 text-[#ed4245]" />;
+                          }
+                          return <Pin className="h-4 w-4 text-[#b5bac1]" />;
+                        })()}
                       </div>
+                      <div className="flex-1 min-w-0 text-sm leading-relaxed text-[#b5bac1]">
+                        <div className="flex items-baseline gap-1.5 flex-wrap">
+                          {(() => {
+                            const isPinnedNotification = msg.content === "pinned_message";
+                            const isCompletedCall = msg.content.startsWith("voice.callCompletedLog:") || msg.content.startsWith("voice.callEndedDuration:");
+                            const isMissedCall = msg.content === "voice.callMissed" || msg.content === "voice.callMissedLog";
+                            const isUnavailableCall = msg.content === "voice.callUnavailable";
+                            const isCallEvent = isCompletedCall || isMissedCall || isUnavailableCall;
 
-                      {/* Content */}
-                      <p className="text-sm text-[#dbdee1] mt-1 break-words leading-relaxed whitespace-pre-wrap">
-                        {renderMessageContent(msg.content)}
-                      </p>
-
-                      {/* Sticker rendering */}
-                      {msg.stickerIds && msg.stickerIds.length > 0 && (
-                        <div className="mt-1 flex flex-col gap-1.5 min-h-[40px]">
-                          {msg.stickerIds.map((sid) => (
-                            <StickerPreview key={sid} stickerId={sid} />
-                          ))}
+                            return (
+                              <>
+                                {!isCallEvent && (
+                                  <span className="font-semibold text-white mr-1.5 inline-block">
+                                    {msg.senderName}
+                                  </span>
+                                )}
+                                {isPinnedNotification ? (
+                                  <>
+                                    <span>{t("chat.pinnedMessageNotification")} </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        window.dispatchEvent(new CustomEvent("open-pinned-list"));
+                                      }}
+                                      className="font-semibold text-white hover:underline cursor-pointer select-none border-none bg-transparent p-0 outline-none hover:text-[#dbdee1] transition"
+                                    >
+                                      {t("chat.viewPinnedMessages")}
+                                    </button>
+                                  </>
+                                ) : msg.content === "voice.callStarted" ? (
+                                  <span>{t("voice.callStarted")}</span>
+                                ) : isMissedCall ? (
+                                  <span>{t("voice.callMissedLog", { caller: msg.senderName })}</span>
+                                ) : isUnavailableCall ? (
+                                  <span>{t("voice.callUnavailable")}</span>
+                                ) : isCompletedCall ? (
+                                  (() => {
+                                    const parts = msg.content.split(":");
+                                    const secsRaw = parts[1] || "0";
+                                    const secs = parseInt(secsRaw, 10);
+                                    const durationText = secs < 60
+                                      ? t("voice.durationSeconds", { count: secs })
+                                      : t("voice.durationMinutesSeconds", { minutes: Math.floor(secs / 60), seconds: secs % 60 });
+                                    return <span>{t("voice.callCompletedLog", { caller: msg.senderName, duration: durationText })}</span>;
+                                  })()
+                                ) : (
+                                  <span>{msg.content}</span>
+                                )}
+                              </>
+                            );
+                          })()}
+                          <span className="text-[10px] text-muted-foreground whitespace-nowrap ml-2">
+                            {formatDate(msg.createdAt)}
+                          </span>
                         </div>
-                      )}
-
-                      {/* Attachment rendering */}
-                      {msg.fileKey && (
-                        <SearchResultAttachment message={msg} />
-                      )}
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="flex items-start gap-2.5">
+                      <StatusAvatar
+                        src={avatarSrc}
+                        fallback={msg.senderName}
+                        size="md"
+                        status={status}
+                        className="shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-sm font-semibold text-foreground truncate">
+                            {msg.senderName}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {formatDate(msg.createdAt)}
+                          </span>
+                        </div>
+
+                        {/* Content */}
+                        <p className="text-sm text-[#dbdee1] mt-1 break-words leading-relaxed whitespace-pre-wrap">
+                          {renderMessageContent(msg.content)}
+                        </p>
+
+                        {/* Sticker rendering */}
+                        {msg.stickerIds && msg.stickerIds.length > 0 && (
+                          <div className="mt-1 flex flex-col gap-1.5 min-h-[40px]">
+                            {msg.stickerIds.map((sid) => (
+                              <StickerPreview key={sid} stickerId={sid} />
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Attachment rendering */}
+                        {msg.fileKey && (
+                          <SearchResultAttachment message={msg} />
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
