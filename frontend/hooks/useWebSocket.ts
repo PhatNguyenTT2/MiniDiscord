@@ -80,14 +80,8 @@ export function useWebSocket() {
       useVoiceStore.getState().checkActiveCall();
 
       // ── Reconcile voice channel participants after reconnect ──
-      const currentVoiceChannel = useVoiceStore.getState().currentChannel;
-      if (currentVoiceChannel) {
-        const roomChannels = useRoomStore.getState().channels[currentVoiceChannel.roomId] || [];
-        const voiceChannelIds = roomChannels.filter((c: any) => c.type === "VOICE").map((c: any) => c.id);
-        if (voiceChannelIds.length > 0) {
-          useVoiceStore.getState().fetchVoiceStates(currentVoiceChannel.roomId, voiceChannelIds);
-        }
-      }
+      useVoiceStore.getState().syncParticipantStates();
+
 
       // ── Sync messages for the active channel after reconnection ──
       const activeChannelId = useUIStore.getState().activeChannelId;

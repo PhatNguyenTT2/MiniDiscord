@@ -188,6 +188,30 @@ public class VoiceStateService {
     return result;
   }
 
+  public Map<String, List<Map<String, Object>>> getDetailedVoiceStates(String roomId, List<String> channelIds) {
+    Map<String, List<Map<String, Object>>> result = new HashMap<>();
+    if (channelIds == null)
+      return result;
+
+    for (String chId : channelIds) {
+      Set<String> members = getChannelParticipants(roomId, chId);
+      List<Map<String, Object>> participantStates = new ArrayList<>();
+      if (members != null) {
+        for (String uid : members) {
+          Map<Object, Object> rawState = getUserVoiceState(uid);
+          Map<String, Object> stateMap = new HashMap<>();
+          stateMap.put("userId", uid);
+          stateMap.put("muted", Boolean.parseBoolean((String) rawState.getOrDefault("muted", "false")));
+          stateMap.put("deafened", Boolean.parseBoolean((String) rawState.getOrDefault("deafened", "false")));
+          stateMap.put("cameraOn", Boolean.parseBoolean((String) rawState.getOrDefault("cameraOn", "false")));
+          participantStates.add(stateMap);
+        }
+      }
+      result.put(chId, participantStates);
+    }
+    return result;
+  }
+
   public Map<Object, Object> getUserVoiceState(String userId) {
     return redisTemplate.opsForHash().entries("voice:user:" + userId);
   }

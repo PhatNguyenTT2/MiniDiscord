@@ -1060,25 +1060,26 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
       const payloadData = res.data?.data || {};
       const newParticipantsMap: Record<string, VoiceParticipant[]> = {};
 
-      // Backend returns map {channelId -> Set<userId>}
       const roomMembers = useRoomStore.getState().members[roomId] || [];
       const userCachedMap = new Map<string, { userId: string; username: string; displayName?: string | null; avatarUrl?: string | null }>(
-        roomMembers.map((m: { userId: string; username: string; displayName?: string | null; avatarUrl?: string | null }) => [m.userId, m])
+        roomMembers.map((m: any) => [m.userId, m])
       );
 
-      Object.entries(payloadData).forEach(([chId, userIdsList]) => {
-        const list = userIdsList as string[];
-        newParticipantsMap[chId] = list.map((uid) => {
+      // payloadData is: Map<channelId, List<Dto>>
+      Object.entries(payloadData).forEach(([chId, participantsList]) => {
+        const list = participantsList as { userId: string; muted: boolean; deafened: boolean; cameraOn: boolean }[];
+        newParticipantsMap[chId] = list.map((pInfo) => {
+          const uid = pInfo.userId;
           const details = userCachedMap.get(uid);
-          const existingParticipant = (get().channelParticipants[chId] || []).find((p) => p.userId === uid);
           const isBot = uid === "music-bot";
           return {
             userId: uid,
             username: isBot ? "music-bot" : (details?.username || `User-${uid.substring(0, 4)}`),
             displayName: isBot ? "Music Bot" : (details?.displayName || details?.username || `User-${uid.substring(0, 4)}`),
             avatarUrl: isBot ? "music-bot" : (details?.avatarUrl || null),
-            muted: existingParticipant?.muted ?? false,
-            deafened: existingParticipant?.deafened ?? false,
+            muted: pInfo.muted,
+            deafened: pInfo.deafened,
+            cameraOn: pInfo.cameraOn,
           };
         });
       });
@@ -1089,9 +1090,59 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
           ...newParticipantsMap
         }
       }));
-      console.log("[VoiceStore] Successfully preloaded voice participants:", newParticipantsMap);
+      console.log("[VoiceStore] Successfully preloaded voice participants with cameraStates:", newParticipantsMap);
     } catch (e) {
       console.error("[VoiceStore] Failed fetching room voice states:", e);
+    }
+  },
+
+  syncParticipantStates: async () => {
+    const channel = get().currentChannel;
+    const activeCall = get().activeCallRoomId;
+    if (!channel && !activeCall) return;
+
+    // Add jitter: random delay between 200ms and 1500ms to prevent Thundering Herd on reconnect
+    const jitterDelay = Math.floor(Math.random() * 1300) + 200;
+    await new Promise((resolve) => setTimeout(resolve, jitterDelay));
+
+    // Re-verify call/channel is still active after the delay
+    const channelNow = get().currentChannel;
+    const activeCallNow = get().activeCallRoomId;
+    if (!channelNow && !activeCallNow) return;
+
+    try {
+      const roomId = channelNow?.roomId || activeCallNow;
+      const channelId = channelNow?.channelId || "dm";
+      if (!roomId) return;
+
+      if (channelId === "dm") {
+        const currentUserId = useAuthStore.getState().user?.id;
+        const otherUserId = get().channelParticipants.dm?.find(p => p.userId !== currentUserId)?.userId;
+        if (!currentUserId || !otherUserId) return;
+
+        const res = await api.get(`/voice/rooms/${roomId}/states/dm`, {
+          params: { userIds: [currentUserId, otherUserId].join(",") }
+        });
+        const statesList = res.data?.data || [];
+        set((state) => ({
+          channelParticipants: {
+            ...state.channelParticipants,
+            dm: (state.channelParticipants.dm || []).map(p => {
+              const serverState = statesList.find((s: any) => s.userId === p.userId);
+              return serverState ? {
+                ...p,
+                muted: serverState.muted,
+                deafened: serverState.deafened,
+                cameraOn: serverState.cameraOn
+              } : p;
+            })
+          }
+        }));
+      } else {
+        await get().fetchVoiceStates(roomId, [channelId]);
+      }
+    } catch (e) {
+      console.error("[VoiceStore] Failed to sync participant states: ", e);
     }
   },
 

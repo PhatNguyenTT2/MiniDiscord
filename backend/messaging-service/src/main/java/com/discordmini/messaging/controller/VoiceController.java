@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.ArrayList;
+import java.util.HashMap;
 
 @Slf4j
 @RestController
@@ -67,34 +69,51 @@ public class VoiceController {
    * room/channels list.
    */
   @GetMapping("/rooms/{roomId}/states")
-  public ApiResponse<Map<String, Set<String>>> getVoiceStates(
+  public ApiResponse<Map<String, List<Map<String, Object>>>> getVoiceStates(
       @PathVariable String roomId,
       @RequestParam List<String> channelIds) {
     log.debug("GET local voice states in room: {} paths: {}", roomId, channelIds);
-    Map<String, Set<String>> states = voiceStateService.getAllVoiceStates(roomId, channelIds);
+    Map<String, List<Map<String, Object>>> states = voiceStateService.getDetailedVoiceStates(roomId, channelIds);
 
-    // Inject phantom music-bot into response participants set if active in room
+    // Inject phantom music-bot into response participants list if active in room
     Map<String, Object> musicState = musicQueueService.getState(roomId);
     if (musicState != null && Boolean.TRUE.equals(musicState.get("isBotActive"))) {
-      // Find which channel of this room the music is playing (or since we play
-      // per-room in voice state,
-      // we can inject it into whichever active voice channel has participants in this
-      // room,
-      // or we can query voiceStateService to see where the users are).
-      // Let's find the first channel that has active users and inject the music-bot
-      // there!
       for (String chId : channelIds) {
-        Set<String> participants = states.get(chId);
+        List<Map<String, Object>> participants = states.get(chId);
         if (participants != null && !participants.isEmpty()) {
-          // Clone the set to avoid Immutable / unmodifiable set issues
-          Set<String> mutableParticipants = new HashSet<>(participants);
-          mutableParticipants.add("music-bot");
+          Map<String, Object> musicBotState = Map.of(
+              "userId", "music-bot",
+              "muted", false,
+              "deafened", false,
+              "cameraOn", false);
+          List<Map<String, Object>> mutableParticipants = new ArrayList<>(participants);
+          mutableParticipants.add(musicBotState);
           states.put(chId, mutableParticipants);
           break;
         }
       }
     }
     return ApiResponse.ok("Voice states loaded", states);
+  }
+
+  @GetMapping("/rooms/{roomId}/states/dm")
+  public ApiResponse<List<Map<String, Object>>> getDmVoiceStates(
+      @PathVariable String roomId,
+      @RequestParam List<String> userIds) {
+    log.info("GET DM voice states in room: {} users: {}", roomId, userIds);
+    List<Map<String, Object>> states = new ArrayList<>();
+    for (String uid : userIds) {
+      Map<Object, Object> rawState = voiceStateService.getUserVoiceState(uid);
+      if (rawState != null && !rawState.isEmpty()) {
+        Map<String, Object> stateMap = new HashMap<>();
+        stateMap.put("userId", uid);
+        stateMap.put("muted", Boolean.parseBoolean((String) rawState.getOrDefault("muted", "false")));
+        stateMap.put("deafened", Boolean.parseBoolean((String) rawState.getOrDefault("deafened", "false")));
+        stateMap.put("cameraOn", Boolean.parseBoolean((String) rawState.getOrDefault("cameraOn", "false")));
+        states.add(stateMap);
+      }
+    }
+    return ApiResponse.ok("DM Voice states retrieved", states);
   }
 
   /**

@@ -80,6 +80,16 @@ export class WebRTCManager {
         // This ensures the reference changes and triggers React/Zustand updates.
         const combinedStream = new MediaStream(event.streams[0].getTracks());
         this.onRemoteStream?.(userId, combinedStream);
+
+        // Listen for future track additions/removals on the same stream to trigger UI updates
+        event.streams[0].onaddtrack = () => {
+          console.log(`[WebRTC] Track added to stream for peer user ${userId}`);
+          this.onRemoteStream?.(userId, new MediaStream(event.streams[0]!.getTracks()));
+        };
+        event.streams[0].onremovetrack = () => {
+          console.log(`[WebRTC] Track removed from stream for peer user ${userId}`);
+          this.onRemoteStream?.(userId, new MediaStream(event.streams[0]!.getTracks()));
+        };
       }
     };
 
