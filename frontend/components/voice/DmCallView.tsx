@@ -148,17 +148,17 @@ export function DmCallView({ roomId, recipientId, recipientName, recipientAvatar
   const showRemoteVideo = (recipientState?.cameraOn ?? false) || (remoteStreams[recipientId]?.getVideoTracks().some(t => t.enabled) ?? false);
 
   useEffect(() => {
-    if (localVideoRef.current && localStream && showLocalVideo) {
+    if (localVideoRef.current && localStream) {
       localVideoRef.current.srcObject = localStream;
     }
-  }, [localStream, showLocalVideo]);
+  }, [localStream]);
 
   useEffect(() => {
     const remoteStream = remoteStreams[recipientId];
-    if (remoteVideoRef.current && remoteStream && showRemoteVideo) {
+    if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
     }
-  }, [remoteStreams, recipientId, showRemoteVideo]);
+  }, [remoteStreams, recipientId]);
 
   return (
     <div

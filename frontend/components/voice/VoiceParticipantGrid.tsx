@@ -63,10 +63,10 @@ function ParticipantCard({
   const showVideo = p.cameraOn || hasVideoTrack;
 
   useEffect(() => {
-    if (videoRef.current && stream && showVideo) {
+    if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
     }
-  }, [stream, showVideo]);
+  }, [stream]);
 
   if (avatarUrl !== prevAvatarUrl) {
     setPrevAvatarUrl(avatarUrl);

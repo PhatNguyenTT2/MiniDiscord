@@ -216,18 +216,22 @@ export class WebRTCManager {
         if (track) {
           this.localStream.addTrack(track);
           videoTrack = track;
-          // Add this new track to all existing RTCPeerConnection instances, reusing transceivers if possible
-          this.peers.forEach(async (pc) => {
-            const transceiver = pc.getTransceivers().find(
-              (t) => t.receiver.track.kind === "video" || t.sender.track?.kind === "video"
+          // Add this new track to all existing RTCPeerConnection instances
+          // MUST use addTrack (not replaceTrack on a receive-only transceiver)
+          // to guarantee onnegotiationneeded fires for proper SDP renegotiation
+          for (const [peerId, pc] of this.peers) {
+            // Only reuse a transceiver where we are already the SENDER of video
+            const senderTransceiver = pc.getTransceivers().find(
+              (t) => t.sender.track?.kind === "video"
             );
-            if (transceiver) {
-              transceiver.direction = "sendrecv";
-              await transceiver.sender.replaceTrack(track);
+            if (senderTransceiver) {
+              console.log(`[WebRTC] Replacing existing video sender track for peer ${peerId}`);
+              await senderTransceiver.sender.replaceTrack(track);
             } else {
+              console.log(`[WebRTC] Adding new video track to peer ${peerId} via addTrack`);
               pc.addTrack(track, this.localStream!);
             }
-          });
+          }
         }
       } catch (error) {
         console.error("[WebRTC] Failed to acquire video track dynamically:", error);
@@ -244,26 +248,26 @@ export class WebRTCManager {
         this.localStream.removeTrack(videoTrack);
 
         // Remove track from all peers to trigger clean renegotiation
-        this.peers.forEach(async (pc) => {
+        for (const [, pc] of this.peers) {
           const senders = pc.getSenders();
           const sender = senders.find((s) => s.track?.id === videoTrack.id || s.track?.kind === "video");
           if (sender) {
             pc.removeTrack(sender);
           }
-        });
+        }
       } else {
         // If enabling and track already exists, ensure it is set on all peers
-        this.peers.forEach(async (pc) => {
-          const transceiver = pc.getTransceivers().find(
-            (t) => t.receiver.track.kind === "video" || t.sender.track?.kind === "video"
+        for (const [peerId, pc] of this.peers) {
+          const senderTransceiver = pc.getTransceivers().find(
+            (t) => t.sender.track?.kind === "video"
           );
-          if (transceiver) {
-            transceiver.direction = "sendrecv";
-            await transceiver.sender.replaceTrack(videoTrack);
+          if (senderTransceiver) {
+            await senderTransceiver.sender.replaceTrack(videoTrack);
           } else {
+            console.log(`[WebRTC] Adding video track to peer ${peerId} via addTrack`);
             pc.addTrack(videoTrack, this.localStream!);
           }
-        });
+        }
       }
       return enable;
     }
