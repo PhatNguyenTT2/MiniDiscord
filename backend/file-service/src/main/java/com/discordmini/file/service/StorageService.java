@@ -33,6 +33,9 @@ public class StorageService {
     @Value("${b2.endpoint}")
     private String endpoint;
 
+    @Value("${b2.public-endpoint}")
+    private String publicEndpoint;
+
     @Value("${b2.presign-expiry:3600}")
     private int presignExpiry;
 
@@ -52,6 +55,13 @@ public class StorageService {
 
     private static final List<String> BLOCKED_EXTENSIONS = List.of(
             ".exe", ".bat", ".sh", ".ps1", ".cmd", ".msi", ".dll", ".vbs");
+
+    private String resolvePublicUrl(String presignedUrl) {
+        if (publicEndpoint != null && !publicEndpoint.isBlank() && !endpoint.equals(publicEndpoint)) {
+            return presignedUrl.replace(endpoint, publicEndpoint);
+        }
+        return presignedUrl;
+    }
 
     public com.discordmini.file.model.dto.PresignResponse generatePresignedUpload(String userId,
             String originalFilename, String contentType, long fileSize, String purpose) {
@@ -131,8 +141,8 @@ public class StorageService {
                             .build());
 
             return com.discordmini.file.model.dto.PresignResponse.builder()
-                    .uploadUrl(uploadUrl)
-                    .viewUrl(viewUrl)
+                    .uploadUrl(resolvePublicUrl(uploadUrl))
+                    .viewUrl(resolvePublicUrl(viewUrl))
                     .fileKey(fileKey)
                     .expiresIn(presignExpiry)
                     .build();
@@ -145,13 +155,14 @@ public class StorageService {
 
     public String generatePresignedView(String fileKey) {
         try {
-            return minioClient.getPresignedObjectUrl(
+            String viewUrl = minioClient.getPresignedObjectUrl(
                     GetPresignedObjectUrlArgs.builder()
                             .method(Method.GET)
                             .bucket(bucketName)
                             .object(fileKey)
                             .expiry(Math.min(presignExpiry, 604800), TimeUnit.SECONDS)
                             .build());
+            return resolvePublicUrl(viewUrl);
         } catch (Exception e) {
             log.error("Failed to generate view URL for key: {}", fileKey, e);
             throw new RuntimeException("Failed to generate view URL");

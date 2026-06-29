@@ -12,6 +12,7 @@ spring:
 # Backblaze B2 (S3-compatible, uses MinIO SDK)
 b2:
   endpoint: ${B2_ENDPOINT:http://localhost:9000}
+  public-endpoint: ${B2_PUBLIC_ENDPOINT:${b2.endpoint}}
   key-id: ${B2_KEY_ID:minioadmin}
   app-key: ${B2_APP_KEY:minioadmin}
   bucket-name: ${B2_BUCKET_NAME:discord-mini-files}
